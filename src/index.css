@@ -1,0 +1,362 @@
+@import "tailwindcss";
+
+:root {
+  --app-bg: #180A2b;
+  --app-bg-footer: #140825;
+  --app-text: #f1f5f9;
+  --app-text-muted: #94a3b8;
+  --app-card: rgba(36, 18, 61, 0.6);
+  --app-card-border: rgba(147, 51, 234, 0.2);
+  --app-input: rgba(24, 10, 43, 0.8);
+  --app-input-border: rgba(147, 51, 234, 0.3);
+  --app-header: rgba(24, 10, 43, 0.6);
+}
+
+.light, html.light, body.light {
+  --app-bg: #f8fafc; /* Gris ardoise très clair */
+  --app-bg-footer: #f1f5f9; /* Pied de page plus dense */
+  --app-text: #0f172a; /* Texte noir de carbone */
+  --app-text-muted: #475569; /* Slate 600 pour contraste élevé */
+  --app-card: #ffffff; /* Cartes blanches opaques */
+  --app-card-border: #e2e8f0; /* Bordures subtiles */
+  --app-input: #ffffff;
+  --app-input-border: #cbd5e1;
+  --app-header: rgba(255, 255, 255, 0.8);
+
+  /* --- AMÉLIORATION DU CONTRASTE ET LISIBILITÉ EN MODE CLAIR --- */
+  
+  /* Dégradé radial clair soyeux chic */
+  background: radial-gradient(circle at 50% 0%, #f3e8ff 0%, #f8fafc 100%) no-repeat !important;
+  background-attachment: fixed !important;
+  color: var(--app-text) !important;
+}
+
+.light body {
+  background: radial-gradient(circle at 50% 0%, #f3e8ff 0%, #f8fafc 100%) no-repeat !important;
+  background-attachment: fixed !important;
+  color: var(--app-text) !important;
+}
+
+.light {
+  /* Remplacement des fonds sombres en dur */
+  [class*="bg-[#180A2b]"] {
+    background-color: var(--app-bg) !important;
+  }
+  [class*="bg-[#140825]"] {
+    background-color: var(--app-bg-footer) !important;
+  }
+
+  /* Cartes et panneaux Glassmorphism en thème clair */
+  [class*="bg-[#24123d]"]:not(button), 
+  [class*="bg-[#24123d]/60"], 
+  [class*="bg-[#24123d]/40"],
+  .glass-card, 
+  .glass-panel {
+    background-color: var(--app-card) !important;
+    color: var(--app-text) !important;
+    border-color: var(--app-card-border) !important;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  /* Textes par défaut des tables et grilles */
+  table, tbody, tr, td, th, label {
+    color: var(--app-text) !important;
+  }
+
+  /* Inputs et formulaires */
+  [class*="bg-[#180A2b]/80"],
+  [class*="bg-[#180A2b]/50"],
+  [class*="bg-[#180A2b]/40"],
+  input, select, textarea {
+    background-color: var(--app-input) !important;
+    border-color: var(--app-input-border) !important;
+    color: var(--app-text) !important;
+  }
+  
+  input::placeholder, select::placeholder {
+    color: #64748b !important;
+  }
+
+  /* Boutons secondaires (d'origine violet foncé) */
+  button[class*="bg-[#24123d]"],
+  button[class*="bg-purple-950"],
+  label[class*="bg-app-card"] {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #480A94 !important;
+  }
+  button[class*="bg-[#24123d]"]:hover,
+  button[class*="bg-purple-950"]:hover,
+  label[class*="bg-app-card"]:hover {
+    background-color: #e2e8f0 !important;
+    color: #1e0a38 !important;
+  }
+
+  /* Cartes boutons de matrices d'activité inactifs (titre + description) */
+  [class*="bg-[#24123d]/60"] h3 {
+    color: #1e0a38 !important;
+  }
+  [class*="bg-[#24123d]/60"] p {
+    color: #475569 !important;
+  }
+
+  /* Bouton d'activité sélectionné (bg-secondary/40) en mode clair */
+  [class*="bg-secondary/40"] {
+    background-color: #480A94 !important;
+    border-color: #9ecd33 !important;
+    box-shadow: 0 12px 25px -5px rgba(72, 10, 148, 0.2) !important;
+  }
+  [class*="bg-secondary/40"] h3,
+  [class*="bg-secondary/40"] span {
+    color: #ffffff !important;
+  }
+  [class*="bg-secondary/40"] p {
+    color: #e9d5ff !important;
+  }
+
+  /* Bouton d'onglets inactifs dans le DashboardShell */
+  button[class*="text-purple-200"]:not([class*="bg-primary"]) {
+    color: #480A94 !important;
+  }
+  button[class*="text-purple-200"]:not([class*="bg-primary"]):hover {
+    color: #1e0a38 !important;
+    background-color: rgba(72, 10, 148, 0.05) !important;
+  }
+
+  /* Badges de statuts contrastés */
+  [class*="bg-green-950/40"], [class*="bg-green-900/30"] {
+    background-color: #dcfce7 !important;
+    color: #15803d !important;
+    border-color: #bbf7d0 !important;
+  }
+  [class*="bg-yellow-950/40"], [class*="bg-yellow-900/30"] {
+    background-color: #fef9c3 !important;
+    color: #a16207 !important;
+    border-color: #fef08a !important;
+  }
+  [class*="bg-red-950/40"], [class*="bg-red-900/30"] {
+    background-color: #fee2e2 !important;
+    color: #b91c1c !important;
+    border-color: #fecaca !important;
+  }
+  [class*="bg-blue-950/40"], [class*="bg-blue-900/30"] {
+    background-color: #dbeafe !important;
+    color: #1d4ed8 !important;
+    border-color: #bfdbfe !important;
+  }
+
+  /* Boutons de session réseau détectés */
+  [class*="bg-primary/5"] {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+  }
+  [class*="bg-primary/5"] .text-white,
+  [class*="bg-primary/5"] span {
+    color: #1e0a38 !important;
+  }
+
+  /* Éviter que le texte blanc général devienne illisible */
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--app-text) !important;
+  }
+
+  /* Remplacement des textes gris/blancs par du gris foncé pour contraste */
+  .text-white, .text-slate-100, .text-slate-200, .text-slate-300 {
+    &:not(button *):not([class*="bg-primary"] *):not([class*="bg-secondary"] *) {
+      color: var(--app-text) !important;
+    }
+  }
+  .text-slate-400, .text-slate-500, .text-purple-300 {
+    &:not(button *):not([class*="bg-primary"] *):not([class*="bg-secondary"] *) {
+      color: var(--app-text-muted) !important;
+    }
+  }
+
+  /* Optimisation accessibilité vert sur blanc */
+  .text-primary, [class*="text-primary"] {
+    &:not(button *):not([class*="bg-primary"] *) {
+      color: #3f7d00 !important;
+    }
+  }
+
+  /* Bordures globales */
+  [class*="border-purple-950"],
+  [class*="border-purple-900"],
+  [class*="border-purple-900/60"],
+  [class*="border-purple-900/40"] {
+    border-color: var(--app-card-border) !important;
+  }
+
+  /* En-tête des tableaux */
+  th {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+  }
+}
+
+@theme {
+  --color-primary: #9ecd33; /* Vert Lime Insertech */
+  --color-secondary: #480A94; /* Violet Insertech */
+  
+  /* Sémantique du thème adaptatif */
+  --color-app-bg: var(--app-bg);
+  --color-app-bg-footer: var(--app-bg-footer);
+  --color-app-text: var(--app-text);
+  --color-app-text-muted: var(--app-text-muted);
+  --color-app-card: var(--app-card);
+  --color-app-card-border: var(--app-card-border);
+  --color-app-input: var(--app-input);
+  --color-app-input-border: var(--app-input-border);
+  --color-app-header: var(--app-header);
+
+  /* Fallbacks de compatibilité */
+  --color-accent-dark: var(--app-bg);
+  --color-purple-950: var(--app-card-border);
+  --color-purple-900: var(--app-card-border);
+  
+  --font-display: "Oswald", "Impact", "Trebuchet MS", sans-serif;
+  --font-sans: "Roboto", "Helvetica Neue", "Arial", sans-serif;
+}
+
+@utility glass-panel {
+  background: var(--app-header);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--app-card-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+}
+
+@utility glass-card {
+  background: var(--app-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--app-card-border);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.03);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility glass-card-hover {
+  &:hover {
+    transform: translateY(-4px) scale(1.01);
+    border-color: var(--color-primary);
+    box-shadow: 0 20px 30px -5px rgba(158, 205, 51, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+}
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    /* Dégradé radial chic de fond */
+    background: radial-gradient(circle at 50% 0%, #2e1065 0%, var(--app-bg) 100%) no-repeat;
+    background-attachment: fixed;
+    color: var(--color-app-text);
+    transition: background 0.5s ease, color 0.3s ease;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  
+  body {
+    font-family: var(--font-sans);
+  }
+}
+
+/* --- ANIMATIONS ET EFFETS HOVER MODERNES & CHICS --- */
+
+/* Animation d'entrée fadeInUp */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+main, .grid, form, section, .glass-card {
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Micro-interactions globales sur les boutons */
+button, .cursor-pointer {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+button:hover, .cursor-pointer:hover {
+  transform: translateY(-1.5px) scale(1.025);
+}
+button:active, .cursor-pointer:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+/* Effets Hover Premium sur les grilles de sélection de matrices d'activité */
+[class*="grid-cols-1"] button {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+[class*="grid-cols-1"] button:hover {
+  transform: translateY(-5px) scale(1.02) !important;
+  border-color: rgba(158, 205, 51, 0.6) !important;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3) !important;
+}
+.light [class*="grid-cols-1"] button:hover {
+  border-color: rgba(72, 10, 148, 0.4) !important;
+  box-shadow: 0 20px 40px -15px rgba(72, 10, 148, 0.12) !important;
+}
+
+/* Glow subtil sur le bouton actif sélectionné */
+.light [class*="bg-secondary/40"] {
+  animation: selectionGlowLight 2s infinite alternate;
+}
+@keyframes selectionGlowLight {
+  from {
+    box-shadow: 0 8px 20px -5px rgba(72, 10, 148, 0.25);
+  }
+  to {
+    box-shadow: 0 8px 30px 2px rgba(72, 10, 148, 0.4);
+  }
+}
+
+[class*="bg-secondary/40"]:not(.light *) {
+  animation: selectionGlowDark 2s infinite alternate;
+}
+@keyframes selectionGlowDark {
+  from {
+    box-shadow: 0 8px 20px -5px rgba(158, 205, 51, 0.2);
+  }
+  to {
+    box-shadow: 0 8px 30px 2px rgba(158, 205, 51, 0.45);
+  }
+}
+
+/* Animations de tirage au sort (Raffle) */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 10s linear infinite;
+}
+
+/* Scrollbars personnalisés */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--app-bg-footer);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
