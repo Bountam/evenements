@@ -12,6 +12,9 @@ node_modules
 dist
 dist-ssr
 *.local
+*.pdb
+launcher/bin/
+launcher/obj/
 
 # Éditeurs & OS
 .vscode/*
