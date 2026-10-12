@@ -1,0 +1,117 @@
+name: CI / CD Pipeline - Insertech Événements
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ------------------------------------------------------------
+  # Job 1 : Validation de la qualité et des types (CI)
+  # ------------------------------------------------------------
+  ci-quality-check:
+    name: "CI : Validation des types & Bundle Web"
+    runs-on: windows-latest
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Vérifier les types TypeScript (Lint)
+        run: npm run lint
+
+      - name: Valider la génération du bundle HTML
+        run: npm run build
+
+  # ------------------------------------------------------------
+  # Job 2 : Compilation du binaire portable Windows (.NET 7)
+  # ------------------------------------------------------------
+  build-windows-exe:
+    name: "Build : Exécutable autonome Windows x64"
+    needs: ci-quality-check
+    runs-on: windows-latest
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Configurer .NET 7 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Installer les dépendances npm
+        run: npm ci
+
+      - name: Compiler le bundle web et l'exécutable portable
+        run: npm run build:exe
+
+      - name: Téléverser l'exécutable Windows (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-Windows-x64
+          path: InsertechEvenements.exe
+          retention-days: 30
+
+      - name: Téléverser la version Web autonome (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-Web-HTML
+          path: dist/index.html
+          retention-days: 30
+
+  # ------------------------------------------------------------
+  # Job 3 : Déploiement automatique lors d'une release (CD)
+  # ------------------------------------------------------------
+  release:
+    name: "CD : Publication de la Release GitHub"
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-windows-exe
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Télécharger l'exécutable Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-Windows-x64
+          path: release/
+
+      - name: Télécharger le bundle Web
+        uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-Web-HTML
+          path: release/
+
+      - name: Publier la Release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/InsertechEvenements.exe
+            release/index.html
+          generate_release_notes: true
+          draft: false
+          prerelease: false

@@ -2274,14 +2274,27 @@ Les composants utilisent ces variables CSS directement, jamais de valeurs codée
 
 ### Étape 1 : Compiler l'application
 
+#### Option A : Bundle Web autonome (HTML unique)
 ```bash
 npm run build
 ```
-
 Cela génère le fichier `dist/index.html`. C'est ce fichier unique qui contient toute l'application.
 
+#### Option B : Exécutable portable Windows (.NET 7 avec icône et zéro permission)
+```bash
+npm run build:exe
+```
+Cela génère l'exécutable portable `InsertechEvenements.exe` à la racine, prêt à l'emploi avec icône intégrée, sans installation et sans alerte de sécurité.
+
+#### Option C : Intégration Continue & Déploiement Continu (CI / CD)
+Un pipeline GitHub Actions (`.github/workflows/ci-cd.yml`) valide automatiquement chaque **Pull Request (PR)** et compile l'exécutable à chaque `push` sur la branche principale :
+- **CI** : Vérification des types TypeScript (`npm run lint`) et test du bundle.
+- **Artifacts** : Téléchargement automatique de `InsertechEvenements.exe` et `dist/index.html` depuis l'onglet Actions de GitHub.
+- **CD / Releases** : Création automatique d'une release officielle dès qu'un tag `v*` est poussé.
+
 > [!TIP]
-> Le fichier `dist/index.html` peut être copié sur une clé USB et ouvert directement dans Chrome ou Firefox, sans installer quoi que ce soit.
+> Le fichier `InsertechEvenements.exe` ou `dist/index.html` peut être copié sur une clé USB et ouvert directement, sans installer quoi que ce soit.
+
 
 ### Étape 2 : PC Hôte — Créer la session
 
