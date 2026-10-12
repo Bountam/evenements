@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:exe": "npm run build && C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe /target:winexe /win32icon:app.ico /win32manifest:app.manifest /resource:dist\\index.html,app_index.html /out:InsertechEvenements.exe Launcher.cs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
