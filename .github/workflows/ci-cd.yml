@@ -20,7 +20,7 @@ jobs:
   # ------------------------------------------------------------
   ci-quality-check:
     name: "CI : Validation des types & Bundle Web"
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Récupérer le code source
@@ -67,7 +67,7 @@ jobs:
       - name: Installer les dépendances npm
         run: npm ci
 
-      - name: Compiler le bundle web et l'exécutable portable
+      - name: Compiler le bundle web et l'exécutable Windows
         run: npm run build:exe
 
       - name: Téléverser l'exécutable Windows (Artifact)
@@ -85,12 +85,55 @@ jobs:
           retention-days: 30
 
   # ------------------------------------------------------------
-  # Job 3 : Déploiement automatique lors d'une release (CD)
+  # Job 3 : Compilation du binaire portable Linux Debian (.NET 7)
+  # ------------------------------------------------------------
+  build-linux-bin:
+    name: "Build : Exécutable portable Linux Debian x64"
+    needs: ci-quality-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Configurer .NET 7 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Installer les dépendances npm
+        run: npm ci
+
+      - name: Compiler le bundle web et l'exécutable Linux Debian
+        run: |
+          npm run build:linux
+          chmod +x InsertechEvenements-linux-x64
+          tar -czvf InsertechEvenements-linux-x64.tar.gz InsertechEvenements-linux-x64
+
+      - name: Téléverser l'exécutable Linux Debian (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-Linux-Debian-x64
+          path: |
+            InsertechEvenements-linux-x64
+            InsertechEvenements-linux-x64.tar.gz
+          retention-days: 30
+
+  # ------------------------------------------------------------
+  # Job 4 : Déploiement automatique lors d'une release (CD)
   # ------------------------------------------------------------
   release:
     name: "CD : Publication de la Release GitHub"
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-windows-exe
+    needs:
+      - build-windows-exe
+      - build-linux-bin
     runs-on: ubuntu-latest
 
     steps:
@@ -98,6 +141,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: InsertechEvenements-Windows-x64
+          path: release/
+
+      - name: Télécharger l'exécutable Linux Debian
+        uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-Linux-Debian-x64
           path: release/
 
       - name: Télécharger le bundle Web
@@ -111,6 +160,8 @@ jobs:
         with:
           files: |
             release/InsertechEvenements.exe
+            release/InsertechEvenements-linux-x64
+            release/InsertechEvenements-linux-x64.tar.gz
             release/index.html
           generate_release_notes: true
           draft: false

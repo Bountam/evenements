@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace InsertechEvenements
 {
@@ -12,88 +13,210 @@ namespace InsertechEvenements
         {
             try
             {
-                string targetHtmlPath = null;
+                bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string appDataDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "InsertechEvenements"
+                );
+                Directory.CreateDirectory(appDataDir);
 
-                string localDist = Path.Combine(baseDir, "dist", "index.html");
-                string localSameDir = Path.Combine(baseDir, "index.html");
-
-                if (File.Exists(localDist))
+                // Sur Linux (Debian/Ubuntu/Mint), extraire l'icône et enregistrer l'entrée Freedesktop (.desktop)
+                if (isLinux)
                 {
-                    targetHtmlPath = localDist;
-                }
-                else if (File.Exists(localSameDir))
-                {
-                    targetHtmlPath = localSameDir;
-                }
-                else
-                {
-                    string parentDist = Path.Combine(baseDir, "..", "dist", "index.html");
-                    if (File.Exists(parentDist))
-                    {
-                        targetHtmlPath = Path.GetFullPath(parentDist);
-                    }
+                    SetupLinuxDesktopIntegration(appDataDir);
                 }
 
-                // Mode 100% autonome : Si aucun fichier HTML externe n'est présent, extraire la ressource embarquée
-                if (string.IsNullOrEmpty(targetHtmlPath) || !File.Exists(targetHtmlPath))
-                {
-                    string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "InsertechEvenements");
-                    Directory.CreateDirectory(appDataDir);
-                    string extractedPath = Path.Combine(appDataDir, "index.html");
-
-                    var assembly = Assembly.GetExecutingAssembly();
-                    using (Stream stream = assembly.GetManifestResourceStream("app_index.html"))
-                    {
-                        if (stream != null)
-                        {
-                            using (FileStream fileStream = new FileStream(extractedPath, FileMode.Create, FileAccess.Write))
-                            {
-                                stream.CopyTo(fileStream);
-                            }
-                            targetHtmlPath = extractedPath;
-                        }
-                    }
-                }
+                string targetHtmlPath = ResolveHtmlPath(baseDir, appDataDir);
 
                 if (!string.IsNullOrEmpty(targetHtmlPath) && File.Exists(targetHtmlPath))
                 {
                     string fileUri = new Uri(targetHtmlPath).AbsoluteUri;
-                    string browserPath = FindBrowser();
+                    string profileDir = Path.Combine(appDataDir, "Profile");
+                    Directory.CreateDirectory(profileDir);
 
-                    if (!string.IsNullOrEmpty(browserPath))
+                    if (isLinux)
                     {
-                        string profileDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "InsertechEvenements", "Profile");
-                        Directory.CreateDirectory(profileDir);
-
-                        // Mode application autonome (sans onglets ni barre d'URL, zéro port réseau, zéro invite pare-feu)
-                        string args = string.Format(
-                            "--app=\"{0}\" --user-data-dir=\"{1}\" --window-size=1360,860 --start-maximized --allow-file-access-from-files --no-first-run --no-default-browser-check",
-                            fileUri,
-                            profileDir
-                        );
-
-                        ProcessStartInfo psi = new ProcessStartInfo
-                        {
-                            FileName = browserPath,
-                            Arguments = args,
-                            UseShellExecute = false
-                        };
-                        Process.Start(psi);
+                        LaunchOnLinux(fileUri, profileDir);
                     }
                     else
                     {
-                        Process.Start(new ProcessStartInfo(fileUri) { UseShellExecute = true });
+                        LaunchOnWindows(fileUri, profileDir);
                     }
                 }
             }
             catch
             {
-                // Fallback silencieux
+                // Repli silencieux pour éviter tout crash bloquant
             }
         }
 
-        static string FindBrowser()
+        static string ResolveHtmlPath(string baseDir, string appDataDir)
+        {
+            string localDist = Path.Combine(baseDir, "dist", "index.html");
+            string localSameDir = Path.Combine(baseDir, "index.html");
+
+            if (File.Exists(localDist))
+            {
+                return localDist;
+            }
+            if (File.Exists(localSameDir))
+            {
+                return localSameDir;
+            }
+
+            string parentDist = Path.Combine(baseDir, "..", "dist", "index.html");
+            if (File.Exists(parentDist))
+            {
+                return Path.GetFullPath(parentDist);
+            }
+
+            // Mode 100% autonome : extraire la ressource HTML embarquée dans le dossier utilisateur
+            string extractedPath = Path.Combine(appDataDir, "index.html");
+            ExtractEmbeddedResource("app_index.html", extractedPath);
+
+            return File.Exists(extractedPath) ? extractedPath : null;
+        }
+
+        static void ExtractEmbeddedResource(string resourceName, string destinationPath)
+        {
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream != null)
+                    {
+                        using (FileStream fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write))
+                        {
+                            stream.CopyTo(fileStream);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignorer si le fichier est déjà verrouillé par une autre instance
+            }
+        }
+
+        static void SetupLinuxDesktopIntegration(string appDataDir)
+        {
+            try
+            {
+                string iconPath = Path.Combine(appDataDir, "logo.png");
+                ExtractEmbeddedResource("app_logo.png", iconPath);
+
+                string exePath = Environment.ProcessPath;
+                if (string.IsNullOrEmpty(exePath))
+                {
+                    exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "InsertechEvenements-linux-x64");
+                }
+
+                string localShare = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string applicationsDir = Path.Combine(localShare, "applications");
+                Directory.CreateDirectory(applicationsDir);
+
+                string desktopFilePath = Path.Combine(applicationsDir, "insertech-evenements.desktop");
+                string desktopContent =
+                    "[Desktop Entry]\n" +
+                    "Version=1.0\n" +
+                    "Type=Application\n" +
+                    "Name=Insertech Événements\n" +
+                    "Comment=Tableau de bord événementiel hors-ligne Insertech\n" +
+                    "Exec=\"" + exePath + "\"\n" +
+                    "Icon=" + iconPath + "\n" +
+                    "Terminal=false\n" +
+                    "Categories=Office;Utility;\n" +
+                    "StartupWMClass=InsertechEvenements\n";
+
+                File.WriteAllText(desktopFilePath, desktopContent);
+            }
+            catch
+            {
+                // Non bloquant si l'environnement est sans bureau graphique standard
+            }
+        }
+
+        static void LaunchOnWindows(string fileUri, string profileDir)
+        {
+            string browserPath = FindWindowsChromiumBrowser();
+
+            if (!string.IsNullOrEmpty(browserPath))
+            {
+                string args = string.Format(
+                    "--app=\"{0}\" --user-data-dir=\"{1}\" --window-size=1360,860 --start-maximized --allow-file-access-from-files --no-first-run --no-default-browser-check",
+                    fileUri,
+                    profileDir
+                );
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = browserPath,
+                    Arguments = args,
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo(fileUri) { UseShellExecute = true });
+            }
+        }
+
+        static void LaunchOnLinux(string fileUri, string profileDir)
+        {
+            // 1. Priorité aux navigateurs Chromium (supportent le mode fenêtre native --app sans barre d'adresse)
+            string chromiumBrowser = FindLinuxChromiumBrowser();
+            if (!string.IsNullOrEmpty(chromiumBrowser))
+            {
+                string args = string.Format(
+                    "--app=\"{0}\" --user-data-dir=\"{1}\" --class=InsertechEvenements --window-size=1360,860 --start-maximized --allow-file-access-from-files --no-first-run --no-default-browser-check",
+                    fileUri,
+                    profileDir
+                );
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = chromiumBrowser,
+                    Arguments = args,
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+                return;
+            }
+
+            // 2. Navigateur par défaut sur Debian : Firefox ESR ou Firefox standard
+            string firefoxBrowser = FindLinuxFirefoxBrowser();
+            if (!string.IsNullOrEmpty(firefoxBrowser))
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = firefoxBrowser,
+                    Arguments = "--new-window \"" + fileUri + "\"",
+                    UseShellExecute = false
+                };
+                Process.Start(psi);
+                return;
+            }
+
+            // 3. Repli universel Freedesktop (xdg-open)
+            if (File.Exists("/usr/bin/xdg-open"))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/xdg-open",
+                    Arguments = "\"" + fileUri + "\"",
+                    UseShellExecute = false
+                });
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo(fileUri) { UseShellExecute = true });
+            }
+        }
+
+        static string FindWindowsChromiumBrowser()
         {
             string[] possiblePaths = new string[]
             {
@@ -106,6 +229,51 @@ namespace InsertechEvenements
             };
 
             foreach (string path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            return null;
+        }
+
+        static string FindLinuxChromiumBrowser()
+        {
+            string[] candidates = new string[]
+            {
+                "/usr/bin/chromium",
+                "/usr/bin/chromium-browser",
+                "/snap/bin/chromium",
+                "/usr/bin/google-chrome",
+                "/usr/bin/google-chrome-stable",
+                "/usr/bin/brave-browser",
+                "/usr/bin/microsoft-edge",
+                "/usr/bin/microsoft-edge-stable"
+            };
+
+            foreach (string path in candidates)
+            {
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            return null;
+        }
+
+        static string FindLinuxFirefoxBrowser()
+        {
+            string[] candidates = new string[]
+            {
+                "/usr/bin/firefox-esr",
+                "/usr/bin/firefox",
+                "/snap/bin/firefox"
+            };
+
+            foreach (string path in candidates)
             {
                 if (File.Exists(path))
                 {

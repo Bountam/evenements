@@ -2,14 +2,16 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
-    <ApplicationIcon>..\app.ico</ApplicationIcon>
-    <AssemblyName>InsertechEvenements</AssemblyName>
+    <AssemblyName Condition="'$(RuntimeIdentifier)' != 'linux-x64'">InsertechEvenements</AssemblyName>
+    <AssemblyName Condition="'$(RuntimeIdentifier)' == 'linux-x64'">InsertechEvenements-linux-x64</AssemblyName>
     <RootNamespace>InsertechEvenements</RootNamespace>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishTrimmed>true</PublishTrimmed>
-    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <ApplicationIcon Condition="'$(RuntimeIdentifier)' != 'linux-x64'">..\app.ico</ApplicationIcon>
+    <ApplicationManifest Condition="'$(RuntimeIdentifier)' != 'linux-x64'">..\app.manifest</ApplicationManifest>
     <AssemblyTitle>Insertech Événements</AssemblyTitle>
     <Company>Insertech Angus</Company>
     <Product>Insertech Événements</Product>
@@ -20,5 +22,6 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\dist\index.html" LogicalName="app_index.html" />
+    <EmbeddedResource Include="..\logo.png" LogicalName="app_logo.png" />
   </ItemGroup>
 </Project>
