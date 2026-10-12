@@ -23,6 +23,18 @@ if (typeof window !== 'undefined') {
       event.stopPropagation();
     }
   });
+
+  // Enregistrement du Service Worker PWA (uniquement sur HTTP/HTTPS comme GitHub Pages)
+  if (
+    'serviceWorker' in navigator &&
+    (window.location.protocol === 'https:' || window.location.protocol === 'http:')
+  ) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {
+        // Ignore en mode développement local si non applicable
+      });
+    });
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

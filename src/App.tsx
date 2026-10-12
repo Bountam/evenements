@@ -20,6 +20,51 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('accueil');
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
+  const [deferredPwaPrompt, setDeferredPwaPrompt] = useState<any>(null);
+  const [isStandalonePwa, setIsStandalonePwa] = useState<boolean>(false);
+
+  // Gestion de l'installation PWA Android / Tablette
+  useEffect(() => {
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true ||
+      window.location.protocol === 'file:';
+    setIsStandalonePwa(isStandalone);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPwaPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPwaPrompt(null);
+      setIsStandalonePwa(true);
+      showToast('Application installée avec succès sur votre appareil !', 'success');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (deferredPwaPrompt) {
+      deferredPwaPrompt.prompt();
+      const { outcome } = await deferredPwaPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPwaPrompt(null);
+      }
+    } else {
+      showToast(
+        'Sur Android (Chrome) : ouvrez le menu ⋮ en haut à droite puis appuyez sur « Installer l\'application » ou « Ajouter à l\'écran d\'accueil ».',
+        'info'
+      );
+    }
+  };
 
   // Thème clair/foncé d'Insertech
   const [isLightTheme, setIsLightTheme] = useState<boolean>(() => {
@@ -1484,6 +1529,18 @@ export default function App() {
             >
               {isLightTheme ? <Moon size={14} /> : <Sun size={14} />}
             </button>
+
+            {/* Bouton Installation PWA (Android / Tablette) */}
+            {!isStandalonePwa && (
+              <button
+                onClick={handleInstallPwa}
+                title="Installer l'application hors-ligne sur cet appareil (Android / Tablette)"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-secondary border border-primary/50 text-xs font-bold font-display uppercase tracking-wider hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
+              >
+                <Download size={14} />
+                <span>Installer l'App (Android / PWA)</span>
+              </button>
+            )}
 
             {/* Bouton Réseau */}
             <button

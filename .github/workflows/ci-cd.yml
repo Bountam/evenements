@@ -13,13 +13,15 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   # ------------------------------------------------------------
   # Job 1 : Validation de la qualité et des types (CI)
   # ------------------------------------------------------------
   ci-quality-check:
-    name: "CI : Validation des types & Bundle Web"
+    name: "CI : Validation des types & Bundle PWA"
     runs-on: ubuntu-latest
 
     steps:
@@ -38,11 +40,42 @@ jobs:
       - name: Vérifier les types TypeScript (Lint)
         run: npm run lint
 
-      - name: Valider la génération du bundle HTML
+      - name: Valider la génération du bundle PWA
         run: npm run build
 
+      - name: Téléverser le package complet PWA Android / Web (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-PWA-Android-Web
+          path: dist/
+          retention-days: 30
+
   # ------------------------------------------------------------
-  # Job 2 : Compilation du binaire portable Windows (.NET 7)
+  # Job 2 : Déploiement de la PWA Android sur GitHub Pages
+  # ------------------------------------------------------------
+  deploy-pwa-pages:
+    name: "CD : Déploiement PWA Android (GitHub Pages)"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: ci-quality-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Télécharger le build PWA
+        uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-PWA-Android-Web
+          path: dist/
+
+      - name: Déployer sur la branche gh-pages (GitHub Pages)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
+          commit_message: "chore(pwa): deploy Android PWA to GitHub Pages"
+
+  # ------------------------------------------------------------
+  # Job 3 : Compilation du binaire portable Windows (.NET 7)
   # ------------------------------------------------------------
   build-windows-exe:
     name: "Build : Exécutable autonome Windows x64"
@@ -77,15 +110,8 @@ jobs:
           path: InsertechEvenements.exe
           retention-days: 30
 
-      - name: Téléverser la version Web autonome (Artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: InsertechEvenements-Web-HTML
-          path: dist/index.html
-          retention-days: 30
-
   # ------------------------------------------------------------
-  # Job 3 : Compilation du binaire portable Linux Debian (.NET 7)
+  # Job 4 : Compilation du binaire portable Linux Debian (.NET 7)
   # ------------------------------------------------------------
   build-linux-bin:
     name: "Build : Exécutable portable Linux Debian x64"
@@ -126,7 +152,7 @@ jobs:
           retention-days: 30
 
   # ------------------------------------------------------------
-  # Job 4 : Déploiement automatique lors d'une release (CD)
+  # Job 5 : Déploiement automatique lors d'une release (CD)
   # ------------------------------------------------------------
   release:
     name: "CD : Publication de la Release GitHub"
@@ -149,11 +175,16 @@ jobs:
           name: InsertechEvenements-Linux-Debian-x64
           path: release/
 
-      - name: Télécharger le bundle Web
+      - name: Télécharger le bundle PWA
         uses: actions/download-artifact@v4
         with:
-          name: InsertechEvenements-Web-HTML
-          path: release/
+          name: InsertechEvenements-PWA-Android-Web
+          path: release/pwa/
+
+      - name: Créer l'archive PWA et préparer les fichiers de Release
+        run: |
+          cp release/pwa/index.html release/index.html
+          cd release/pwa && zip -r ../InsertechEvenements-PWA-Android.zip .
 
       - name: Publier la Release GitHub
         uses: softprops/action-gh-release@v2
@@ -162,6 +193,7 @@ jobs:
             release/InsertechEvenements.exe
             release/InsertechEvenements-linux-x64
             release/InsertechEvenements-linux-x64.tar.gz
+            release/InsertechEvenements-PWA-Android.zip
             release/index.html
           generate_release_notes: true
           draft: false
