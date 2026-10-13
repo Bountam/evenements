@@ -56,6 +56,34 @@ class P2PNetworkManager {
   // File d'attente locale pour la résilience hors-ligne (Offline Queue)
   offlineQueue: NetworkMessage[] = [];
 
+  // Canal de synchronisation inter-onglets / multi-fenêtres (HDMI Écran Public local)
+  chronoChannel: BroadcastChannel | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedTracks = localStorage.getItem('insertech_tracks_state');
+        if (savedTracks) {
+          const parsed = JSON.parse(savedTracks);
+          if (parsed && typeof parsed === 'object') {
+            this.tracksState = { ...this.tracksState, ...parsed };
+          }
+        }
+      } catch (e) {
+        // Ignorer si corrompu
+      }
+
+      if ('BroadcastChannel' in window) {
+        this.chronoChannel = new BroadcastChannel('insertech_chrono_sync_channel');
+        this.chronoChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'LOCAL_CHRONO_ACTION') {
+            this.applyChronoAction(event.data.action, false);
+          }
+        };
+      }
+    }
+  }
+
   updateStatus(status: string) {
     if (this.onStatusChange) {
       this.onStatusChange(status);
@@ -362,12 +390,8 @@ class P2PNetworkManager {
 
   // ÉMETTRE UNE ACTION DE CHRONO / RAFFLE
   sendChronoAction(action: SyncMessage) {
-    if (this.role === 'standalone') {
-      // Si autonome, on l'applique uniquement en local
-      this.applyChronoAction(action);
-    } else {
-      // Si en ligne, on l'envoie au réseau
-      this.applyChronoAction(action);
+    this.applyChronoAction(action, true);
+    if (this.role !== 'standalone') {
       this.broadcast({
         type: 'CHRONO_ACTION',
         message: action
@@ -375,11 +399,28 @@ class P2PNetworkManager {
     }
   }
 
+  private persistTracksState() {
+    try {
+      localStorage.setItem('insertech_tracks_state', JSON.stringify(this.tracksState));
+    } catch (e) {
+      // Ignorer quota localStorage
+    }
+  }
+
   // APPLIQUER CHRONO EN LOCAL
-  private applyChronoAction(action: SyncMessage) {
+  private applyChronoAction(action: SyncMessage, broadcastLocal: boolean = true) {
+    if (broadcastLocal && this.chronoChannel) {
+      try {
+        this.chronoChannel.postMessage({ type: 'LOCAL_CHRONO_ACTION', action });
+      } catch (e) {
+        // Ignorer
+      }
+    }
+
     if (action.type === 'TRACKS_STATE_SYNC') {
       this.tracksState = action.tracks;
-      if (this.onTracksSync) this.onTracksSync(this.tracksState);
+      this.persistTracksState();
+      if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
     } else if (action.type === 'TRACK_ASSIGN') {
       const track = this.tracksState[action.trackId];
       if (track) {
@@ -389,6 +430,7 @@ class P2PNetworkManager {
         track.startTime = null;
         track.elapsedBeforeStart = 0;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }
     } else if (action.type === 'TIMER_START') {
@@ -398,6 +440,7 @@ class P2PNetworkManager {
         track.startTime = action.startTime;
         track.elapsedBeforeStart = action.elapsedBeforeStart;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }
     } else if (action.type === 'TIMER_STOP') {
@@ -407,6 +450,7 @@ class P2PNetworkManager {
         track.startTime = null;
         track.elapsedBeforeStart = action.elapsed;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }
     } else if (action.type === 'TIMER_RESET') {
@@ -416,6 +460,7 @@ class P2PNetworkManager {
         track.startTime = null;
         track.elapsedBeforeStart = 0;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }
     } else if (action.type === 'PEER_CELEBRATION') {
@@ -427,6 +472,16 @@ class P2PNetworkManager {
 
   // APPELÉ POUR PROPAGER UNE ÉCRITURE VERS LE MASTER (OU DIRECTEMENT SI HÔTE)
   async writeToDatabase(table: string, action: 'put' | 'delete', data: any) {
+    // 1. Toujours persister immédiatement dans l'IndexedDB locale (Master, Client ou Standalone)
+    const t = db.table(table);
+    if (action === 'put') {
+      await t.put(data);
+    } else if (action === 'delete') {
+      await t.delete(data);
+    }
+    notifySync();
+
+    // 2. Propager sur le réseau P2P selon le rôle
     if (this.role === 'client') {
       const conn = this.connections[0];
       if (conn && conn.open) {
@@ -445,31 +500,24 @@ class P2PNetworkManager {
           data
         });
       }
-    } else {
-      // Si Master ou Standalone, écrire localement directement
-      const t = db.table(table);
-      if (action === 'put') {
-        await t.put(data);
-      } else if (action === 'delete') {
-        await t.delete(data);
-      }
-      notifySync();
-
+    } else if (this.role === 'host') {
       // Si Master, diffuser le delta atomique aux clients (O(1) au lieu de O(N))
-      if (this.role === 'host') {
-        this.broadcast({
-          type: 'DB_DELTA',
-          table,
-          action,
-          data
-        });
-      }
+      this.broadcast({
+        type: 'DB_DELTA',
+        table,
+        action,
+        data
+      });
     }
   }
 
   // ÉCRITURE PAR LOT TRANSACTIONNELLE (OPTIMISATION POUR IMPORTATIONS MASSIFS)
   async writeBatchToDatabase(table: string, items: any[]) {
     if (!items || items.length === 0) return;
+
+    const t = db.table(table);
+    await t.bulkPut(items);
+    notifySync();
 
     if (this.role === 'client') {
       const conn = this.connections[0];
@@ -486,18 +534,12 @@ class P2PNetworkManager {
           items
         });
       }
-    } else {
-      const t = db.table(table);
-      await t.bulkPut(items);
-      notifySync();
-
-      if (this.role === 'host') {
-        this.broadcast({
-          type: 'DB_BATCH_WRITE',
-          table,
-          items
-        });
-      }
+    } else if (this.role === 'host') {
+      this.broadcast({
+        type: 'DB_BATCH_WRITE',
+        table,
+        items
+      });
     }
   }
 
