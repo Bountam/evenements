@@ -5,6 +5,9 @@ const ASSETS_TO_CACHE = [
   './manifest.json',
   './favicon.ico',
   './logo.png',
+  './logo-insertech.png',
+  './prize-ssd.png',
+  './prize-laptop.png',
   './pwa-192x192.png',
   './pwa-512x512.png',
   './apple-touch-icon.png'

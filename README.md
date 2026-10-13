@@ -2292,19 +2292,30 @@ npm run build:linux
 ```
 Cela génère le binaire portable `InsertechEvenements-linux-x64` à la racine (idéal pour les *Install Fest Linux* ou les postes sous Debian/Ubuntu/Mint). Au premier lancement (`./InsertechEvenements-linux-x64`), il extrait automatiquement le logo du chapiteau magique et enregistre un raccourci Freedesktop (`~/.local/share/applications/insertech-evenements.desktop`) sans demander de mot de passe administrateur (`sudo`).
 
-Pour compiler simultanément les versions **Web + Windows + Linux Debian** :
+#### Option D : Exécutable Mobile Android APK (.apk) & PWA
+```bash
+npm run build:mobile
+```
+Cela compile l'application, synchronise les assets mobiles dans le projet Android (`android/app/src/main/assets/`) et génère `dist/InsertechEvenements-Mobile.html`.
+Sur machine avec Android SDK ou via GitHub Actions, l'APK Android autonome est produit avec `./gradlew assembleDebug` sous le nom `InsertechEvenements-Android.apk`.
+
+Pour compiler simultanément l'ensemble des versions **Web + Windows + Linux Debian + Mobile Android** :
 ```bash
 npm run build:all
 ```
 
-#### Option D : Intégration Continue & Déploiement Continu (CI / CD)
-Un pipeline GitHub Actions (`.github/workflows/ci-cd.yml`) valide automatiquement chaque **Pull Request (PR)** et compile les exécutables Windows et Linux Debian à chaque `push` sur la branche principale :
-- **CI** : Vérification des types TypeScript (`npm run lint`) et test du bundle.
-- **Artifacts** : Téléchargement automatique de `InsertechEvenements.exe`, `InsertechEvenements-linux-x64.tar.gz` et `dist/index.html` depuis l'onglet Actions de GitHub.
-- **CD / Releases** : Création automatique d'une release officielle dès qu'un tag `v*` est poussé.
+#### Option E : Intégration Continue & Déploiement Continu (CI / CD)
+Un pipeline GitHub Actions (`.github/workflows/ci-cd.yml`) valide automatiquement chaque **Pull Request (PR)** et compile l'ensemble des exécutables à chaque push et sur chaque PR :
+- **CI** : Vérification des types TypeScript (`npm run lint`) et compilation du bundle.
+- **Artifacts de PR & Releases** : Téléchargement automatique pour chaque PR :
+  - 📱 **Android Mobile** : `InsertechEvenements-Android.apk` (exécutable installable sur smartphones et tablettes Android).
+  - 🪟 **Windows x64** : `InsertechEvenements.exe` (exécutable portable sans installation).
+  - 🐧 **Linux Debian x64** : `InsertechEvenements-linux-x64` (exécutable portable ELF).
+  - 🌐 **PWA Web & Mobile** : `InsertechEvenements-PWA-Android.zip` et `InsertechEvenements-Mobile.html`.
+- **CD / Releases** : Publication automatique des exécutables et de l'APK dès qu'un tag `v*` est poussé.
 
 > [!TIP]
-> Les fichiers `InsertechEvenements.exe`, `InsertechEvenements-linux-x64` ou `dist/index.html` peuvent être copiés sur une clé USB et ouverts directement, sans installer quoi que ce soit.
+> Sur smartphone ou tablette (Android / iOS), l'application peut également être installée directement depuis le navigateur via le bouton **« App Mobile (PWA & APK) »** et le QR Code interactif généré sur l'écran d'accueil !
 
 
 ### Étape 2 : PC Hôte — Créer la session

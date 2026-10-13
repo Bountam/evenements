@@ -18,3 +18,6 @@ Décrivez brièvement les changements apportés dans cette Pull Request :
 - [ ] `npm run lint` s'exécute sans aucune erreur de type.
 - [ ] `npm run build` génère avec succès le bundle autonome.
 - [ ] L'exécutable portable [InsertechEvenements.exe](file:///c:/Users/ricar/Desktop/Luka/Insertech%20-%20Tableau%20%20de%20bords%20%C3%A9v%C3%A9nementiel/InsertechEvenements.exe) fonctionne correctement sous Windows.
+- [ ] L'exécutable portable `InsertechEvenements-linux-x64` fonctionne correctement sous Linux.
+- [ ] L'exécutable mobile PWA & Android APK (`InsertechEvenements-Android.apk`) est généré et installable sur smartphone/tablette.
+

@@ -8,9 +8,10 @@ import ReparothonMatrix from './components/matrices/ReparothonMatrix';
 import TeardownMatrix from './components/matrices/TeardownMatrix';
 import GenericMatrix from './components/matrices/GenericMatrix';
 import { showToast, ToastContainer } from './components/shared/Toast';
+import MobileInstallModal from './components/shared/MobileInstallModal';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
-  History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, Sun, Moon, AlertTriangle, Download
+  History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, Sun, Moon, AlertTriangle, Download, Smartphone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -22,6 +23,7 @@ export default function App() {
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
   const [deferredPwaPrompt, setDeferredPwaPrompt] = useState<any>(null);
   const [isStandalonePwa, setIsStandalonePwa] = useState<boolean>(false);
+  const [showMobileInstallModal, setShowMobileInstallModal] = useState<boolean>(false);
 
   // Gestion de l'installation PWA Android / Tablette
   useEffect(() => {
@@ -57,12 +59,10 @@ export default function App() {
       const { outcome } = await deferredPwaPrompt.userChoice;
       if (outcome === 'accepted') {
         setDeferredPwaPrompt(null);
+        setShowMobileInstallModal(false);
       }
     } else {
-      showToast(
-        'Sur Android (Chrome) : ouvrez le menu ⋮ en haut à droite puis appuyez sur « Installer l\'application » ou « Ajouter à l\'écran d\'accueil ».',
-        'info'
-      );
+      setShowMobileInstallModal(true);
     }
   };
 
@@ -1534,17 +1534,15 @@ export default function App() {
               {isLightTheme ? <Moon size={14} /> : <Sun size={14} />}
             </button>
 
-            {/* Bouton Installation PWA (Android / Tablette) */}
-            {!isStandalonePwa && (
-              <button
-                onClick={handleInstallPwa}
-                title="Installer l'application hors-ligne sur cet appareil (Android / Tablette)"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-secondary border border-primary/50 text-xs font-bold font-display uppercase tracking-wider hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
-              >
-                <Download size={14} />
-                <span>Installer l'App (Android / PWA)</span>
-              </button>
-            )}
+            {/* Bouton Installation PWA / Mobile */}
+            <button
+              onClick={() => setShowMobileInstallModal(true)}
+              title="Installer ou télécharger l'application sur smartphone ou tablette (Android / iOS / PWA)"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-secondary border border-primary/50 text-xs font-bold font-display uppercase tracking-wider hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
+            >
+              <Smartphone size={14} />
+              <span>App Mobile (PWA & APK)</span>
+            </button>
 
             {/* Bouton Réseau */}
             <button
@@ -1664,6 +1662,13 @@ export default function App() {
 
       {renderNetModal()}
       {renderImportValidationModal()}
+      <MobileInstallModal
+        isOpen={showMobileInstallModal}
+        onClose={() => setShowMobileInstallModal(false)}
+        deferredPrompt={deferredPwaPrompt}
+        onInstallPwa={handleInstallPwa}
+        isStandalone={isStandalonePwa}
+      />
       <ToastContainer />
     </div>
   );
