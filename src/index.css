@@ -63,12 +63,15 @@
     color: var(--app-text) !important;
   }
 
-  /* Inputs et formulaires */
+  /* Inputs, sous-cartes et formulaires */
   [class*="bg-[#180A2b]/80"],
+  [class*="bg-[#180A2b]/70"],
+  [class*="bg-[#180A2b]/60"],
   [class*="bg-[#180A2b]/50"],
   [class*="bg-[#180A2b]/40"],
+  [class*="bg-[#180A2b]/30"],
   input, select, textarea {
-    background-color: var(--app-input) !important;
+    background-color: #f8fafc !important;
     border-color: var(--app-input-border) !important;
     color: var(--app-text) !important;
   }
@@ -123,26 +126,35 @@
     background-color: rgba(72, 10, 148, 0.05) !important;
   }
 
-  /* Badges de statuts contrastés */
-  [class*="bg-green-950/40"], [class*="bg-green-900/30"] {
+  /* Badges de statuts et pénalités contrastés */
+  [class*="bg-green-950/40"], [class*="bg-green-900/30"], [class*="bg-emerald-950/50"] {
     background-color: #dcfce7 !important;
-    color: #15803d !important;
-    border-color: #bbf7d0 !important;
+    color: #166534 !important;
+    border-color: #86efac !important;
   }
-  [class*="bg-yellow-950/40"], [class*="bg-yellow-900/30"] {
-    background-color: #fef9c3 !important;
-    color: #a16207 !important;
-    border-color: #fef08a !important;
+  [class*="bg-yellow-950/40"], [class*="bg-yellow-900/30"], [class*="bg-amber-950/50"] {
+    background-color: #fef3c7 !important;
+    color: #92400e !important;
+    border-color: #fcd34d !important;
   }
-  [class*="bg-red-950/40"], [class*="bg-red-900/30"] {
+  [class*="bg-red-950/40"], [class*="bg-red-900/30"], [class*="bg-red-950/50"], [class*="bg-red-950/60"] {
     background-color: #fee2e2 !important;
-    color: #b91c1c !important;
-    border-color: #fecaca !important;
+    color: #991b1b !important;
+    border-color: #fca5a5 !important;
   }
   [class*="bg-blue-950/40"], [class*="bg-blue-900/30"] {
     background-color: #dbeafe !important;
-    color: #1d4ed8 !important;
-    border-color: #bfdbfe !important;
+    color: #1e40af !important;
+    border-color: #93c5fd !important;
+  }
+
+  /* Conteneurs légèrement teintés (bg-primary/10, bg-primary/15, bg-primary/20) en mode clair */
+  [class*="bg-primary/10"],
+  [class*="bg-primary/15"],
+  [class*="bg-primary/20"] {
+    background-color: #ecfccb !important;
+    border-color: #84cc16 !important;
+    color: #1a2e05 !important;
   }
 
   /* Boutons de session réseau détectés */
@@ -160,23 +172,59 @@
     color: var(--app-text) !important;
   }
 
-  /* Remplacement des textes gris/blancs par du gris foncé pour contraste */
+  /* Remplacement des textes gris/blancs par du gris foncé très contrasté (sauf boutons pleins) */
   .text-white, .text-slate-100, .text-slate-200, .text-slate-300 {
-    &:not(button *):not([class*="bg-primary"] *):not([class*="bg-secondary"] *) {
-      color: var(--app-text) !important;
+    &:not(.bg-primary *):not(.bg-secondary *):not(.bg-red-600 *):not([class*="bg-secondary/40"] *) {
+      color: #0f172a !important;
     }
   }
   .text-slate-400, .text-slate-500, .text-purple-300 {
-    &:not(button *):not([class*="bg-primary"] *):not([class*="bg-secondary"] *) {
-      color: var(--app-text-muted) !important;
+    &:not(.bg-primary *):not(.bg-secondary *):not([class*="bg-secondary/40"] *) {
+      color: #334155 !important;
     }
   }
 
-  /* Optimisation accessibilité vert sur blanc */
+  /* Optimisation accessibilité vert sur blanc (WCAG AAA #2d6a00) */
   .text-primary, [class*="text-primary"] {
-    &:not(button *):not([class*="bg-primary"] *) {
-      color: #3f7d00 !important;
+    &:not(.bg-primary *):not(.bg-secondary *):not([class*="bg-secondary/40"] *) {
+      color: #2d6a00 !important;
     }
+  }
+
+  /* Cadran digital du chronomètre et badges de scores en mode clair */
+  .stopwatch-lcd {
+    background-color: #f1f5f9 !important;
+    border: 2px solid #cbd5e1 !important;
+    box-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.08) !important;
+  }
+  .stopwatch-lcd .stopwatch-digits-running {
+    color: #15803d !important;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  .stopwatch-lcd .stopwatch-digits-idle {
+    color: #0f172a !important;
+  }
+
+  .score-badge-gold {
+    background-color: #ecfccb !important;
+    border: 1.5px solid #65a30d !important;
+    color: #1a2e05 !important;
+  }
+  .score-badge-gold span,
+  .score-badge-gold svg {
+    color: #1a2e05 !important;
+  }
+
+  .score-badge-standard {
+    background-color: #f1f5f9 !important;
+    border: 1.5px solid #94a3b8 !important;
+    color: #0f172a !important;
+  }
+  .score-badge-standard span {
+    color: #0f172a !important;
+  }
+  .score-badge-standard svg {
+    color: #475569 !important;
   }
 
   /* Bordures globales */

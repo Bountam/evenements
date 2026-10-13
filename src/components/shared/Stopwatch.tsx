@@ -65,8 +65,8 @@ export default function Stopwatch({
       </div>
       
       {/* Affichage digital géant */}
-      <div className="font-mono text-5xl sm:text-7xl font-bold text-white tracking-wider tabular-nums bg-purple-950/80 px-6 py-4 rounded-2xl border border-primary/20 mb-6 min-w-[280px] text-center shadow-inner">
-        <span className={state.isRunning ? 'text-primary' : 'text-white'}>
+      <div className="stopwatch-lcd font-mono text-5xl sm:text-7xl font-bold text-white tracking-wider tabular-nums bg-purple-950/80 px-6 py-4 rounded-2xl border border-primary/20 mb-6 min-w-[280px] text-center shadow-inner">
+        <span className={state.isRunning ? 'text-primary stopwatch-digits-running' : 'text-white stopwatch-digits-idle'}>
           {formatTime(time)}
         </span>
       </div>

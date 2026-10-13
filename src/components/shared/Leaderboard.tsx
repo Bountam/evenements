@@ -177,11 +177,17 @@ export default function Leaderboard({
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-1.5">
-                          <Clock size={12} className={index === 0 ? 'text-primary' : 'text-slate-500'} />
+                        <div
+                          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border ${
+                            index === 0
+                              ? 'score-badge-gold bg-primary/15 border-primary/40 text-primary'
+                              : 'score-badge-standard bg-purple-950/60 border-purple-900/60 text-white'
+                          }`}
+                        >
+                          <Clock size={12} className={index === 0 ? 'text-primary' : 'text-slate-400'} />
                           <span
-                            className={`font-mono font-bold text-base tabular-nums ${
-                              index === 0 ? 'text-primary' : 'text-slate-200'
+                            className={`font-mono font-extrabold text-base tabular-nums ${
+                              index === 0 ? 'text-primary' : 'text-white'
                             }`}
                           >
                             {formatTime(participant.timeMs!)}

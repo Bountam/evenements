@@ -1417,21 +1417,23 @@ function PublicTrackBlock({ track, heightClass, isSingle = false }: PublicTrackB
         </h3>
       </div>
 
-      <div className="flex items-end justify-between mt-4">
+      <div className="flex items-end justify-between mt-4 gap-3">
         <div
-          className={`font-mono font-bold tracking-wider text-white tabular-nums ${
-            isSingle ? 'text-7xl sm:text-8xl text-primary' : 'text-4xl sm:text-5xl'
+          className={`stopwatch-lcd px-4 py-2 rounded-2xl bg-purple-950/80 border border-primary/20 font-mono font-bold tracking-wider tabular-nums ${
+            isSingle ? 'text-6xl sm:text-8xl' : 'text-3xl sm:text-5xl'
           }`}
         >
-          {formatTime(time)}
+          <span className={track.isRunning ? 'text-primary stopwatch-digits-running' : 'text-white stopwatch-digits-idle'}>
+            {formatTime(time)}
+          </span>
         </div>
 
         {track.isRunning ? (
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-bold uppercase animate-pulse font-sans">
+          <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-bold uppercase animate-pulse font-sans shrink-0">
             En cours
           </span>
         ) : (
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-purple-950 text-slate-400 border border-purple-900/40 font-bold uppercase font-sans">
+          <span className="text-[10px] px-2.5 py-1 rounded-full bg-purple-950 text-slate-400 border border-purple-900/40 font-bold uppercase font-sans shrink-0">
             Prêt / Stop
           </span>
         )}
