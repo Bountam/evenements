@@ -617,12 +617,21 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     .filter((p) => typeof p.timeMs === 'number' && p.timeMs > 0)
     .sort((a, b) => a.timeMs! - b.timeMs!);
   const bestParticipant = rankedParticipants.length > 0 ? rankedParticipants[0] : null;
+  const secondParticipant = rankedParticipants.length > 1 ? rankedParticipants[1] : null;
+  const thirdParticipant = rankedParticipants.length > 2 ? rankedParticipants[2] : null;
   const averageTimeMs =
     rankedParticipants.length > 0
       ? Math.round(
           rankedParticipants.reduce((acc, p) => acc + (p.timeMs || 0), 0) / rankedParticipants.length
         )
       : null;
+
+  // Inscrits au statut "En attente" non assignés sur une piste en direct
+  const waitingForLiveRace = participants.filter(
+    (p) =>
+      (p.timeMs === null || p.timeMs <= 0) &&
+      !Object.values(tracks).some((t) => t.participantId === p.id)
+  );
 
   // Filtrage et tri de la liste des participants
   const filteredParticipants = participants
@@ -696,19 +705,6 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           />
         </div>
       );
-    }
-
-    let gridColsClass = 'grid-cols-1';
-    let blockHeightClass = 'min-h-[180px]';
-
-    if (activeTracks.length === 2) {
-      gridColsClass = 'grid-cols-1 md:grid-cols-2';
-    } else if (activeTracks.length === 3 || activeTracks.length === 4) {
-      gridColsClass = 'grid-cols-1 md:grid-cols-2';
-      blockHeightClass = 'min-h-[140px]';
-    } else if (activeTracks.length === 5) {
-      gridColsClass = 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-      blockHeightClass = 'min-h-[130px]';
     }
 
     return (
@@ -819,25 +815,249 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             </div>
           ) : (
             /* ================================================================ */
-            /* ÉTAT EN COURSE : PISTES EN DIRECT + TABLEAU DES CHAMPIONS        */
+            /* ÉTAT EN COURSE : PISTES EN DIRECT (65%) + PODIUM & PRIX (35%)   */
             /* ================================================================ */
             <div className="h-full grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
-              <div className="col-span-12 lg:col-span-7 xl:col-span-8 flex flex-col justify-center gap-3 overflow-y-auto">
-                <div className={`grid ${gridColsClass} gap-3 sm:gap-4`}>
-                  {activeTracks.map((track) => (
-                    <PublicTrackBlock
-                      key={track.trackId}
-                      track={track}
-                      heightClass={blockHeightClass}
-                      isSingle={activeTracks.length === 1}
-                      bestTimeMs={bestParticipant?.timeMs ?? null}
-                    />
-                  ))}
+              {/* Colonne Gauche (65%) : Bannière Live + Grille Dynamique + Prochains Départs */}
+              <div className="col-span-12 lg:col-span-7 xl:col-span-8 h-full flex flex-col justify-between gap-2.5 min-h-0">
+                {/* 1. Bannière d'en-tête Live */}
+                <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex items-center justify-between gap-3 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="relative flex h-3 w-3 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                    <span className="font-display font-black text-xs sm:text-sm uppercase tracking-wider text-red-500 flex items-center gap-1.5 truncate">
+                      <span>Course en direct</span>
+                      <span className="px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-[10px] font-mono font-bold text-red-400">
+                        {activeTracks.length} piste{activeTracks.length > 1 ? 's' : ''} active{activeTracks.length > 1 ? 's' : ''}
+                      </span>
+                    </span>
+                  </div>
+
+                  {bestParticipant ? (
+                    <div className="flex items-center gap-1.5 shrink-0 bg-amber-500/15 border border-amber-600/40 px-2.5 py-1 rounded-xl text-amber-950 dark:text-primary shadow-sm">
+                      <Trophy size={13} className="text-amber-700 dark:text-yellow-400 shrink-0" />
+                      <span className="text-xs uppercase font-black tracking-wide">
+                        Temps à battre : <span className="font-mono text-sm underline text-amber-950 dark:text-primary">{formatTime(bestParticipant.timeMs!)}</span>
+                        <span className="text-[11px] font-bold text-app-text-muted hidden md:inline ml-1">({bestParticipant.name})</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 shrink-0 bg-primary/15 border border-primary/30 px-2.5 py-1 rounded-xl text-primary text-xs font-black uppercase">
+                      <Sparkles size={13} />
+                      <span>Établissez le 1er record !</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* 2. Grille dynamique auto-adaptative selon le nombre de pistes actives (N) */}
+                <div className="flex-1 min-h-0">
+                  {/* N = 1 : 1 carte géante occupant toute la zone (effet duel contre la montre) */}
+                  {activeTracks.length === 1 && (
+                    <div className="h-full w-full flex items-center justify-center">
+                      <div className="w-full h-full max-w-4xl mx-auto">
+                        <PublicTrackBlock
+                          track={activeTracks[0]}
+                          isSingle={true}
+                          bestTimeMs={bestParticipant?.timeMs ?? null}
+                          secondTimeMs={secondParticipant?.timeMs ?? null}
+                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* N = 2 : 2 grandes cartes côte à côte */}
+                  {activeTracks.length === 2 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 h-full items-stretch">
+                      {activeTracks.map((track) => (
+                        <PublicTrackBlock
+                          key={track.trackId}
+                          track={track}
+                          isSingle={false}
+                          bestTimeMs={bestParticipant?.timeMs ?? null}
+                          secondTimeMs={secondParticipant?.timeMs ?? null}
+                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* N = 3 : 2 cartes en haut + 3e carte en bas partageant l'espace avec la carte "Prochain Départ" */}
+                  {activeTracks.length === 3 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 h-full items-stretch">
+                      {activeTracks.map((track) => (
+                        <PublicTrackBlock
+                          key={track.trackId}
+                          track={track}
+                          isSingle={false}
+                          bestTimeMs={bestParticipant?.timeMs ?? null}
+                          secondTimeMs={secondParticipant?.timeMs ?? null}
+                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                        />
+                      ))}
+
+                      {/* 4e case : invitation proactive pour combler le vide et attirer les participants */}
+                      <div className="relative overflow-hidden p-4 rounded-3xl bg-gradient-to-br from-primary/15 via-app-card to-app-card border-2 border-dashed border-primary/50 flex flex-col items-center justify-center text-center shadow-md">
+                        <div className="w-11 h-11 rounded-2xl bg-primary/20 text-primary border border-primary/40 flex items-center justify-center mb-1.5 shadow-sm">
+                          <Zap size={22} className="animate-bounce text-primary" />
+                        </div>
+                        <span className="text-[10px] uppercase font-black tracking-widest text-primary font-display">
+                          Prochain Départ
+                        </span>
+                        <h4 className="font-display font-black text-sm sm:text-base text-app-text uppercase mt-0.5">
+                          Pistes 4 & 5 disponibles !
+                        </h4>
+                        <p className="text-xs text-app-text-muted mt-0.5 max-w-[200px]">
+                          Présentez-vous à l'animateur pour participer à la prochaine vague !
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* N = 4 : Grille 2x2 symétrique */}
+                  {activeTracks.length === 4 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 h-full items-stretch">
+                      {activeTracks.map((track) => (
+                        <PublicTrackBlock
+                          key={track.trackId}
+                          track={track}
+                          isSingle={false}
+                          bestTimeMs={bestParticipant?.timeMs ?? null}
+                          secondTimeMs={secondParticipant?.timeMs ?? null}
+                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* N = 5 : 3 cartes en haut + 2 cartes centrées en bas */}
+                  {activeTracks.length === 5 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 h-full items-stretch">
+                      {activeTracks.slice(0, 3).map((track) => (
+                        <div key={track.trackId} className="sm:col-span-2 h-full">
+                          <PublicTrackBlock
+                            track={track}
+                            isSingle={false}
+                            bestTimeMs={bestParticipant?.timeMs ?? null}
+                            secondTimeMs={secondParticipant?.timeMs ?? null}
+                            thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                          />
+                        </div>
+                      ))}
+                      {activeTracks.slice(3, 5).map((track) => (
+                        <div key={track.trackId} className="sm:col-span-3 h-full">
+                          <PublicTrackBlock
+                            track={track}
+                            isSingle={false}
+                            bestTimeMs={bestParticipant?.timeMs ?? null}
+                            secondTimeMs={secondParticipant?.timeMs ?? null}
+                            thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Bandeau File d'attente / Prochains Départs */}
+                {waitingForLiveRace.length > 0 ? (
+                  <div className="bg-app-card border border-app-card-border px-3.5 py-1.5 rounded-2xl shadow-sm flex items-center gap-2.5 shrink-0 overflow-hidden">
+                    <div className="flex items-center gap-1.5 text-primary shrink-0 font-display font-black text-xs uppercase tracking-wide">
+                      <Clock size={13} className="shrink-0 animate-pulse" />
+                      <span>Prochains au départ :</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1 min-w-0">
+                      {waitingForLiveRace.slice(0, 6).map((wp, idx) => (
+                        <span
+                          key={wp.id}
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-app-input border border-app-card-border text-xs font-bold text-app-text shadow-sm"
+                        >
+                          <span className="text-[10px] font-mono text-primary font-black">#{idx + 1}</span>
+                          <span className="truncate max-w-[120px]">{wp.name}</span>
+                        </span>
+                      ))}
+                      {waitingForLiveRace.length > 6 && (
+                        <span className="text-[10px] text-app-text-muted font-bold shrink-0">
+                          +{waitingForLiveRace.length - 6} autre{waitingForLiveRace.length - 6 > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-app-card border border-app-card-border px-3.5 py-1.5 rounded-2xl shadow-sm flex items-center justify-between gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 text-primary font-display font-black text-xs uppercase">
+                      <Zap size={13} className="animate-bounce" />
+                      <span>Pistes disponibles pour la prochaine vague !</span>
+                    </div>
+                    <span className="text-xs text-app-text-muted font-sans font-medium">
+                      Présentez-vous à l'animateur pour inscrire votre nom et participer au tirage !
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="col-span-12 lg:col-span-5 xl:col-span-4 h-full flex flex-col min-h-0">
-                <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
+              {/* Colonne Droite (35%) : Tableau des Champions + Vitrine permanente des 2 Prix */}
+              <div className="col-span-12 lg:col-span-5 xl:col-span-4 h-full flex flex-col justify-between gap-2.5 min-h-0">
+                {/* Tableau des Champions (Podium + Poursuivants) */}
+                <div className="flex-1 min-h-0">
+                  <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
+                </div>
+
+                {/* Vitrine officielle permanente des 2 Prix (côte à côte en 2 colonnes) */}
+                <div className="grid grid-cols-2 gap-2.5 shrink-0">
+                  {/* 1er Prix : Disque SSD portable 128 Go */}
+                  <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-600/50 p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                        <img
+                          src="./prize-ssd.png"
+                          alt="Disque SSD Portable 128 Go"
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="px-1.5 py-0.2 rounded bg-amber-400/35 text-amber-950 border border-amber-600 text-[8px] font-black uppercase font-display tracking-wider block w-fit">
+                          1er Prix
+                        </span>
+                        <h4 className="text-xs font-black text-app-text font-display uppercase tracking-tight leading-tight truncate mt-0.5">
+                          SSD 128 Go
+                        </h4>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-app-text-muted leading-tight font-sans">
+                      Boîtier USB-C avec diagnostic PC.
+                    </p>
+                  </div>
+
+                  {/* Prix de Participation : Laptop Toshiba Portégé X40-G */}
+                  <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                        <img
+                          src="./prize-laptop.png"
+                          alt="TOSHIBA Dynabook Portégé X40-G"
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-950 dark:text-purple-300 border border-purple-500/50 text-[8px] font-black uppercase font-display tracking-wider block">
+                            Tirage
+                          </span>
+                          <span className="text-[8px] font-bold font-mono text-primary">500$</span>
+                        </div>
+                        <h4 className="text-xs font-black text-app-text font-display uppercase tracking-tight leading-tight truncate mt-0.5">
+                          Portégé X40-G
+                        </h4>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-app-text-muted leading-tight font-sans">
+                      Laptop i5 tiré parmi tous !
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1658,16 +1878,20 @@ function AdminTrackBlock({
 // ============================================================================
 interface PublicTrackBlockProps {
   track: TrackState;
-  heightClass: string;
+  heightClass?: string;
   isSingle?: boolean;
   bestTimeMs?: number | null;
+  secondTimeMs?: number | null;
+  thirdTimeMs?: number | null;
 }
 
 function PublicTrackBlock({
   track,
-  heightClass,
+  heightClass = 'h-full',
   isSingle = false,
-  bestTimeMs = null
+  bestTimeMs = null,
+  secondTimeMs = null,
+  thirdTimeMs = null
 }: PublicTrackBlockProps) {
   const [time, setTime] = useState(0);
   const intervalRef = useRef<number | null>(null);
@@ -1699,40 +1923,64 @@ function PublicTrackBlock({
   const paceRatio = hasBestRecord ? time / bestTimeMs! : 0;
   const pacePercent = Math.min(100, Math.max(0, paceRatio * 100));
 
-  let paceBarColor = 'bg-primary';
-  let paceLabel = 'En avance sur le record 🏆';
-  if (paceRatio >= 1) {
-    paceBarColor = 'bg-rose-500';
-    paceLabel = `Record dépassé (+${((time - bestTimeMs!) / 1000).toFixed(2)}s)`;
-  } else if (paceRatio >= 0.75) {
+  // ========================================================================
+  // 3 PHASES VISUELLES DYNAMIQUES DE COURSE
+  // ========================================================================
+  let borderClass = 'border-primary shadow-primary/20 ring-2 ring-primary/20';
+  let beamClass = 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse';
+  let digitsClass = 'text-primary stopwatch-digits-running';
+  let paceBarColor = 'bg-primary shadow-sm shadow-primary/30';
+  let paceLabel = 'En route vers le record 🏆';
+
+  if (!hasBestRecord) {
+    paceLabel = 'En route pour établir le 1er record ! ⚡';
+  } else if (paceRatio >= 1) {
+    // Phase 3 : Record 1re place dépassé -> Objectif 2e ou 3e place (Podium) & Tirage au sort !
+    borderClass = 'border-purple-500 shadow-purple-500/20 ring-2 ring-purple-500/30';
+    beamClass = 'bg-gradient-to-r from-purple-500 via-indigo-400 to-primary';
+    digitsClass = 'text-purple-300 dark:text-purple-200';
+    paceBarColor = 'bg-gradient-to-r from-purple-500 to-primary';
+
+    if (secondTimeMs && time < secondTimeMs) {
+      paceLabel = `En course pour la 2e place (${formatTime(secondTimeMs)}) 🥈 & Tirage 🎁`;
+    } else if (thirdTimeMs && time < thirdTimeMs) {
+      paceLabel = `En course pour le Podium 3e place (${formatTime(thirdTimeMs)}) 🥉 & Tirage 🎁`;
+    } else {
+      paceLabel = 'En course pour le Podium & Tirage au sort Laptop 🎁';
+    }
+  } else if (paceRatio >= 0.8) {
+    // Phase 2 : Zone critique (80% à 100% du record)
+    borderClass = 'border-amber-400 shadow-amber-500/25 ring-2 ring-amber-400/40';
+    beamClass = 'bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 animate-pulse';
+    digitsClass = 'text-amber-400';
     paceBarColor = 'bg-amber-400 animate-pulse';
-    paceLabel = 'Zone critique du record ⚡';
+    const remainingSec = Math.max(0, (bestTimeMs! - time) / 1000).toFixed(1);
+    paceLabel = `Zone critique du record ⚡ - Moins de ${remainingSec}s !`;
   }
 
   return (
     <div
-      className={`relative overflow-hidden p-5 sm:p-6 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between ${heightClass} ${
-        track.isRunning ? 'border-primary shadow-primary/20 ring-2 ring-primary/20' : 'border-app-card-border'
+      className={`relative overflow-hidden p-4 sm:p-5 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between ${heightClass} ${
+        track.isRunning ? borderClass : 'border-app-card-border'
       }`}
     >
       {/* Faisceau lumineux supérieur */}
       <div
         className={`absolute top-0 left-0 right-0 h-1.5 transition-all duration-500 ${
-          track.isRunning
-            ? 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse'
-            : 'bg-gradient-to-r from-primary/30 to-purple-600/30'
+          track.isRunning ? beamClass : 'bg-gradient-to-r from-primary/30 to-purple-600/30'
         }`}
       />
 
-      <div className="flex items-start justify-between gap-2">
+      {/* En-tête de la carte */}
+      <div className="flex items-start justify-between gap-2 shrink-0">
         <div className="min-w-0">
-          <span className="text-[10px] uppercase font-black text-primary tracking-widest font-sans flex items-center gap-1">
-            <Zap size={11} className={track.isRunning ? 'animate-bounce text-primary' : ''} />
+          <span className="text-[10px] sm:text-xs uppercase font-black text-primary tracking-widest font-sans flex items-center gap-1.5">
+            <Zap size={12} className={track.isRunning ? 'animate-bounce text-primary' : ''} />
             Piste {track.trackId}
           </span>
           <h3
-            className={`font-display font-black uppercase text-app-text truncate mt-1 ${
-              isSingle ? 'text-3xl sm:text-5xl' : 'text-lg sm:text-2xl'
+            className={`font-display font-black uppercase text-app-text truncate mt-0.5 leading-tight ${
+              isSingle ? 'text-3xl sm:text-5xl lg:text-6xl' : 'text-lg sm:text-2xl md:text-3xl'
             }`}
           >
             {track.participantName}
@@ -1740,34 +1988,40 @@ function PublicTrackBlock({
         </div>
 
         {track.isRunning ? (
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-black uppercase animate-pulse font-sans shrink-0">
-            En cours
+          <span className="text-[10px] sm:text-xs px-3 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-black uppercase animate-pulse font-sans shrink-0">
+            En direct
           </span>
         ) : (
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase font-sans shrink-0">
-            Prêt / Stop
+          <span className="text-[10px] sm:text-xs px-2.5 py-1 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase font-sans shrink-0">
+            Prêt / Arrêté
           </span>
         )}
       </div>
 
-      <div className="mt-4 space-y-3">
+      {/* Zone Chronomètre Géant LCD */}
+      <div className="my-auto py-2 space-y-2">
         <div
-          className={`stopwatch-lcd px-4 py-2.5 rounded-2xl bg-app-input border border-primary/30 font-mono font-bold tracking-wider tabular-nums text-center shadow-inner ${
-            isSingle ? 'text-5xl sm:text-7xl' : 'text-2xl sm:text-4xl'
+          className={`stopwatch-lcd py-2 sm:py-3.5 px-4 rounded-2xl bg-app-input border border-primary/30 font-mono font-black tracking-wider tabular-nums text-center shadow-inner flex items-center justify-center ${
+            isSingle
+              ? 'text-6xl sm:text-7xl md:text-8xl lg:text-9xl'
+              : 'text-4xl sm:text-5xl md:text-6xl lg:text-7xl'
           }`}
         >
-          <span className={track.isRunning ? 'text-primary stopwatch-digits-running' : 'text-app-text stopwatch-digits-idle'}>
+          <span className={track.isRunning ? digitsClass : 'text-app-text stopwatch-digits-idle'}>
             {formatTime(time)}
           </span>
         </div>
 
+        {/* Jauge de rythme dynamique et épaisse (10px) */}
         {showPaceGauge && (
           <div className="space-y-1">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
-              <span className="text-app-text-muted">{paceLabel}</span>
-              <span className="font-mono text-app-text-muted">Record : {formatTime(bestTimeMs!)}</span>
+            <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider">
+              <span className="text-app-text truncate mr-2">{paceLabel}</span>
+              <span className="font-mono text-app-text-muted shrink-0">
+                Record : {formatTime(bestTimeMs!)}
+              </span>
             </div>
-            <div className="w-full h-2 rounded-full bg-app-input border border-app-card-border overflow-hidden p-0.5">
+            <div className="w-full h-2.5 sm:h-3 rounded-full bg-app-input border border-app-card-border overflow-hidden p-0.5 shadow-inner">
               <div
                 className={`h-full rounded-full transition-all duration-75 ${paceBarColor}`}
                 style={{ width: `${pacePercent}%` }}
@@ -1812,20 +2066,22 @@ function PublicParticipantsTicker({ participants, eventName }: PublicParticipant
   const displayItems = sorted.length < 8 ? [...sorted, ...sorted, ...sorted, ...sorted] : [...sorted, ...sorted];
 
   return (
-    <div className="shrink-0 h-10 sm:h-11 rounded-2xl bg-app-card/90 border border-app-card-border shadow-md backdrop-blur-md flex items-center overflow-hidden px-2 sm:px-3">
-      {/* Badge fixe gauche */}
-      <div className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/15 border border-primary/30 text-primary font-display font-black text-xs uppercase tracking-wider mr-2 z-10 shadow-sm">
-        <Users size={13} className="shrink-0" />
-        <span className="hidden sm:inline">Tous les participants</span>
-        <span className="text-[11px] font-mono px-1 rounded bg-primary/20">({sorted.length})</span>
+    <div className="shrink-0 h-10 sm:h-11 rounded-2xl bg-app-card/95 border border-app-card-border shadow-md backdrop-blur-md flex items-center overflow-hidden">
+      {/* Badge fixe gauche avec conteneur opaque et ombre portée masquante */}
+      <div className="shrink-0 h-full flex items-center bg-app-card pl-2.5 sm:pl-3.5 pr-3 z-20 shadow-[15px_0_15px_-4px_rgba(0,0,0,0.35)] border-r border-app-card-border/60">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/20 border border-primary/40 text-primary font-display font-black text-xs uppercase tracking-wider shadow-sm">
+          <Users size={13} className="shrink-0" />
+          <span className="hidden sm:inline">Tous les participants</span>
+          <span className="text-[11px] font-mono px-1 rounded bg-primary/25">({sorted.length})</span>
+        </div>
       </div>
 
-      {/* Ruban défilant avec fondu progressif sur les bords */}
+      {/* Ruban défilant avec fondu progressif masqué avant le badge */}
       <div
-        className="flex-1 overflow-hidden relative"
+        className="flex-1 overflow-hidden relative h-full flex items-center"
         style={{
-          maskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
-          WebkitMaskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)'
+          maskImage: 'linear-gradient(to right, transparent 0px, black 32px, black calc(100% - 32px), transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent 0px, black 32px, black calc(100% - 32px), transparent 100%)'
         }}
       >
         <div className="animate-ticker flex items-center gap-2 sm:gap-3 py-1">
