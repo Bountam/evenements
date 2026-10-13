@@ -26,7 +26,11 @@ import {
   PlusCircle,
   MinusCircle,
   Clock,
-  Users
+  Users,
+  HardDrive,
+  Laptop,
+  Gift,
+  Zap
 } from 'lucide-react';
 
 interface TeardownMatrixProps {
@@ -639,19 +643,32 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const activeTracks = Object.values(tracks).filter((t) => t.participantId !== null);
 
   // ============================================================================
-  // RENDU DE L'ÉCRAN PUBLIC DE PROJECTION
+  // RENDU DE L'ÉCRAN PUBLIC DE PROJECTION (Kiosque Plein Écran Adaptatif)
   // ============================================================================
   if (activeTab === 'public') {
     if (raffle.status !== 'idle') {
       return (
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl text-center space-y-4 shadow-lg">
-            <h2 className="text-2xl font-display font-bold text-white uppercase tracking-wider">
+        <div className="h-full flex flex-col justify-center max-w-4xl mx-auto space-y-6 p-4">
+          <div className="bg-app-card border border-app-card-border p-6 rounded-3xl text-center space-y-3 shadow-xl">
+            <span className="px-3 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 text-xs font-black uppercase font-display tracking-widest inline-flex items-center gap-1.5">
+              <Gift size={14} /> Grand Tirage au Sort Insertech
+            </span>
+            <h2 className="text-3xl font-display font-black text-app-text uppercase tracking-wider">
               Tirage au Sort en Direct
             </h2>
-            <p className="text-xs text-slate-400 font-sans">
-              Un ordinateur reconditionné Insertech est en jeu parmi les participants !
-            </p>
+            <div className="flex items-center justify-center gap-3 py-1">
+              <div className="w-12 h-12 rounded-xl bg-white p-1 border border-slate-200 shadow-sm shrink-0">
+                <img src="./prize-laptop.png" alt="TOSHIBA Dynabook" className="w-full h-full object-contain" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-app-text">
+                  TOSHIBA Dynabook Portégé X40-G i5 (10e gen) <span className="text-primary font-mono">• Valeur 500$</span>
+                </p>
+                <p className="text-xs text-app-text-muted">
+                  Reconditionné par Insertech • Tiré au sort parmi TOUS les participants !
+                </p>
+              </div>
+            </div>
           </div>
           <RaffleSpinner
             state={raffle}
@@ -665,78 +682,152 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     }
 
     let gridColsClass = 'grid-cols-1';
-    let blockHeightClass = 'min-h-[220px]';
+    let blockHeightClass = 'min-h-[180px]';
 
     if (activeTracks.length === 2) {
       gridColsClass = 'grid-cols-1 md:grid-cols-2';
     } else if (activeTracks.length === 3 || activeTracks.length === 4) {
       gridColsClass = 'grid-cols-1 md:grid-cols-2';
-      blockHeightClass = 'min-h-[160px]';
+      blockHeightClass = 'min-h-[140px]';
     } else if (activeTracks.length === 5) {
       gridColsClass = 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-      blockHeightClass = 'min-h-[150px]';
+      blockHeightClass = 'min-h-[130px]';
     }
 
     return (
-      <div className="space-y-8">
-        <div className="text-center py-4 bg-[#24123d]/40 rounded-3xl border border-purple-950/40 max-w-3xl mx-auto shadow px-4">
-          <h2 className="text-xl font-display font-bold text-white uppercase tracking-wider flex justify-center items-center gap-2">
-            <Timer className="text-primary animate-pulse" size={20} />
-            <span>Kiosque-Concours : Montage & Démontage en Direct</span>
-          </h2>
-          <p className="text-xs text-slate-400 font-sans mt-1">
-            {bestParticipant
-              ? `Record actuel à battre : ${formatTime(bestParticipant.timeMs!)} par ${bestParticipant.name} 🏆`
-              : 'Les temps de démontage et remontage s\'affichent en temps réel.'}
-          </p>
+      <div className="h-full flex flex-col justify-between overflow-hidden gap-2.5 sm:gap-3.5">
+        {/* Corps central adaptatif occupant tout l'écran */}
+        <div className="flex-1 min-h-0">
+          {activeTracks.length === 0 ? (
+            /* ================================================================ */
+            /* ÉTAT REPOS : TABLEAU DES CHAMPIONS PRIORITAIRE + VITRINE DES PRIX */
+            /* ================================================================ */
+            <div className="h-full grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
+              {/* Colonne Principale (65% largeur) : Tableau des Champions & Podium Olympique */}
+              <div className="col-span-12 lg:col-span-7 xl:col-span-8 h-full flex flex-col min-h-0">
+                <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
+              </div>
+
+              {/* Colonne Droite (35% largeur) : Appel au Défi & Vitrine des 2 Prix */}
+              <div className="col-span-12 lg:col-span-5 xl:col-span-4 h-full flex flex-col justify-between gap-3 min-h-0">
+                {/* Carte Appel au Défi avec compteur d'inscriptions intégré */}
+                <div className="bg-gradient-to-br from-primary/15 via-app-card to-app-card border-2 border-primary/50 p-4 sm:p-5 rounded-3xl shadow-xl text-center flex flex-col items-center justify-center shrink-0">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/40 text-primary flex items-center justify-center mb-2 shadow-md shadow-primary/20">
+                    <Timer size={24} className="animate-pulse" />
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-display font-black text-app-text uppercase tracking-tight">
+                    Prêt pour le prochain départ ?
+                  </h3>
+                  <p className="text-xs sm:text-sm text-app-text-muted font-sans mt-0.5 max-w-xs leading-relaxed">
+                    Présentez-vous à la table d'assemblage pour tenter d'établir le meilleur chrono !
+                  </p>
+
+                  {/* Badge Record du moment */}
+                  {bestParticipant && (
+                    <div className="mt-2.5 w-full py-1.5 px-3 rounded-2xl bg-amber-500/15 dark:bg-primary/15 border border-amber-600/40 dark:border-primary/40 text-amber-950 dark:text-primary flex items-center justify-center gap-2 shadow-sm">
+                      <Trophy size={15} className="text-amber-700 dark:text-yellow-400 shrink-0" />
+                      <span className="text-xs font-black uppercase tracking-wide truncate">
+                        Record : <span className="font-mono text-sm underline text-amber-950 dark:text-primary">{formatTime(bestParticipant.timeMs!)}</span> ({bestParticipant.name})
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Compteur intégré : Inscriptions du jour */}
+                  <div className="mt-2.5 w-full py-1.5 px-3 rounded-2xl bg-app-card/80 border border-app-card-border flex items-center justify-between text-xs shadow-sm">
+                    <span className="flex items-center gap-1.5 font-bold text-app-text">
+                      <Users size={14} className="text-primary" />
+                      <span>Inscriptions du jour</span>
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-secondary text-white dark:bg-primary dark:text-secondary font-mono font-black text-xs shadow-sm">
+                      {participants.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Vitrine officielle des 2 Prix en jeu avec photos agrandies */}
+                <div className="grid grid-cols-1 gap-2.5 flex-1 min-h-0">
+                  {/* Prix #1 : Meilleur Temps - Disque SSD portable 128 Go */}
+                  <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-600/50 p-3 sm:p-3.5 rounded-3xl shadow-md dark:shadow-amber-500/10 flex items-center gap-3.5 relative overflow-hidden group">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md dark:shadow-amber-500/20 overflow-hidden">
+                      <img
+                        src="./prize-ssd.png"
+                        alt="Disque SSD Portable 128 Go"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-md bg-amber-400/30 text-amber-950 border border-amber-600 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
+                          1er Prix
+                        </span>
+                        <span className="text-[10px] font-bold text-app-text-muted uppercase">Meilleur chrono</span>
+                      </div>
+                      <h4 className="text-sm sm:text-base font-black text-app-text font-display uppercase tracking-tight mt-0.5 leading-tight truncate">
+                        Disque SSD portable 128 Go
+                      </h4>
+                      <p className="text-[11px] text-app-text-muted mt-0.5 leading-snug">
+                        Boîtier rapide USB-C avec outils de diagnostic PC intégrés.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Prix de Participation : Tirage TOSHIBA Dynabook Portégé X40-G i5 (10e gen) 500$ */}
+                  <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-3 sm:p-3.5 rounded-3xl shadow-md dark:shadow-purple-500/15 flex items-center gap-3.5 relative overflow-hidden group">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md dark:shadow-purple-500/25 overflow-hidden">
+                      <img
+                        src="./prize-laptop.png"
+                        alt="TOSHIBA Dynabook Portégé X40-G"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-950 dark:text-purple-300 border border-purple-500/50 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
+                          Tirage au sort
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary border border-primary/40 text-[9px] font-black font-mono">
+                          Valeur 500$
+                        </span>
+                      </div>
+                      <h4 className="text-sm sm:text-base font-black text-app-text font-display uppercase tracking-tight mt-0.5 leading-tight truncate">
+                        TOSHIBA Dynabook Portégé X40-G
+                      </h4>
+                      <p className="text-[11px] text-app-text-muted mt-0.5 leading-snug">
+                        Intel Core i5 (10e gen) reconditionné par Insertech. Tiré parmi TOUS les participants !
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ================================================================ */
+            /* ÉTAT EN COURSE : PISTES EN DIRECT + TABLEAU DES CHAMPIONS        */
+            /* ================================================================ */
+            <div className="h-full grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
+              <div className="col-span-12 lg:col-span-7 xl:col-span-8 flex flex-col justify-center gap-3 overflow-y-auto">
+                <div className={`grid ${gridColsClass} gap-3 sm:gap-4`}>
+                  {activeTracks.map((track) => (
+                    <PublicTrackBlock
+                      key={track.trackId}
+                      track={track}
+                      heightClass={blockHeightClass}
+                      isSingle={activeTracks.length === 1}
+                      bestTimeMs={bestParticipant?.timeMs ?? null}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="col-span-12 lg:col-span-5 xl:col-span-4 h-full flex flex-col min-h-0">
+                <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
+              </div>
+            </div>
+          )}
         </div>
 
-        {activeTracks.length === 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start max-w-5xl mx-auto">
-            <div className="lg:col-span-7 bg-[#24123d]/40 border border-purple-950 p-10 rounded-3xl text-center space-y-4">
-              <div className="w-16 h-16 bg-purple-950 border border-purple-800 rounded-full flex items-center justify-center text-primary mx-auto">
-                <Timer size={28} className="animate-pulse" />
-              </div>
-              <h3 className="text-xl font-display font-bold text-white uppercase">
-                Prêt pour le prochain départ
-              </h3>
-              <p className="text-sm text-slate-400 font-sans max-w-sm mx-auto">
-                Présentez-vous à la table d'assemblage pour enregistrer votre nom et tenter de battre le meilleur temps !
-              </p>
-              {bestParticipant && (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-primary/10 border border-primary/30 text-primary text-xs font-bold mt-2">
-                  <Trophy size={14} />
-                  <span>
-                     Champion actuel : {bestParticipant.name} ({formatTime(bestParticipant.timeMs!)})
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="lg:col-span-5">
-              <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-8">
-              <div className={`grid ${gridColsClass} gap-6`}>
-                {activeTracks.map((track) => (
-                  <PublicTrackBlock
-                    key={track.trackId}
-                    track={track}
-                    heightClass={blockHeightClass}
-                    isSingle={activeTracks.length === 1}
-                    bestTimeMs={bestParticipant?.timeMs ?? null}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="lg:col-span-4">
-              <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
-            </div>
-          </div>
-        )}
+        {/* Ruban Défilant Continu (Ticker de tous les participants et leurs scores) */}
+        <PublicParticipantsTicker participants={participants} eventName={event.name} />
       </div>
     );
   }
@@ -1444,8 +1535,8 @@ function PublicTrackBlock({
 
   return (
     <div
-      className={`relative overflow-hidden p-6 rounded-3xl bg-[#24123d]/60 border shadow-lg flex flex-col justify-between ${heightClass} ${
-        track.isRunning ? 'border-primary shadow-primary/15' : 'border-purple-900/40'
+      className={`relative overflow-hidden p-5 sm:p-6 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between ${heightClass} ${
+        track.isRunning ? 'border-primary shadow-primary/20 ring-2 ring-primary/20' : 'border-app-card-border'
       }`}
     >
       {/* Faisceau lumineux supérieur */}
@@ -1453,18 +1544,19 @@ function PublicTrackBlock({
         className={`absolute top-0 left-0 right-0 h-1.5 transition-all duration-500 ${
           track.isRunning
             ? 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse'
-            : 'bg-gradient-to-r from-purple-600/50 to-primary/40'
+            : 'bg-gradient-to-r from-primary/30 to-purple-600/30'
         }`}
       />
 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <span className="text-[10px] uppercase font-black text-primary tracking-widest font-sans">
+          <span className="text-[10px] uppercase font-black text-primary tracking-widest font-sans flex items-center gap-1">
+            <Zap size={11} className={track.isRunning ? 'animate-bounce text-primary' : ''} />
             Piste {track.trackId}
           </span>
           <h3
-            className={`font-display font-bold uppercase text-white truncate mt-1 ${
-              isSingle ? 'text-4xl' : 'text-xl'
+            className={`font-display font-black uppercase text-app-text truncate mt-1 ${
+              isSingle ? 'text-3xl sm:text-5xl' : 'text-lg sm:text-2xl'
             }`}
           >
             {track.participantName}
@@ -1472,11 +1564,11 @@ function PublicTrackBlock({
         </div>
 
         {track.isRunning ? (
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-bold uppercase animate-pulse font-sans shrink-0">
+          <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-black uppercase animate-pulse font-sans shrink-0">
             En cours
           </span>
         ) : (
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-purple-950 text-slate-400 border border-purple-900/40 font-bold uppercase font-sans shrink-0">
+          <span className="text-[10px] px-2.5 py-1 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase font-sans shrink-0">
             Prêt / Stop
           </span>
         )}
@@ -1484,11 +1576,11 @@ function PublicTrackBlock({
 
       <div className="mt-4 space-y-3">
         <div
-          className={`stopwatch-lcd px-4 py-2.5 rounded-2xl bg-purple-950/80 border border-primary/20 font-mono font-bold tracking-wider tabular-nums text-center ${
-            isSingle ? 'text-6xl sm:text-8xl' : 'text-3xl sm:text-5xl'
+          className={`stopwatch-lcd px-4 py-2.5 rounded-2xl bg-app-input border border-primary/30 font-mono font-bold tracking-wider tabular-nums text-center shadow-inner ${
+            isSingle ? 'text-5xl sm:text-7xl' : 'text-2xl sm:text-4xl'
           }`}
         >
-          <span className={track.isRunning ? 'text-primary stopwatch-digits-running' : 'text-white stopwatch-digits-idle'}>
+          <span className={track.isRunning ? 'text-primary stopwatch-digits-running' : 'text-app-text stopwatch-digits-idle'}>
             {formatTime(time)}
           </span>
         </div>
@@ -1496,10 +1588,10 @@ function PublicTrackBlock({
         {showPaceGauge && (
           <div className="space-y-1">
             <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
-              <span className="text-slate-300">{paceLabel}</span>
-              <span className="font-mono text-slate-400">Record : {formatTime(bestTimeMs!)}</span>
+              <span className="text-app-text-muted">{paceLabel}</span>
+              <span className="font-mono text-app-text-muted">Record : {formatTime(bestTimeMs!)}</span>
             </div>
-            <div className="w-full h-2 rounded-full bg-purple-950/90 border border-purple-900/60 overflow-hidden p-0.5">
+            <div className="w-full h-2 rounded-full bg-app-input border border-app-card-border overflow-hidden p-0.5">
               <div
                 className={`h-full rounded-full transition-all duration-75 ${paceBarColor}`}
                 style={{ width: `${pacePercent}%` }}
@@ -1511,4 +1603,120 @@ function PublicTrackBlock({
     </div>
   );
 }
+
+// ============================================================================
+// COMPOSANT : Ruban Défilant Continu des Participants (Ticker Marquee)
+// ============================================================================
+interface PublicParticipantsTickerProps {
+  participants: Participant[];
+  eventName?: string;
+}
+
+function PublicParticipantsTicker({ participants, eventName }: PublicParticipantsTickerProps) {
+  // Trier les participants : ceux avec un temps valide d'abord (du meilleur au moins bon), puis inscrits récents
+  const sorted = [...participants].sort((a, b) => {
+    const aHasTime = typeof a.timeMs === 'number' && a.timeMs > 0;
+    const bHasTime = typeof b.timeMs === 'number' && b.timeMs > 0;
+    if (aHasTime && bHasTime) return a.timeMs! - b.timeMs!;
+    if (aHasTime && !bHasTime) return -1;
+    if (!aHasTime && bHasTime) return 1;
+    return b.registeredAt - a.registeredAt;
+  });
+
+  if (sorted.length === 0) {
+    return (
+      <div className="shrink-0 h-10 sm:h-11 rounded-2xl bg-app-card/80 border border-app-card-border shadow-sm flex items-center justify-center px-4 text-xs font-semibold text-app-text-muted">
+        <Sparkles size={14} className="text-primary mr-2 animate-pulse" />
+        <span>Soyez le premier participant à relever le défi et inscrire votre nom au classement !</span>
+      </div>
+    );
+  }
+
+  // Duplication pour assurer une boucle fluide sans saut visuel
+  const displayItems = sorted.length < 8 ? [...sorted, ...sorted, ...sorted, ...sorted] : [...sorted, ...sorted];
+
+  return (
+    <div className="shrink-0 h-10 sm:h-11 rounded-2xl bg-app-card/90 border border-app-card-border shadow-md backdrop-blur-md flex items-center overflow-hidden px-2 sm:px-3">
+      {/* Badge fixe gauche */}
+      <div className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/15 border border-primary/30 text-primary font-display font-black text-xs uppercase tracking-wider mr-2 z-10 shadow-sm">
+        <Users size={13} className="shrink-0" />
+        <span className="hidden sm:inline">Tous les participants</span>
+        <span className="text-[11px] font-mono px-1 rounded bg-primary/20">({sorted.length})</span>
+      </div>
+
+      {/* Ruban défilant avec fondu progressif sur les bords */}
+      <div
+        className="flex-1 overflow-hidden relative"
+        style={{
+          maskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)'
+        }}
+      >
+        <div className="animate-ticker flex items-center gap-2 sm:gap-3 py-1">
+          {displayItems.map((p, idx) => {
+            const hasTime = typeof p.timeMs === 'number' && p.timeMs > 0;
+            // Calculer le rang parmi ceux qui ont un temps
+            const rankIndex = hasTime
+              ? sorted.filter((sp) => typeof sp.timeMs === 'number' && sp.timeMs! < p.timeMs!).length + 1
+              : null;
+
+            // Insérer une puce événementielle spéciale toutes les 4 personnes
+            const isEventDivider = idx > 0 && idx % 4 === 0;
+
+            return (
+              <React.Fragment key={`${p.id}-${idx}`}>
+                {isEventDivider && (
+                  <div className="shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 border border-primary/30 text-[11px] font-black uppercase text-primary tracking-wide shadow-sm">
+                    {idx % 8 === 0 ? (
+                      <>
+                        <Trophy size={12} className="text-amber-500 shrink-0" />
+                        <span>1er Prix : SSD 128 Go</span>
+                      </>
+                    ) : (
+                      <>
+                        <Gift size={12} className="text-purple-400 shrink-0" />
+                        <span>Tirage : Laptop Dynabook X40</span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="shrink-0 flex items-center gap-2 px-3 py-1 rounded-xl bg-app-input border border-app-card-border shadow-sm text-xs">
+                  {rankIndex !== null ? (
+                    <span
+                      className={`font-mono font-black px-2 py-0.5 rounded-md text-[10px] ${
+                        rankIndex === 1
+                          ? 'bg-amber-400/35 text-amber-950 border border-amber-600 shadow-sm'
+                          : rankIndex === 2
+                          ? 'bg-slate-200 dark:bg-slate-300/20 text-slate-950 dark:text-slate-100 border border-slate-400 shadow-sm'
+                          : rankIndex === 3
+                          ? 'bg-amber-600/30 text-amber-950 border border-amber-700 shadow-sm'
+                          : 'bg-primary/20 text-primary border border-primary/40'
+                      }`}
+                    >
+                      #{rankIndex}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1 py-0.5 rounded bg-primary/10 text-primary font-bold">⭐</span>
+                  )}
+
+                  <span className="font-bold text-app-text truncate max-w-[140px]">{p.name}</span>
+
+                  {hasTime ? (
+                    <span className="font-mono font-black text-primary tabular-nums">
+                      {formatTime(p.timeMs!)}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-app-text-muted italic">En attente</span>
+                  )}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
