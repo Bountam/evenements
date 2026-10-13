@@ -1192,8 +1192,8 @@ export default function App() {
   const renderNetModal = () => {
     if (!showNetModal) return null;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#180A2b]/80 backdrop-blur-xs">
-        <div className="bg-[#24123d] border border-purple-900/60 p-6 rounded-3xl max-w-md w-full mx-4 space-y-6">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#180A2b]/80 backdrop-blur-xs p-4">
+        <div className="bg-[#24123d] border border-purple-900/60 p-6 rounded-3xl max-w-md w-full space-y-6 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between pb-3 border-b border-purple-950">
             <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider flex items-center gap-2">
               <Wifi className="text-primary" size={20} />

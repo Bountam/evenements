@@ -613,41 +613,41 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
           </div>
         )}
 
-        {/* Grille de stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+        {/* Grille de stats adaptative */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
             <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-sans block mb-1">
               Appareils apportés
             </span>
-            <div className="text-4xl font-display font-bold text-white">{totalRegistered}</div>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-white">{totalRegistered}</div>
           </div>
 
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
             <span className="text-[10px] uppercase font-black tracking-widest text-primary font-sans block mb-1">
               Taux de succès
             </span>
-            <div className="text-4xl font-display font-bold text-primary">
+            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-primary">
               {totalRegistered > 0 ? Math.round((successCount / totalRegistered) * 100) : 0}%
             </div>
           </div>
 
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
             <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-sans block mb-1">
               En cours de réparation
             </span>
-            <div className="text-4xl font-display font-bold text-yellow-500">{inProgressCount}</div>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-yellow-500">{inProgressCount}</div>
           </div>
 
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
             <span className="text-[10px] uppercase font-black tracking-widest text-primary font-sans block mb-1">
               Poids Sauvé
             </span>
-            <div className="text-4xl font-display font-bold text-primary">{totalWeightSaved.toFixed(1)} kg</div>
+            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-primary">{totalWeightSaved.toFixed(1)} kg</div>
           </div>
         </div>
 
         {/* Graphique et file d'attente */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-8">
           {/* File d'attente / Tableau des réparations */}
           <div className="lg:col-span-8 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
             <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider mb-4 pb-2 border-b border-purple-950/60">

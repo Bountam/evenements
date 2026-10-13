@@ -519,34 +519,34 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   // Rendu de l'onglet Bilan & Évaluation
   return (
     <div className="space-y-8">
-      {/* Cards de Bilan rapide */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+      {/* Cards de Bilan rapide adaptatives */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+        <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
           <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-sans block mb-1">
             Total Inscrits
           </span>
-          <div className="text-4xl font-display font-bold text-white">{totalRegistered}</div>
+          <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-white">{totalRegistered}</div>
         </div>
 
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+        <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
           <span className="text-[10px] uppercase font-black tracking-widest text-primary font-sans block mb-1">
             Présence Effective
           </span>
-          <div className="text-4xl font-display font-bold text-primary">{presentCount} ({presenceRate}%)</div>
+          <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-primary">{presentCount} ({presenceRate}%)</div>
         </div>
 
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 rounded-2xl text-center shadow-lg">
+        <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
           <span className="text-[10px] uppercase font-black tracking-widest text-yellow-500 font-sans block mb-1">
             Satisfaction Moyenne
           </span>
-          <div className="text-4xl font-display font-bold text-yellow-500">
+          <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-yellow-500">
             {feedbackList.length > 0 ? `${averageFeedback} / 5` : 'Aucun avis'}
           </div>
         </div>
       </div>
 
       {/* Graphiques et Liste de Feedbacks */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-8">
         {/* Liste des avis formulés */}
         <div className="lg:col-span-6 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
           <h3 className="text-base font-bold font-display text-white uppercase tracking-wider mb-4 pb-2 border-b border-purple-950/60">

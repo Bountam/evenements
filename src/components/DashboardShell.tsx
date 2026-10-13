@@ -81,7 +81,7 @@ export default function DashboardShell({
 
   return (
     <div className={`min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10 ${
-      isPublicView ? 'h-screen h-[100dvh] overflow-hidden' : ''
+      isPublicView ? 'min-h-screen lg:h-screen lg:h-[100dvh] lg:overflow-hidden kiosk-auto-scroll' : ''
     }`}>
       {/* ==================================================================== */}
       {/* EN-TÊTE ÉCRAN PUBLIC (Kiosque immersif et épuré) */}
@@ -347,7 +347,7 @@ export default function DashboardShell({
       {/* Zone de contenu principale débridée en largeur (jusqu'à 1850px) */}
       <main className={`flex-1 w-full transition-all duration-300 ${
         isPublicView 
-          ? 'h-[calc(100vh-64px)] overflow-hidden p-2 sm:p-4 flex flex-col' 
+          ? 'min-h-[calc(100vh-64px)] lg:h-[calc(100vh-64px)] overflow-y-auto lg:overflow-hidden p-2 sm:p-4 flex flex-col kiosk-auto-scroll' 
           : event.type === 'kiosque_concours'
             ? 'max-w-[1850px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex-1 flex flex-col min-h-0'
             : 'max-w-[1850px] mx-auto px-4 md:px-6 py-4 md:py-6'
@@ -359,7 +359,7 @@ export default function DashboardShell({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.99 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className={isPublicView ? 'h-full flex flex-col' : ''}
+            className={isPublicView ? 'min-h-full lg:h-full flex flex-col kiosk-auto-scroll' : ''}
           >
             {children}
           </motion.div>

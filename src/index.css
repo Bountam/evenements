@@ -549,4 +549,20 @@ button:active, .cursor-pointer:active {
   animation-play-state: paused;
 }
 
+/* --- PROTECTION UNIVERSELLE RESPONSIVE & ANTI-SUPERPOSITION --- */
+@media (max-height: 760px) {
+  .kiosk-auto-scroll {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* Sécurité anti-débordement pour éléments flexibles et colonnes */
+.safe-column {
+  min-height: 0;
+  max-width: 100%;
+}
+
+
 

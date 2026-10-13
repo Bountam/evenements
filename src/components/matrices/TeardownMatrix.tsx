@@ -708,7 +708,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     }
 
     return (
-      <div className="h-full flex flex-col justify-between overflow-hidden gap-2.5 sm:gap-3.5">
+      <div className="min-h-full h-full flex flex-col justify-between overflow-visible lg:overflow-hidden gap-2.5 sm:gap-3.5 kiosk-auto-scroll">
         {/* Corps central adaptatif occupant tout l'écran */}
         <div className="flex-1 min-h-0">
           {activeTracks.length === 0 ? (
@@ -717,12 +717,12 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             /* ================================================================ */
             <div className="h-full grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
               {/* Colonne Principale (65% largeur) : Tableau des Champions & Podium Olympique */}
-              <div className="col-span-12 lg:col-span-7 xl:col-span-8 h-full flex flex-col min-h-0">
+              <div className="col-span-12 lg:col-span-7 xl:col-span-8 min-h-[380px] lg:h-full flex flex-col min-h-0">
                 <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
               </div>
 
               {/* Colonne Droite (35% largeur) : Appel au Défi & Vitrine des 2 Prix */}
-              <div className="col-span-12 lg:col-span-5 xl:col-span-4 h-full flex flex-col justify-between gap-3 min-h-0">
+              <div className="col-span-12 lg:col-span-5 xl:col-span-4 min-h-[380px] lg:h-full flex flex-col justify-between gap-3 min-h-0">
                 {/* Carte Appel au Défi avec compteur d'inscriptions intégré */}
                 <div className="bg-gradient-to-br from-primary/15 via-app-card to-app-card border-2 border-primary/50 p-4 sm:p-5 rounded-3xl shadow-xl text-center flex flex-col items-center justify-center shrink-0">
                   <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/40 text-primary flex items-center justify-center mb-2 shadow-md shadow-primary/20">
@@ -819,7 +819,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             /* ================================================================ */
             <div className="h-full grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
               {/* Colonne Gauche (65%) : Bannière Live + Grille Dynamique + Prochains Départs */}
-              <div className="col-span-12 lg:col-span-7 xl:col-span-8 h-full flex flex-col justify-between gap-2.5 min-h-0">
+              <div className="col-span-12 lg:col-span-7 xl:col-span-8 min-h-[360px] lg:h-full flex flex-col justify-between gap-2.5 min-h-0">
                 {/* 1. Bannière d'en-tête Live */}
                 <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -999,13 +999,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               </div>
 
               {/* Colonne Droite (35%) : Tableau des Champions + Vitrine permanente des 2 Prix */}
-              <div className="col-span-12 lg:col-span-5 xl:col-span-4 h-full flex flex-col justify-between gap-2.5 min-h-0">
-                {/* Tableau des Champions (Podium + Poursuivants) */}
-                <div className="flex-1 min-h-0">
-                  <Leaderboard participants={participants} highlightId={lastSavedParticipantId} />
+              <div className="col-span-12 lg:col-span-5 xl:col-span-4 min-h-[360px] lg:h-full flex flex-col gap-2.5 min-h-0">
+                {/* Tableau des Champions (Podium compacté pour cohabiter harmonieusement avec les 2 prix) */}
+                <div className="flex-1 min-h-[190px] flex flex-col">
+                  <Leaderboard participants={participants} highlightId={lastSavedParticipantId} compact={true} />
                 </div>
 
-                {/* Vitrine officielle permanente des 2 Prix (côte à côte en 2 colonnes) */}
+                {/* Vitrine officielle permanente des 2 Prix (côte à côte en 2 colonnes sans superposition) */}
                 <div className="grid grid-cols-2 gap-2.5 shrink-0">
                   {/* 1er Prix : Disque SSD portable 128 Go */}
                   <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-600/50 p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group">
@@ -1357,7 +1357,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         {/* COLONNE 3 (DROITE ~25%) : File d'attente & Classement Unifiés    */}
         {/* ================================================================ */}
         <div className="col-span-12 lg:col-span-3">
-          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5 flex flex-col h-full max-h-[calc(100vh-140px)]">
+          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5 flex flex-col h-full min-h-[350px] lg:max-h-[calc(100vh-140px)]">
             <div className="flex items-center justify-between shrink-0">
               <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-1.5">
                 <span>File & Classement</span>

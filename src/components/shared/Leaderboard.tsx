@@ -8,6 +8,7 @@ interface LeaderboardProps {
   participants: Participant[];
   highlightId?: string | null;
   isAdmin?: boolean;
+  compact?: boolean;
   onResetScore?: (participantId: string) => void;
   onUpdateScore?: (participantId: string, newTimeMs: number) => void;
   onSendToTrack?: (participantId: string) => void;
@@ -48,6 +49,7 @@ export default function Leaderboard({
   participants,
   highlightId = null,
   isAdmin = false,
+  compact = false,
   onResetScore,
   onUpdateScore,
   onSendToTrack
@@ -111,13 +113,13 @@ export default function Leaderboard({
   };
 
   return (
-    <div className="bg-[#24123d]/60 border border-purple-900/40 p-5 sm:p-6 rounded-3xl shadow-lg flex flex-col h-full min-h-0">
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-purple-950/60 shrink-0">
-        <h3 className="text-base sm:text-lg font-bold font-display text-white uppercase tracking-wider flex items-center gap-2">
-          <Trophy className="text-primary animate-bounce shrink-0" size={20} />
+    <div className={`bg-[#24123d]/60 border border-purple-900/40 ${compact ? 'p-3 sm:p-4 rounded-2xl' : 'p-5 sm:p-6 rounded-3xl'} shadow-lg flex flex-col h-full min-h-0`}>
+      <div className={`flex items-center justify-between ${compact ? 'mb-2 pb-2' : 'mb-4 pb-3'} border-b border-purple-950/60 shrink-0`}>
+        <h3 className={`${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} font-bold font-display text-white uppercase tracking-wider flex items-center gap-2`}>
+          <Trophy className="text-primary animate-bounce shrink-0" size={compact ? 16 : 20} />
           <span>Tableau des Champions</span>
         </h3>
-        <span className="text-xs font-semibold text-slate-400 font-sans">
+        <span className="text-[11px] sm:text-xs font-semibold text-slate-400 font-sans">
           {rankedParticipants.length} {rankedParticipants.length > 1 ? 'temps enregistrés' : 'temps enregistré'}
         </span>
       </div>
@@ -130,7 +132,7 @@ export default function Leaderboard({
       ) : (
         <div className="flex flex-col flex-1 min-h-0">
           {/* PODIUM OLYMPIQUE 3D ANIMÉ (Top 3) */}
-          <div className="grid grid-cols-3 items-end gap-2 sm:gap-4 pt-1 pb-4 mb-3 border-b border-app-card-border shrink-0">
+          <div className={`grid grid-cols-3 items-end gap-1.5 sm:gap-3 pt-1 ${compact ? 'pb-2 mb-2' : 'pb-4 mb-3'} border-b border-app-card-border shrink-0`}>
             {/* 2e Place (Argent - Gauche) */}
             <div className="flex flex-col items-center">
               {secondPlace ? (
@@ -141,31 +143,31 @@ export default function Leaderboard({
                   transition={{ delay: 0.1, type: 'spring', stiffness: 260, damping: 20 }}
                   className="w-full flex flex-col items-center text-center"
                 >
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-300 text-secondary flex items-center justify-center font-black shadow mb-1 border border-slate-400">
-                    <Medal size={16} />
+                  <div className={`${compact ? 'w-6 h-6 sm:w-7 sm:h-7' : 'w-8 h-8 sm:w-9 sm:h-9'} rounded-full bg-slate-300 text-secondary flex items-center justify-center font-black shadow mb-1 border border-slate-400`}>
+                    <Medal size={compact ? 13 : 16} />
                   </div>
-                  <span className="text-xs sm:text-sm font-extrabold text-app-text truncate max-w-full px-1">
+                  <span className={`${compact ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'} font-extrabold text-app-text truncate max-w-full px-1`}>
                     {secondPlace.name}
                   </span>
-                  <span className="font-mono text-xs sm:text-sm font-black text-app-text mt-0.5 tabular-nums">
+                  <span className={`font-mono ${compact ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'} font-black text-app-text mt-0.5 tabular-nums`}>
                     {formatTime(secondPlace.timeMs!)}
                   </span>
                   {bestTimeMs !== null && (
-                    <span className="text-[10px] font-mono text-app-text-muted mb-1.5 font-bold">
+                    <span className="text-[9px] font-mono text-app-text-muted mb-1 font-bold">
                       {formatDelta(secondPlace.timeMs! - bestTimeMs)}
                     </span>
                   )}
                   <motion.div
                     initial={{ height: 0 }}
-                    animate={{ height: 68 }}
+                    animate={{ height: compact ? 36 : 68 }}
                     transition={{ type: 'spring', stiffness: 220, damping: 22, delay: 0.12 }}
-                    className="podium-pillar-silver w-full rounded-t-2xl bg-gradient-to-b from-slate-300/35 to-slate-400/20 border-t-2 border-x border-slate-400/70 flex items-center justify-center shadow-md"
+                    className="podium-pillar-silver w-full rounded-t-xl sm:rounded-t-2xl bg-gradient-to-b from-slate-300/35 to-slate-400/20 border-t-2 border-x border-slate-400/70 flex items-center justify-center shadow-md"
                   >
-                    <span className="font-display font-black text-xl text-slate-900 dark:text-slate-100">2e</span>
+                    <span className={`font-display font-black ${compact ? 'text-base sm:text-lg' : 'text-xl'} text-slate-900 dark:text-slate-100`}>2e</span>
                   </motion.div>
                 </motion.div>
               ) : (
-                <div className="w-full h-16 rounded-t-2xl border border-dashed border-app-card-border flex items-center justify-center opacity-40">
+                <div className={`w-full ${compact ? 'h-10' : 'h-16'} rounded-t-xl border border-dashed border-app-card-border flex items-center justify-center opacity-40`}>
                   <span className="text-xs font-display uppercase text-app-text-muted">2e</span>
                 </div>
               )}
@@ -174,7 +176,7 @@ export default function Leaderboard({
             {/* 1re Place (Or - Centre Surélevé avec Halo) */}
             <div className="flex flex-col items-center relative">
               {/* Halo lumineux subtil d'arrière-plan */}
-              <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-44 h-44 rounded-full bg-amber-400/15 dark:bg-amber-400/20 blur-2xl pointer-events-none -z-10" />
+              <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-32 sm:w-44 h-32 sm:h-44 rounded-full bg-amber-400/15 dark:bg-amber-400/20 blur-2xl pointer-events-none -z-10" />
 
               {firstPlace && (
                 <motion.div
@@ -185,28 +187,30 @@ export default function Leaderboard({
                   className="w-full flex flex-col items-center text-center relative z-0"
                 >
                   <motion.div
-                    animate={{ y: [0, -4, 0] }}
+                    animate={{ y: [0, -3, 0] }}
                     transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-yellow-400 text-secondary flex items-center justify-center font-black shadow-xl shadow-yellow-400/30 mb-1 border-2 border-yellow-200"
+                    className={`${compact ? 'w-8 h-8 sm:w-9 sm:h-9' : 'w-11 h-11 sm:w-12 sm:h-12'} rounded-full bg-yellow-400 text-secondary flex items-center justify-center font-black shadow-xl shadow-yellow-400/30 mb-1 border-2 border-yellow-200`}
                   >
-                    <Crown size={22} />
+                    <Crown size={compact ? 16 : 22} />
                   </motion.div>
-                  <span className="text-sm sm:text-base md:text-lg font-black text-app-text truncate max-w-full px-1">
+                  <span className={`${compact ? 'text-xs sm:text-sm' : 'text-sm sm:text-base md:text-lg'} font-black text-app-text truncate max-w-full px-1`}>
                     {firstPlace.name}
                   </span>
-                  <span className="score-badge-gold px-3 py-0.5 rounded-xl font-mono text-sm sm:text-base font-black mt-1 mb-1.5 tabular-nums shadow-sm">
+                  <span className={`score-badge-gold ${compact ? 'px-2 py-0.2 text-xs sm:text-sm' : 'px-3 py-0.5 text-sm sm:text-base'} rounded-xl font-mono font-black mt-0.5 mb-1 tabular-nums shadow-sm`}>
                     {formatTime(firstPlace.timeMs!)}
                   </span>
                   <motion.div
                     initial={{ height: 0 }}
-                    animate={{ height: 96 }}
+                    animate={{ height: compact ? 52 : 96 }}
                     transition={{ type: 'spring', stiffness: 240, damping: 20, delay: 0.05 }}
-                    className="podium-pillar-gold podium-shimmer w-full rounded-t-2xl bg-gradient-to-b from-yellow-400/40 via-yellow-500/25 to-primary/10 border-t-2 border-x border-yellow-400/80 flex flex-col items-center justify-center shadow-lg"
+                    className="podium-pillar-gold podium-shimmer w-full rounded-t-xl sm:rounded-t-2xl bg-gradient-to-b from-yellow-400/40 via-yellow-500/25 to-primary/10 border-t-2 border-x border-yellow-400/80 flex flex-col items-center justify-center shadow-lg"
                   >
-                    <span className="font-display font-black text-2xl sm:text-3xl text-amber-950 dark:text-yellow-300 leading-none">1er</span>
-                    <span className="text-[10px] uppercase font-black tracking-widest text-amber-950 dark:text-primary mt-0.5">
-                      Record
-                    </span>
+                    <span className={`font-display font-black ${compact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} text-amber-950 dark:text-yellow-300 leading-none`}>1er</span>
+                    {!compact && (
+                      <span className="text-[10px] uppercase font-black tracking-widest text-amber-950 dark:text-primary mt-0.5">
+                        Record
+                      </span>
+                    )}
                   </motion.div>
                 </motion.div>
               )}
@@ -222,31 +226,31 @@ export default function Leaderboard({
                   transition={{ delay: 0.18, type: 'spring', stiffness: 260, damping: 20 }}
                   className="w-full flex flex-col items-center text-center"
                 >
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-amber-700 text-white flex items-center justify-center font-black shadow mb-1 border border-amber-600">
-                    <Medal size={16} />
+                  <div className={`${compact ? 'w-6 h-6 sm:w-7 sm:h-7' : 'w-8 h-8 sm:w-9 sm:h-9'} rounded-full bg-amber-700 text-white flex items-center justify-center font-black shadow mb-1 border border-amber-600`}>
+                    <Medal size={compact ? 13 : 16} />
                   </div>
-                  <span className="text-xs sm:text-sm font-extrabold text-app-text truncate max-w-full px-1">
+                  <span className={`${compact ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'} font-extrabold text-app-text truncate max-w-full px-1`}>
                     {thirdPlace.name}
                   </span>
-                  <span className="font-mono text-xs sm:text-sm font-black text-app-text mt-0.5 tabular-nums">
+                  <span className={`font-mono ${compact ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'} font-black text-app-text mt-0.5 tabular-nums`}>
                     {formatTime(thirdPlace.timeMs!)}
                   </span>
                   {bestTimeMs !== null && (
-                    <span className="text-[10px] font-mono text-app-text-muted mb-1.5 font-bold">
+                    <span className="text-[9px] font-mono text-app-text-muted mb-1 font-bold">
                       {formatDelta(thirdPlace.timeMs! - bestTimeMs)}
                     </span>
                   )}
                   <motion.div
                     initial={{ height: 0 }}
-                    animate={{ height: 50 }}
+                    animate={{ height: compact ? 26 : 50 }}
                     transition={{ type: 'spring', stiffness: 220, damping: 22, delay: 0.2 }}
-                    className="podium-pillar-bronze w-full rounded-t-2xl bg-gradient-to-b from-amber-600/40 to-amber-900/20 border-t-2 border-x border-amber-600/70 flex items-center justify-center shadow-md"
+                    className="podium-pillar-bronze w-full rounded-t-xl sm:rounded-t-2xl bg-gradient-to-b from-amber-600/40 to-amber-900/20 border-t-2 border-x border-amber-600/70 flex items-center justify-center shadow-md"
                   >
-                    <span className="font-display font-black text-lg text-amber-950 dark:text-amber-300">3e</span>
+                    <span className={`font-display font-black ${compact ? 'text-xs sm:text-sm' : 'text-lg'} text-amber-950 dark:text-amber-300`}>3e</span>
                   </motion.div>
                 </motion.div>
               ) : (
-                <div className="w-full h-12 rounded-t-2xl border border-dashed border-app-card-border flex items-center justify-center opacity-40">
+                <div className={`w-full ${compact ? 'h-8' : 'h-12'} rounded-t-xl border border-dashed border-app-card-border flex items-center justify-center opacity-40`}>
                   <span className="text-xs font-display uppercase text-app-text-muted">3e</span>
                 </div>
               )}
