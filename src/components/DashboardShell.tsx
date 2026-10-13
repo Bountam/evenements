@@ -1,9 +1,10 @@
 import React from 'react';
-import { EventSettings, EventType } from '../types';
+import { EventSettings } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
-  LogOut, Download, Database, Calendar, MapPin, Sparkles, Building, Wifi, Sun, Moon
+  LogOut, Download, Database, Calendar, MapPin, Building, Wifi, Sun, Moon
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface DashboardShellProps {
   event: EventSettings;
@@ -58,24 +59,35 @@ export default function DashboardShell({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10">
       {/* En-tête principal premium avec thème lime et violet */}
-      <header className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-6 py-4 flex flex-col xl:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-md transition-colors duration-300">
-        {/* Identité visuelle */}
-        <div className="flex items-center gap-3 w-full xl:w-auto">
-          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center rotate-3 shadow-md shrink-0">
-            <span className="text-secondary font-black text-xl font-display">I</span>
-          </div>
+      <header className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-6 py-3.5 flex flex-col xl:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-xl transition-colors duration-300">
+        {/* Identité visuelle avec le logo Chapiteau Magique */}
+        <div className="flex items-center gap-3.5 w-full xl:w-auto">
+          <motion.div
+            whileHover={{ rotate: 6, scale: 1.08 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 14 }}
+            className="w-11 h-11 rounded-xl overflow-hidden border-2 border-primary shadow-lg shadow-primary/20 shrink-0 bg-[#180A2b]"
+          >
+            <img
+              src="./logo.png"
+              alt="Insertech Événements"
+              className="w-full h-full object-cover"
+            />
+          </motion.div>
           <div>
             <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none">
               Insertech <span className="text-primary font-black">Événements</span>
             </h1>
-            <p className="text-[10px] text-app-text-muted font-semibold mt-1">Tableau de bord autonome et 100% hors-ligne</p>
+            <p className="text-[10px] text-app-text-muted font-semibold mt-1">
+              Tableau de bord autonome et 100% hors-ligne
+            </p>
           </div>
         </div>
 
         {/* Détails de l'événement actif */}
-        <div className="flex flex-wrap items-center gap-3 bg-app-input border border-app-card-border p-2.5 rounded-2xl w-full xl:w-auto transition-colors duration-300">
+        <div className="flex flex-wrap items-center gap-3 bg-app-input border border-app-card-border p-2.5 rounded-2xl w-full xl:w-auto transition-colors duration-300 shadow-sm">
           <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-xl text-primary font-display font-semibold text-xs uppercase">
             <Icon size={14} />
             <span>{matrixInfo.title}</span>
@@ -105,21 +117,31 @@ export default function DashboardShell({
 
         {/* Onglets de navigation et boutons d'actions */}
         <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-between xl:justify-end">
-          {/* Onglets */}
-          <div className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display uppercase transition cursor-pointer ${
-                  currentTab === tab.id
-                    ? 'bg-primary text-secondary font-extrabold shadow'
-                    : 'text-app-text-muted hover:text-app-text'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Onglets avec pilule glissante Framer Motion */}
+          <div className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative">
+            {tabs.map((tab) => {
+              const isActive = currentTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onTabChange(tab.id)}
+                  className={`relative px-3.5 py-1.5 rounded-lg text-xs font-bold font-display uppercase transition cursor-pointer z-10 ${
+                    isActive
+                      ? 'bg-primary text-secondary font-extrabold shadow-sm'
+                      : 'text-app-text-muted hover:text-app-text'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="activeTabPill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                      className="absolute inset-0 bg-primary rounded-lg -z-10 shadow-md shadow-primary/25"
+                    />
+                  )}
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Actions rapides */}
@@ -166,9 +188,19 @@ export default function DashboardShell({
         </div>
       </header>
 
-      {/* Zone de contenu principale de l'activité */}
+      {/* Zone de contenu principale de l'activité avec transition fluide inter-onglets */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8">
-        {children}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${event.id}-${currentTab}`}
+            initial={{ opacity: 0, y: 12, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.99 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Pied de page informatif sur IndexedDB */}
@@ -179,3 +211,4 @@ export default function DashboardShell({
     </div>
   );
 }
+

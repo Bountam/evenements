@@ -1508,9 +1508,13 @@ export default function App() {
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-12">
         {/* En-tête de bienvenue */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-6 border-b border-app-card-border">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center rotate-3 shadow-md shrink-0">
-              <span className="text-secondary font-black text-xl font-display">I</span>
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl overflow-hidden border-2 border-primary shadow-lg shadow-primary/20 shrink-0 bg-[#180A2b] transition-transform duration-300 hover:rotate-6 hover:scale-105">
+              <img
+                src="./logo.png"
+                alt="Insertech Événements"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none">

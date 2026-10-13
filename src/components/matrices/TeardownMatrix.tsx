@@ -726,6 +726,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     track={track}
                     heightClass={blockHeightClass}
                     isSingle={activeTracks.length === 1}
+                    bestTimeMs={bestParticipant?.timeMs ?? null}
                   />
                 ))}
               </div>
@@ -1162,6 +1163,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     key={track.trackId}
                     track={track}
                     assignableParticipants={assignableParticipants}
+                    bestTimeMs={bestParticipant?.timeMs ?? null}
                     onAssign={(pId) => handleAssignParticipant(track.trackId, pId)}
                     onStart={() => handleStartTimer(track.trackId)}
                     onStop={() => handleStopTimer(track.trackId)}
@@ -1195,6 +1197,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 interface AdminTrackBlockProps {
   track: TrackState;
   assignableParticipants: Participant[];
+  bestTimeMs: number | null;
   onAssign: (pId: string | null) => void;
   onStart: () => void;
   onStop: () => void;
@@ -1206,6 +1209,7 @@ interface AdminTrackBlockProps {
 function AdminTrackBlock({
   track,
   assignableParticipants,
+  bestTimeMs,
   onAssign,
   onStart,
   onStop,
@@ -1224,23 +1228,41 @@ function AdminTrackBlock({
 
   return (
     <div
-      className={`p-5 rounded-2xl bg-[#24123d]/60 border shadow-lg space-y-4 transition ${
+      className={`relative overflow-hidden p-5 rounded-2xl bg-[#24123d]/60 border shadow-lg space-y-4 transition-all duration-300 ${
         track.isRunning
-          ? 'border-primary shadow-primary/10'
+          ? 'border-primary shadow-primary/15'
           : track.participantId
             ? 'border-purple-700/60'
             : 'border-purple-900/40'
       }`}
     >
+      {/* Faisceau lumineux supérieur de statut de piste */}
+      <div
+        className={`absolute top-0 left-0 right-0 h-1 transition-all duration-500 ${
+          track.isRunning
+            ? 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse'
+            : track.participantId
+              ? 'bg-gradient-to-r from-purple-500 to-primary/60'
+              : 'bg-transparent'
+        }`}
+      />
+
       {/* En-tête de piste */}
       <div className="flex items-center justify-between pb-2 border-b border-purple-950">
         <div className="flex items-center gap-2">
           <span className="text-xs font-extrabold font-display text-primary uppercase">
             Piste {track.trackId}
           </span>
-          {track.isRunning && (
-            <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
-          )}
+          {track.isRunning ? (
+            <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 font-bold uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+              <span>En course</span>
+            </span>
+          ) : track.participantId ? (
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800/50 font-bold uppercase">
+              Prêt
+            </span>
+          ) : null}
         </div>
         {track.participantId && (
           <button
@@ -1271,6 +1293,7 @@ function AdminTrackBlock({
             onStart={onStart}
             onStop={onStop}
             onReset={onReset}
+            bestTimeMs={bestTimeMs}
           />
 
           {/* Boutons rapides de pénalité / bonus d'arbitrage */}
@@ -1370,9 +1393,15 @@ interface PublicTrackBlockProps {
   track: TrackState;
   heightClass: string;
   isSingle?: boolean;
+  bestTimeMs?: number | null;
 }
 
-function PublicTrackBlock({ track, heightClass, isSingle = false }: PublicTrackBlockProps) {
+function PublicTrackBlock({
+  track,
+  heightClass,
+  isSingle = false,
+  bestTimeMs = null
+}: PublicTrackBlockProps) {
   const [time, setTime] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
@@ -1398,34 +1427,48 @@ function PublicTrackBlock({ track, heightClass, isSingle = false }: PublicTrackB
     };
   }, [track.isRunning, track.startTime, track.elapsedBeforeStart]);
 
+  const hasBestRecord = typeof bestTimeMs === 'number' && bestTimeMs > 0;
+  const showPaceGauge = hasBestRecord && (track.isRunning || time > 0);
+  const paceRatio = hasBestRecord ? time / bestTimeMs! : 0;
+  const pacePercent = Math.min(100, Math.max(0, paceRatio * 100));
+
+  let paceBarColor = 'bg-primary';
+  let paceLabel = 'En avance sur le record 🏆';
+  if (paceRatio >= 1) {
+    paceBarColor = 'bg-rose-500';
+    paceLabel = `Record dépassé (+${((time - bestTimeMs!) / 1000).toFixed(2)}s)`;
+  } else if (paceRatio >= 0.75) {
+    paceBarColor = 'bg-amber-400 animate-pulse';
+    paceLabel = 'Zone critique du record ⚡';
+  }
+
   return (
     <div
-      className={`p-6 rounded-3xl bg-[#24123d]/60 border shadow-lg flex flex-col justify-between ${heightClass} ${
-        track.isRunning ? 'border-primary' : 'border-purple-900/40'
+      className={`relative overflow-hidden p-6 rounded-3xl bg-[#24123d]/60 border shadow-lg flex flex-col justify-between ${heightClass} ${
+        track.isRunning ? 'border-primary shadow-primary/15' : 'border-purple-900/40'
       }`}
     >
-      <div>
-        <span className="text-[10px] uppercase font-black text-primary tracking-widest font-sans">
-          Piste {track.trackId}
-        </span>
-        <h3
-          className={`font-display font-bold uppercase text-white truncate mt-1 ${
-            isSingle ? 'text-4xl' : 'text-xl'
-          }`}
-        >
-          {track.participantName}
-        </h3>
-      </div>
+      {/* Faisceau lumineux supérieur */}
+      <div
+        className={`absolute top-0 left-0 right-0 h-1.5 transition-all duration-500 ${
+          track.isRunning
+            ? 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse'
+            : 'bg-gradient-to-r from-purple-600/50 to-primary/40'
+        }`}
+      />
 
-      <div className="flex items-end justify-between mt-4 gap-3">
-        <div
-          className={`stopwatch-lcd px-4 py-2 rounded-2xl bg-purple-950/80 border border-primary/20 font-mono font-bold tracking-wider tabular-nums ${
-            isSingle ? 'text-6xl sm:text-8xl' : 'text-3xl sm:text-5xl'
-          }`}
-        >
-          <span className={track.isRunning ? 'text-primary stopwatch-digits-running' : 'text-white stopwatch-digits-idle'}>
-            {formatTime(time)}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span className="text-[10px] uppercase font-black text-primary tracking-widest font-sans">
+            Piste {track.trackId}
           </span>
+          <h3
+            className={`font-display font-bold uppercase text-white truncate mt-1 ${
+              isSingle ? 'text-4xl' : 'text-xl'
+            }`}
+          >
+            {track.participantName}
+          </h3>
         </div>
 
         {track.isRunning ? (
@@ -1438,6 +1481,34 @@ function PublicTrackBlock({ track, heightClass, isSingle = false }: PublicTrackB
           </span>
         )}
       </div>
+
+      <div className="mt-4 space-y-3">
+        <div
+          className={`stopwatch-lcd px-4 py-2.5 rounded-2xl bg-purple-950/80 border border-primary/20 font-mono font-bold tracking-wider tabular-nums text-center ${
+            isSingle ? 'text-6xl sm:text-8xl' : 'text-3xl sm:text-5xl'
+          }`}
+        >
+          <span className={track.isRunning ? 'text-primary stopwatch-digits-running' : 'text-white stopwatch-digits-idle'}>
+            {formatTime(time)}
+          </span>
+        </div>
+
+        {showPaceGauge && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+              <span className="text-slate-300">{paceLabel}</span>
+              <span className="font-mono text-slate-400">Record : {formatTime(bestTimeMs!)}</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-purple-950/90 border border-purple-900/60 overflow-hidden p-0.5">
+              <div
+                className={`h-full rounded-full transition-all duration-75 ${paceBarColor}`}
+                style={{ width: `${pacePercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+

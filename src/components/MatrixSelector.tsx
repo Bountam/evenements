@@ -5,6 +5,7 @@ import {
   Terminal, Presentation, MessageSquare, Calendar, MapPin, Building, Plus, ArrowRight, Upload, Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface MatrixSelectorProps {
   onCreateEvent: (settings: Omit<EventSettings, 'id' | 'createdAt'>) => void;
@@ -326,9 +327,19 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="text-center mb-10 space-y-4">
-        <div className="w-16 h-16 bg-[#9ecd33] rounded-2xl flex items-center justify-center rotate-6 shadow-lg shrink-0 mx-auto mb-2">
-          <span className="text-[#480A94] font-black text-3xl font-display">I</span>
-        </div>
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0, rotate: -8 }}
+          animate={{ scale: 1, opacity: 1, rotate: 4 }}
+          whileHover={{ rotate: -4, scale: 1.08 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 16 }}
+          className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-primary shadow-2xl shadow-primary/25 shrink-0 mx-auto mb-3 bg-[#180A2b]"
+        >
+          <img
+            src="./logo.png"
+            alt="Chapiteau Insertech Événements"
+            className="w-full h-full object-cover"
+          />
+        </motion.div>
         <h1 className="text-4xl font-display font-bold text-white uppercase tracking-wider">
           Nouvel Événement Insertech
         </h1>
@@ -337,30 +348,57 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
         </p>
       </div>
 
-
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Choix de la matrice */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-display text-white uppercase tracking-wide flex items-center gap-2">
               <span>1. Choisir le type de matrice d'activité</span>
-              {selectedType && (
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase ${activeMatrix?.badgeColor}`}>
-                  {activeMatrix?.title}
-                </span>
-              )}
+              <AnimatePresence mode="wait">
+                {selectedType && activeMatrix && (
+                  <motion.span
+                    key={activeMatrix.type}
+                    initial={{ opacity: 0, scale: 0.85, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.85 }}
+                    className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase ${activeMatrix.badgeColor}`}
+                  >
+                    {activeMatrix.title}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </h2>
             {errors.type && <span className="text-red-400 text-xs font-semibold">{errors.type}</span>}
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: { opacity: 0 },
+              visible: {
+                opacity: 1,
+                transition: { staggerChildren: 0.055 }
+              }
+            }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
             {MATRICES_LIST.map((matrix) => {
               const Icon = matrix.icon;
               const isSelected = selectedType === matrix.type;
               return (
-                <button
+                <motion.button
                   key={matrix.type}
                   type="button"
+                  variants={{
+                    hidden: { opacity: 0, y: 18, scale: 0.96 },
+                    visible: {
+                      opacity: 1,
+                      y: 0,
+                      scale: 1,
+                      transition: { type: 'spring', stiffness: 300, damping: 24 }
+                    }
+                  }}
                   onClick={() => {
                     setSelectedType(matrix.type);
                     setErrors(prev => ({ ...prev, type: '' }));
@@ -368,23 +406,36 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                       setName(`${matrix.title} - ${new Date().toLocaleDateString('fr-CA', { month: 'short', year: 'numeric' })}`);
                     }
                   }}
-                  className={`flex items-start gap-4 p-5 rounded-2xl text-left transition-all duration-300 ${
+                  className={`relative flex items-start gap-4 p-5 rounded-2xl text-left transition-all duration-300 cursor-pointer overflow-hidden ${
                     isSelected 
-                      ? 'bg-secondary/40 border-2 border-primary shadow-lg shadow-primary/10' 
+                      ? 'bg-secondary/40 border-2 border-primary shadow-lg shadow-primary/15' 
                       : 'bg-[#24123d]/60 border border-purple-900/40 hover:border-purple-600/40 hover:bg-[#2c174a]/60'
                   }`}
                 >
-                  <div className={`p-3 rounded-xl shrink-0 ${isSelected ? 'bg-primary text-secondary' : 'bg-purple-950 text-primary'}`}>
+                  {isSelected && (
+                    <motion.span
+                      layoutId="selectedMatrixOutline"
+                      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                      className="absolute inset-0 rounded-2xl border-2 border-primary pointer-events-none"
+                    />
+                  )}
+                  <motion.div
+                    animate={isSelected ? { scale: [1, 1.15, 1], rotate: [0, -6, 0] } : { scale: 1, rotate: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className={`p-3 rounded-xl shrink-0 transition-colors ${
+                      isSelected ? 'bg-primary text-secondary shadow-md shadow-primary/30' : 'bg-purple-950 text-primary'
+                    }`}
+                  >
                     <Icon size={22} />
-                  </div>
-                  <div>
+                  </motion.div>
+                  <div className="relative z-10">
                     <h3 className="font-bold text-white font-display text-base leading-tight mb-1">{matrix.title}</h3>
                     <p className="text-xs text-slate-400 leading-normal line-clamp-2 font-sans">{matrix.description}</p>
                   </div>
-                </button>
+                </motion.button>
               );
             })}
-          </div>
+          </motion.div>
         </div>
 
         {/* Détails logistiques / Importation */}
