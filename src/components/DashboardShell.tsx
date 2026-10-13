@@ -231,29 +231,38 @@ export default function DashboardShell({
             </div>
           </div>
 
-          {/* Détails de l'événement actif */}
-          <div className="flex flex-wrap items-center gap-3 bg-app-input border border-app-card-border p-2.5 rounded-2xl w-full xl:w-auto transition-colors duration-300 shadow-sm">
-            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-xl text-primary font-display font-semibold text-xs uppercase">
-              <Icon size={14} />
-              <span>{matrixInfo.title}</span>
-            </div>
-            <div className="w-px h-6 bg-app-card-border hidden md:block"></div>
-            <div className="text-sm font-bold text-app-text max-w-[200px] truncate" title={event.name}>
-              {event.name}
-            </div>
-            <div className="w-px h-6 bg-app-card-border hidden md:block"></div>
+          {/* Détails de l'événement actif (anti-doublon et largeur fluide) */}
+          <div className="flex flex-wrap items-center gap-2.5 bg-app-input border border-app-card-border p-2 rounded-2xl w-full xl:w-auto transition-colors duration-300 shadow-sm">
+            {event.name.trim().toLowerCase() !== matrixInfo.title.trim().toLowerCase() ? (
+              <>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 border border-primary/25 rounded-xl text-primary font-display font-bold text-xs uppercase tracking-wide shrink-0">
+                  <Icon size={14} />
+                  <span>{matrixInfo.title}</span>
+                </div>
+                <div className="w-px h-5 bg-app-card-border hidden md:block"></div>
+                <div className="text-sm font-black text-app-text max-w-[340px] truncate uppercase font-display" title={event.name}>
+                  {event.name}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1 bg-primary/15 border border-primary/30 rounded-xl text-primary font-display font-black text-sm uppercase tracking-wide">
+                <Icon size={15} />
+                <span>{event.name}</span>
+              </div>
+            )}
+            <div className="w-px h-5 bg-app-card-border hidden md:block"></div>
             <div className="flex items-center gap-3 text-xs text-app-text-muted font-medium">
               <span className="flex items-center gap-1">
-                <Calendar size={12} className="text-primary" />
+                <Calendar size={12} className="text-primary shrink-0" />
                 {new Date(event.date + 'T00:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'short', year: 'numeric' })}
               </span>
-              <span className="flex items-center gap-1 max-w-[150px] truncate" title={event.location}>
-                <MapPin size={12} className="text-primary" />
+              <span className="flex items-center gap-1 max-w-[180px] truncate" title={event.location}>
+                <MapPin size={12} className="text-primary shrink-0" />
                 {event.location}
               </span>
               {event.partner && (
-                <span className="flex items-center gap-1 max-w-[150px] truncate text-app-text-muted" title={event.partner}>
-                  <Building size={12} className="text-primary" />
+                <span className="flex items-center gap-1 max-w-[160px] truncate text-app-text" title={event.partner}>
+                  <Building size={12} className="text-primary shrink-0" />
                   {event.partner}
                 </span>
               )}
@@ -261,7 +270,7 @@ export default function DashboardShell({
           </div>
 
           {/* Onglets de navigation et boutons d'actions */}
-          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-between xl:justify-end">
+          <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto justify-between xl:justify-end">
             <div className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative">
               {tabs.map((tab) => {
                 const isActive = currentTab === tab.id;
@@ -288,55 +297,60 @@ export default function DashboardShell({
               })}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={onOpenNetModal}
                 title={`Statut réseau : ${netStatus}`}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition ${
                   sessionCode 
                     ? 'bg-primary/20 text-primary border-primary/50' 
-                    : 'bg-app-card border-app-card-border text-app-text hover:scale-[1.02] active:scale-95'
+                    : 'bg-app-card border-app-card-border text-app-text hover:border-primary/50'
                 }`}
               >
-                <Wifi size={14} className={sessionCode ? 'animate-pulse' : ''} />
+                <Wifi size={13} className={sessionCode ? 'animate-pulse' : ''} />
                 <span>{sessionCode ? sessionCode : 'Réseau LAN'}</span>
               </button>
 
               <button
                 onClick={onToggleTheme}
                 title={isLightTheme ? "Passer au thème sombre" : "Passer au thème clair"}
-                className="flex items-center justify-center p-2 rounded-xl bg-app-card border border-app-card-border text-app-text hover:scale-[1.02] active:scale-95 transition cursor-pointer"
+                className="flex items-center justify-center p-2 rounded-xl bg-app-card border border-app-card-border text-app-text hover:text-primary transition cursor-pointer"
               >
                 {isLightTheme ? <Moon size={14} /> : <Sun size={14} />}
               </button>
 
               <button
                 onClick={onExportData}
-                title="Exporter les données de cet événement en JSON"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-app-card border border-app-card-border text-app-text hover:scale-[1.02] active:scale-95 text-xs font-bold cursor-pointer transition"
+                title="Exporter une sauvegarde JSON de cet événement"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-primary text-app-text hover:text-primary text-xs font-bold cursor-pointer transition shadow-sm"
               >
-                <Download size={14} />
-                <span className="hidden sm:inline">Sauvegarder</span>
+                <Download size={13} />
+                <span>Sauvegarder</span>
               </button>
+
+              {/* Séparateur pour isoler le bouton Quitter de Sauvegarder */}
+              <div className="w-px h-5 bg-app-card-border mx-1 hidden sm:block" />
 
               <button
                 onClick={onLeaveEvent}
                 title="Quitter cet événement et retourner au menu principal"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-950/40 border border-red-900/40 text-red-300 hover:bg-red-900/30 hover:text-white text-xs font-bold cursor-pointer transition"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/30 border border-red-900/50 text-red-400 hover:bg-red-900/50 hover:text-white text-xs font-bold cursor-pointer transition"
               >
-                <LogOut size={14} />
-                <span className="hidden sm:inline">Quitter</span>
+                <LogOut size={13} />
+                <span>Quitter</span>
               </button>
             </div>
           </div>
         </header>
       )}
 
-      {/* Zone de contenu principale de l'activité avec transition fluide inter-onglets */}
+      {/* Zone de contenu principale débridée en largeur (jusqu'à 1850px) */}
       <main className={`flex-1 w-full transition-all duration-300 ${
         isPublicView 
           ? 'h-[calc(100vh-64px)] overflow-hidden p-2 sm:p-4 flex flex-col' 
-          : 'max-w-7xl mx-auto p-4 md:p-6 lg:p-8'
+          : event.type === 'kiosque_concours'
+            ? 'max-w-[1850px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex-1 flex flex-col min-h-0'
+            : 'max-w-[1850px] mx-auto px-4 md:px-6 py-4 md:py-6'
       }`}>
         <AnimatePresence mode="wait">
           <motion.div

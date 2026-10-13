@@ -30,7 +30,8 @@ import {
   HardDrive,
   Laptop,
   Gift,
-  Zap
+  Zap,
+  Square
 } from 'lucide-react';
 
 interface TeardownMatrixProps {
@@ -623,21 +624,37 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         )
       : null;
 
-  // Filtrage de la liste des participants
-  const filteredParticipants = participants.filter((p) => {
-    const matchesSearch =
-      !searchQuery.trim() ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.email && p.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (p.postalCode && p.postalCode.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Filtrage et tri de la liste des participants
+  const filteredParticipants = participants
+    .filter((p) => {
+      const matchesSearch =
+        !searchQuery.trim() ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.email && p.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (p.postalCode && p.postalCode.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    const hasValidTime = typeof p.timeMs === 'number' && p.timeMs > 0;
-    if (participantFilter === 'waiting') return !hasValidTime;
-    if (participantFilter === 'ranked') return hasValidTime;
-    return true;
-  });
+      const hasValidTime = typeof p.timeMs === 'number' && p.timeMs > 0;
+      if (participantFilter === 'waiting') return !hasValidTime;
+      if (participantFilter === 'ranked') return hasValidTime;
+      return true;
+    })
+    .sort((a, b) => {
+      const aHasTime = typeof a.timeMs === 'number' && a.timeMs > 0;
+      const bHasTime = typeof b.timeMs === 'number' && b.timeMs > 0;
+      if (participantFilter === 'ranked') {
+        return (a.timeMs || 0) - (b.timeMs || 0);
+      }
+      if (participantFilter === 'waiting') {
+        return (a.registeredAt || 0) - (b.registeredAt || 0);
+      }
+      // 'all' : classés en tête triés par score, puis ceux en attente
+      if (aHasTime && bHasTime) return a.timeMs! - b.timeMs!;
+      if (aHasTime && !bHasTime) return -1;
+      if (!aHasTime && bHasTime) return 1;
+      return (b.registeredAt || 0) - (a.registeredAt || 0);
+    });
 
   // Rendu des Chronomètres Individuels Adaptatifs sur l'Écran Public
   const activeTracks = Object.values(tracks).filter((t) => t.participantId !== null);
@@ -836,65 +853,10 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   // RENDU DE L'ÉCRAN ORGANISATEUR (ADMIN / ARBITRAGE)
   // ============================================================================
   return (
-    <div className="space-y-6">
-      {/* Bandeau de statistiques en temps réel */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-4 rounded-2xl flex items-center gap-3.5 shadow">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center text-primary shrink-0">
-            <Users size={18} />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Participants</span>
-            <span className="text-xl font-display font-bold text-white">{participants.length}</span>
-          </div>
-        </div>
-
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-4 rounded-2xl flex items-center gap-3.5 shadow">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-            <Check size={18} />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Scores Validés</span>
-            <span className="text-xl font-display font-bold text-white">
-              {rankedParticipants.length}{' '}
-              <span className="text-xs font-sans text-slate-400 font-normal">
-                / {participants.length}
-              </span>
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-4 rounded-2xl flex items-center gap-3.5 shadow">
-          <div className="w-10 h-10 rounded-xl bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shrink-0">
-            <Trophy size={18} />
-          </div>
-          <div className="min-w-0">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Record Actuel</span>
-            <span className="text-lg font-mono font-bold text-primary block truncate">
-              {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
-            </span>
-            {bestParticipant && (
-              <span className="text-[10px] text-slate-400 truncate block">{bestParticipant.name}</span>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-4 rounded-2xl flex items-center gap-3.5 shadow">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0">
-            <Clock size={18} />
-          </div>
-          <div>
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Temps Moyen</span>
-            <span className="text-lg font-mono font-bold text-white">
-              {averageTimeMs ? formatTime(averageTimeMs) : '--:--.--'}
-            </span>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-3">
       {/* Bandeau de contrôle du tirage au sort lorsqu'il est actif */}
       {raffle.status !== 'idle' && (
-        <div className="bg-primary/10 border border-primary/30 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="bg-primary/10 border border-primary/30 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
             <Sparkles className="text-primary animate-spin shrink-0" size={18} />
             <div className="min-w-0">
@@ -903,9 +865,9 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   ? "Tirage en cours sur l'écran public"
                   : 'Gagnant sélectionné sur l\'écran public'}
               </span>
-              <span className="font-bold text-white text-xs block mt-1 truncate">
+              <span className="font-bold text-app-text text-xs block mt-0.5 truncate">
                 {raffle.status === 'spinning' ? (
-                  <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="flex items-center gap-1.5 text-app-text-muted">
                     Défilement :{' '}
                     <span className="font-mono text-primary font-black animate-pulse">
                       {raffleDisplayValue}
@@ -921,219 +883,381 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           </div>
           <button
             onClick={resetRaffle}
-            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-red-950/60 border border-red-900/60 text-xs font-bold font-display uppercase text-red-300 hover:text-white hover:bg-red-900 transition cursor-pointer"
+            className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-red-950/60 border border-red-900/60 text-xs font-bold font-display uppercase text-red-300 hover:text-white hover:bg-red-900 transition cursor-pointer"
           >
             Fermer le tirage et revenir aux chronos
           </button>
         </div>
       )}
 
+      {/* Cockpit 3 Colonnes Zéro-Scroll */}
       <div
-        className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start transition-all duration-500 ${
+        className={`grid grid-cols-12 gap-3.5 items-start transition-all duration-500 ${
           raffle.status === 'spinning' ? 'opacity-40 pointer-events-none scale-[0.99]' : ''
         }`}
       >
-        {/* Colonne Gauche : Inscription & Liste des participants */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* Ajouter un participant */}
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-            <h3 className="text-base font-bold font-display text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-              <UserPlus size={18} className="text-primary" />
+        {/* ================================================================ */}
+        {/* COLONNE 1 (GAUCHE ~25%) : Inscription & Tirage au sort           */}
+        {/* ================================================================ */}
+        <div className="col-span-12 lg:col-span-3 space-y-3">
+          {/* Formulaire Nouveau Participant compacté */}
+          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm">
+            <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <UserPlus size={15} className="text-primary" />
               <span>Nouveau Participant</span>
             </h3>
 
-            <form onSubmit={(e) => addParticipant(e, false)} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-300 block">
+            <form onSubmit={(e) => addParticipant(e, false)} className="space-y-2">
+              <div className="space-y-0.5">
+                <label className="text-[9px] font-bold uppercase text-app-text-muted block">
                   Nom complet *
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 text-slate-500" size={14} />
+                  <User className="absolute left-2.5 top-2 text-app-text-muted" size={12} />
                   <input
                     type="text"
                     required
                     value={newParticipantName}
                     onChange={(e) => setNewParticipantName(e.target.value)}
                     placeholder="Jean Tremblay"
-                    className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
+                    className="w-full bg-app-input border border-app-input-border rounded-xl pl-8 pr-2.5 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-300 block">
-                  Adresse courriel
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 text-slate-500" size={14} />
-                  <input
-                    type="email"
-                    value={newParticipantEmail}
-                    onChange={(e) => setNewParticipantEmail(e.target.value)}
-                    placeholder="jean.t@email.com"
-                    className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
-                  />
+              {/* Courriel et Code Postal sur la même ligne (3 cols / 2 cols) */}
+              <div className="grid grid-cols-5 gap-2">
+                <div className="col-span-3 space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase text-app-text-muted block">
+                    Courriel
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-2.5 top-2 text-app-text-muted" size={12} />
+                    <input
+                      type="email"
+                      value={newParticipantEmail}
+                      onChange={(e) => setNewParticipantEmail(e.target.value)}
+                      placeholder="jean@email.com"
+                      className="w-full bg-app-input border border-app-input-border rounded-xl pl-7 pr-2 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-2 space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase text-app-text-muted block">
+                    Code postal
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-2 top-2 text-app-text-muted" size={12} />
+                    <input
+                      type="text"
+                      value={newParticipantPostal}
+                      onChange={(e) => setNewParticipantPostal(e.target.value)}
+                      placeholder="H2W 1Y4"
+                      className="w-full bg-app-input border border-app-input-border rounded-xl pl-6 pr-2 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition uppercase"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-300 block">
-                  Code postal
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 text-slate-500" size={14} />
-                  <input
-                    type="text"
-                    value={newParticipantPostal}
-                    onChange={(e) => setNewParticipantPostal(e.target.value)}
-                    placeholder="H2W 1Y4"
-                    className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-purple-950 border border-primary/40 text-primary font-bold font-display uppercase tracking-wider text-xs hover:bg-primary hover:text-secondary transition cursor-pointer"
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-app-input border border-app-card-border text-app-text hover:text-white hover:border-primary text-[10px] font-bold font-display uppercase tracking-wider transition cursor-pointer"
+                  title="Inscrire [Entrée]"
                 >
-                  <UserPlus size={14} />
+                  <UserPlus size={12} />
                   <span>Inscrire</span>
+                  <span className="text-[8px] text-app-text-muted font-mono hidden sm:inline">[↵]</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={(e) => addParticipant(e as any, true)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
-                  title="Inscrire et envoyer directement sur la première piste libre"
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-[10px] hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
+                  title="Inscrire et assigner directement à la première piste libre"
                 >
-                  <Play size={14} fill="currentColor" />
-                  <span>Inscrire + Piste</span>
+                  <Play size={12} fill="currentColor" />
+                  <span>+ Piste libre</span>
                 </button>
               </div>
             </form>
           </div>
 
-          {/* Résultat du tirage au sort (s'il a été effectué) */}
-          {event.extraData?.raffleWinnerName && (
-            <div className="bg-primary/10 border border-primary/30 p-5 rounded-3xl space-y-2 relative overflow-hidden">
-              <div className="absolute right-2 -bottom-2 opacity-10 text-primary">
-                <Award size={80} />
-              </div>
-              <span className="text-[9px] uppercase font-black text-primary tracking-widest block">
-                🏆 Dernier gagnant du tirage au sort
+          {/* Bloc Tirage au sort unifié */}
+          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-primary font-display flex items-center gap-1.5">
+                <Gift size={13} /> Tirage au Sort
               </span>
-              <h4 className="text-sm font-bold text-white leading-tight font-display">
-                {event.extraData.raffleWinnerName}
-              </h4>
-              <div className="text-[10px] text-slate-400 font-sans space-y-0.5">
-                {event.extraData.raffleWinnerEmail && (
-                  <p>Courriel : {event.extraData.raffleWinnerEmail}</p>
-                )}
-                {event.extraData.raffleWinnerPostal && (
-                  <p>Code postal : {event.extraData.raffleWinnerPostal}</p>
-                )}
-                <p className="text-[9px] text-slate-500 mt-1">
-                  Tiré le {new Date(event.extraData.raffleWinnerAt).toLocaleString('fr-CA')}
-                </p>
+              <span className="text-[10px] font-mono text-app-text-muted">
+                {participants.length} participant{participants.length > 1 ? 's' : ''}
+              </span>
+            </div>
+
+            <button
+              onClick={startRaffle}
+              disabled={participants.length === 0}
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-primary to-lime-400 text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
+            >
+              <Sparkles size={13} />
+              <span>Lancer le tirage ({participants.length})</span>
+            </button>
+
+            {/* Vainqueur précédent si existant */}
+            {event.extraData?.raffleWinnerName ? (
+              <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/30 space-y-1 relative overflow-hidden">
+                <span className="text-[8px] uppercase font-black text-primary tracking-wider block">
+                  🏆 Dernier gagnant du tirage
+                </span>
+                <h4 className="text-xs font-bold text-app-text font-display truncate">
+                  {event.extraData.raffleWinnerName}
+                </h4>
+                <div className="text-[9px] text-app-text-muted space-y-0.5 font-sans">
+                  {event.extraData.raffleWinnerEmail && (
+                    <p className="truncate">Courriel : {event.extraData.raffleWinnerEmail}</p>
+                  )}
+                  {event.extraData.raffleWinnerPostal && (
+                    <p>Code postal : {event.extraData.raffleWinnerPostal}</p>
+                  )}
+                  <p className="text-[8px] text-app-text-muted/70 pt-0.5">
+                    Tiré le {new Date(event.extraData.raffleWinnerAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[9px] text-app-text-muted text-center font-sans">
+                Prix : Laptop Dynabook Portégé X40-G Insertech
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ================================================================ */}
+        {/* COLONNE 2 (CENTRE ~50%) : Stat-bar KPIs + Les 5 Pistes           */}
+        {/* ================================================================ */}
+        <div className="col-span-12 lg:col-span-6 space-y-3">
+          {/* Bandeau de statistiques compact (stat-bar en 1 ligne) */}
+          <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
+            {/* Participants */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center text-primary shrink-0">
+                <Users size={13} />
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Participants</span>
+                <span className="text-xs font-display font-black text-app-text">{participants.length}</span>
               </div>
             </div>
-          )}
 
-          {/* Liste des participants avec recherche et actions rapides */}
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold font-display text-white uppercase tracking-wider">
-                Participants ({filteredParticipants.length}/{participants.length})
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" />
+
+            {/* Scores validés */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                <Check size={13} />
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Scores validés</span>
+                <span className="text-xs font-display font-black text-app-text">
+                  {rankedParticipants.length}{' '}
+                  <span className="text-[9px] font-sans text-app-text-muted font-normal">/ {participants.length}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" />
+
+            {/* Record actuel */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                <Trophy size={13} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Record actuel</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-mono font-black text-primary">
+                    {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
+                  </span>
+                  {bestParticipant && (
+                    <span className="text-[9px] text-app-text-muted font-medium truncate max-w-[80px]">
+                      ({bestParticipant.name})
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" />
+
+            {/* Temps moyen */}
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+                <Clock size={13} />
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Temps moyen</span>
+                <span className="text-xs font-mono font-bold text-app-text">
+                  {averageTimeMs ? formatTime(averageTimeMs) : '--:--.--'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Grille des 5 pistes d'arbitrage */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {Object.values(tracks).map((track, idx) => {
+              const assignableParticipants = participants.filter(
+                (p) => !Object.values(tracks).some((t) => t.participantId === p.id)
+              );
+
+              // La 5e piste s'étale sur les 2 colonnes pour un équilibre parfait
+              const isFifthTrack = Object.values(tracks).length === 5 && idx === 4;
+
+              return (
+                <div key={track.trackId} className={isFifthTrack ? 'sm:col-span-2' : ''}>
+                  <AdminTrackBlock
+                    track={track}
+                    assignableParticipants={assignableParticipants}
+                    bestTimeMs={bestParticipant?.timeMs ?? null}
+                    onAssign={(pId) => handleAssignParticipant(track.trackId, pId)}
+                    onStart={() => handleStartTimer(track.trackId)}
+                    onStop={() => handleStopTimer(track.trackId)}
+                    onReset={() => handleResetTimer(track.trackId)}
+                    onAdjustTime={(deltaMs) => handleAdjustTrackTime(track.trackId, deltaMs)}
+                    onSave={() => handleSaveTrackTime(track.trackId)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ================================================================ */}
+        {/* COLONNE 3 (DROITE ~25%) : File d'attente & Classement Unifiés    */}
+        {/* ================================================================ */}
+        <div className="col-span-12 lg:col-span-3">
+          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5 flex flex-col h-full max-h-[calc(100vh-140px)]">
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-1.5">
+                <span>File & Classement</span>
+                <span className="text-[10px] font-mono font-bold text-primary px-1.5 py-0.2 rounded-md bg-primary/15">
+                  {filteredParticipants.length}/{participants.length}
+                </span>
               </h3>
             </div>
 
-            {/* Barre de recherche et filtres */}
-            <div className="space-y-2">
+            {/* Barre de recherche et 3 onglets de filtres */}
+            <div className="space-y-1.5 shrink-0">
               <div className="relative">
-                <Search className="absolute left-3 top-2.5 text-slate-500" size={13} />
+                <Search className="absolute left-2.5 top-2 text-app-text-muted" size={12} />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Rechercher un participant..."
-                  className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-8 pr-3 py-1.5 text-white text-xs focus:outline-none focus:border-primary transition"
+                  placeholder="Rechercher nom, courriel..."
+                  className="w-full bg-app-input border border-app-input-border rounded-xl pl-7 pr-2.5 py-1 text-app-text text-xs focus:outline-none focus:border-primary transition"
                 />
               </div>
-              <div className="flex items-center gap-1.5">
-                {(['all', 'waiting', 'ranked'] as const).map((filterKey) => (
+              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-app-input border border-app-card-border">
+                {(['waiting', 'ranked', 'all'] as const).map((filterKey) => (
                   <button
                     key={filterKey}
                     onClick={() => setParticipantFilter(filterKey)}
-                    className={`flex-1 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer border ${
+                    className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition cursor-pointer ${
                       participantFilter === filterKey
-                        ? 'bg-primary text-secondary border-primary'
-                        : 'bg-[#180A2b]/60 text-slate-400 border-purple-950 hover:text-white'
+                        ? 'bg-primary text-secondary font-black shadow-sm'
+                        : 'text-app-text-muted hover:text-app-text'
                     }`}
                   >
-                    {filterKey === 'all'
-                      ? 'Tous'
-                      : filterKey === 'waiting'
-                        ? 'En attente'
-                        : 'Classés'}
+                    {filterKey === 'waiting'
+                      ? 'En attente'
+                      : filterKey === 'ranked'
+                        ? 'Classés'
+                        : 'Tous'}
                   </button>
                 ))}
               </div>
             </div>
 
-            {filteredParticipants.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6 font-sans">
-                Aucun participant correspondant.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                {filteredParticipants.map((p) => {
+            {/* Liste déroulante interne uniquement */}
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[350px]">
+              {filteredParticipants.length === 0 ? (
+                <p className="text-xs text-app-text-muted text-center py-8 font-sans">
+                  Aucun participant correspondant.
+                </p>
+              ) : (
+                filteredParticipants.map((p) => {
                   const hasTime = typeof p.timeMs === 'number' && p.timeMs > 0;
                   const assignedTrack = Object.values(tracks).find((t) => t.participantId === p.id);
                   const isAssigned = Boolean(assignedTrack);
                   const isManualEditing = manualScoreParticipantId === p.id;
 
+                  // Rang calculé parmi les classés
+                  const rankIndex = hasTime
+                    ? rankedParticipants.findIndex((rp) => rp.id === p.id) + 1
+                    : null;
+
                   return (
                     <div
                       key={p.id}
-                      className={`p-3 rounded-xl border transition space-y-2 ${
+                      className={`p-2 rounded-xl border transition space-y-1 ${
                         isAssigned
-                          ? 'bg-primary/10 border-primary text-white'
+                          ? 'bg-primary/10 border-primary text-app-text'
                           : hasTime
-                            ? 'bg-[#180A2b]/70 border-purple-900/50 text-slate-200'
-                            : 'bg-[#180A2b]/40 border-purple-950 text-slate-300'
+                            ? 'bg-app-input/90 border-app-card-border text-app-text'
+                            : 'bg-app-card/60 border-app-card-border/60 text-app-text-muted'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-1.5">
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-xs font-bold truncate">{p.name}</h4>
-                          <p className="text-[10px] text-slate-400 truncate font-sans">
+                          <div className="flex items-center gap-1.5">
+                            {rankIndex !== null ? (
+                              <span
+                                className={`font-mono font-black text-[9px] px-1.5 py-0.2 rounded ${
+                                  rankIndex === 1
+                                    ? 'bg-amber-400 text-amber-950'
+                                    : rankIndex === 2
+                                      ? 'bg-slate-300 text-slate-900'
+                                      : rankIndex === 3
+                                        ? 'bg-amber-700 text-amber-100'
+                                        : 'bg-primary/20 text-primary'
+                                }`}
+                              >
+                                #{rankIndex}
+                              </span>
+                            ) : (
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+                            )}
+                            <h4 className="text-xs font-bold text-app-text truncate">{p.name}</h4>
+                          </div>
+                          <div className="text-[10px] font-sans mt-0.5">
                             {isAssigned ? (
                               <span className="text-primary font-bold">
                                 ⏱️ En course (Piste {assignedTrack?.trackId})
                               </span>
                             ) : hasTime ? (
-                              <span className="font-mono text-primary font-semibold">
+                              <span className="font-mono text-primary font-bold">
                                 ✓ {formatTime(p.timeMs!)}
                               </span>
                             ) : (
-                              'En attente de passage'
+                              <span className="text-app-text-muted italic">En attente</span>
                             )}
-                          </p>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-0.5 shrink-0">
                           {!isAssigned && (
                             <button
                               onClick={() => handleQuickSendToTrack(p.id)}
                               title={
                                 hasTime
-                                  ? 'Nouvelle tentative (envoyer sur une piste libre)'
+                                  ? 'Nouvelle tentative (envoyer sur piste libre)'
                                   : 'Envoyer sur une piste libre'
                               }
-                              className="p-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary hover:text-secondary transition cursor-pointer"
+                              className="p-1 rounded-lg bg-primary/15 text-primary hover:bg-primary hover:text-secondary transition cursor-pointer"
                             >
-                              <Play size={12} fill="currentColor" />
+                              <Play size={11} fill="currentColor" />
                             </button>
                           )}
 
@@ -1147,18 +1271,18 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                               }
                             }}
                             title="Saisir ou corriger le temps manuellement"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-purple-900/50 transition cursor-pointer"
+                            className="p-1 rounded-lg text-app-text-muted hover:text-app-text hover:bg-app-card-border/50 transition cursor-pointer"
                           >
-                            <Edit3 size={12} />
+                            <Edit3 size={11} />
                           </button>
 
                           {hasTime && !isAssigned && (
                             <button
                               onClick={() => handleResetParticipantScore(p.id)}
-                              title="Réinitialiser le score (remettre en attente)"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10 transition cursor-pointer"
+                              title="Réinitialiser le score"
+                              className="p-1 rounded-lg text-app-text-muted hover:text-amber-400 hover:bg-amber-500/10 transition cursor-pointer"
                             >
-                              <RotateCcw size={12} />
+                              <RotateCcw size={11} />
                             </button>
                           )}
 
@@ -1166,27 +1290,27 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                             onClick={() => deleteParticipant(p.id)}
                             disabled={isAssigned}
                             title="Supprimer le participant"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 cursor-pointer"
+                            className="p-1 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 cursor-pointer"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={11} />
                           </button>
                         </div>
                       </div>
 
-                      {/* Zone de saisie manuelle de score */}
+                      {/* Zone de saisie manuelle de score inline */}
                       {isManualEditing && (
-                        <div className="pt-2 border-t border-purple-900/40 flex items-center gap-1.5">
+                        <div className="pt-1.5 border-t border-app-card-border flex items-center gap-1">
                           <input
                             type="text"
                             value={manualScoreInput}
                             onChange={(e) => setManualScoreInput(e.target.value)}
-                            placeholder="Ex: 01:24.50 ou 84.5"
-                            className="flex-1 bg-[#180A2b] border border-primary/60 rounded-lg px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-primary"
+                            placeholder="01:24.50"
+                            className="flex-1 bg-app-input border border-primary rounded-lg px-2 py-0.5 text-app-text font-mono text-xs focus:outline-none"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 const ms = parseTimeInputToMs(manualScoreInput);
                                 if (ms) handleUpdateScoreManually(p.id, ms);
-                                else showToast('Format attendu : MM:SS.cc (ex: 01:15.40) ou secondes (ex: 75.4)', 'warning');
+                                else showToast('Format attendu : MM:SS.cc ou secondes', 'warning');
                               }
                               if (e.key === 'Escape') setManualScoreParticipantId(null);
                             }}
@@ -1196,86 +1320,26 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                             onClick={() => {
                               const ms = parseTimeInputToMs(manualScoreInput);
                               if (ms) handleUpdateScoreManually(p.id, ms);
-                              else showToast('Format attendu : MM:SS.cc (ex: 01:15.40) ou secondes (ex: 75.4)', 'warning');
+                              else showToast('Format attendu : MM:SS.cc ou secondes', 'warning');
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-primary text-secondary font-bold text-[10px] uppercase cursor-pointer"
+                            className="px-2 py-0.5 rounded-lg bg-primary text-secondary font-bold text-[9px] uppercase cursor-pointer"
                           >
-                            Valider
+                            OK
                           </button>
                           <button
                             onClick={() => setManualScoreParticipantId(null)}
-                            className="p-1 rounded-lg bg-purple-950 text-slate-400 hover:text-white cursor-pointer"
+                            className="p-0.5 rounded-lg text-app-text-muted hover:text-app-text cursor-pointer"
                           >
-                            <X size={12} />
+                            <X size={11} />
                           </button>
                         </div>
                       )}
                     </div>
                   );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Colonne Droite : Les 5 pistes d'arbitrage + Tableau des Champions */}
-        <div className="lg:col-span-8 space-y-8">
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <span className="text-[10px] tracking-wider uppercase font-black text-primary font-sans">
-                  Arbitrage Multi-Pistes • Montage & Démontage
-                </span>
-                <h2 className="text-xl font-bold font-display text-white uppercase">
-                  Gestion des 5 Chronomètres
-                </h2>
-              </div>
-
-              <button
-                onClick={startRaffle}
-                disabled={participants.length === 0}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-105 active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
-              >
-                <Sparkles size={14} />
-                <span>Lancer un tirage au sort ({participants.length})</span>
-              </button>
-            </div>
-
-            {/* Grille des 5 pistes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Object.values(tracks).map((track) => {
-                // Participants qui ne sont pas déjà en course sur une piste
-                const assignableParticipants = participants.filter(
-                  (p) => !Object.values(tracks).some((t) => t.participantId === p.id)
-                );
-
-                return (
-                  <AdminTrackBlock
-                    key={track.trackId}
-                    track={track}
-                    assignableParticipants={assignableParticipants}
-                    bestTimeMs={bestParticipant?.timeMs ?? null}
-                    onAssign={(pId) => handleAssignParticipant(track.trackId, pId)}
-                    onStart={() => handleStartTimer(track.trackId)}
-                    onStop={() => handleStopTimer(track.trackId)}
-                    onReset={() => handleResetTimer(track.trackId)}
-                    onAdjustTime={(deltaMs) => handleAdjustTrackTime(track.trackId, deltaMs)}
-                    onSave={() => handleSaveTrackTime(track.trackId)}
-                  />
-                );
-              })}
+                })
+              )}
             </div>
           </div>
-
-          {/* Tableau des Champions directement visible et éditable par l'arbitre */}
-          <Leaderboard
-            participants={participants}
-            highlightId={lastSavedParticipantId}
-            isAdmin={true}
-            onResetScore={handleResetParticipantScore}
-            onUpdateScore={handleUpdateScoreManually}
-            onSendToTrack={handleQuickSendToTrack}
-          />
         </div>
       </div>
     </div>
@@ -1315,164 +1379,276 @@ function AdminTrackBlock({
     (p) => typeof p.timeMs === 'number' && p.timeMs > 0
   );
 
-  const hasElapsed = track.isRunning || track.elapsedBeforeStart > 0;
+  // Chronométrage interne fluide et ultra-réactif
+  const [time, setTime] = useState(0);
+  const intervalRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    if (track.isRunning && track.startTime !== null) {
+      const tick = () => {
+        setTime(Date.now() - track.startTime! + track.elapsedBeforeStart);
+      };
+      tick();
+      intervalRef.current = window.setInterval(tick, 10);
+    } else {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      setTime(track.elapsedBeforeStart);
+    }
+
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [track.isRunning, track.startTime, track.elapsedBeforeStart]);
+
+  const hasElapsed = track.isRunning || time > 0;
+
+  // ==========================================================================
+  // ÉTAT 1 : PISTE LIBRE (Aucun participant) - Ultra-compact
+  // ==========================================================================
+  if (!track.participantId) {
+    return (
+      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-purple-800/40 hover:border-purple-600/60 transition-all flex flex-col justify-between gap-2 shadow-sm min-h-[92px]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-black font-display text-primary uppercase">
+              Piste {track.trackId}
+            </span>
+            <span className="text-[9px] px-2 py-0.2 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase">
+              Libre
+            </span>
+          </div>
+          <span className="text-[10px] text-app-text-muted flex items-center gap-1">
+            <User size={11} />
+            <span>En attente</span>
+          </span>
+        </div>
+
+        <select
+          value=""
+          onChange={(e) => {
+            if (e.target.value) onAssign(e.target.value);
+          }}
+          className="w-full bg-app-input border border-app-input-border rounded-xl px-2.5 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition cursor-pointer"
+        >
+          <option value="" disabled>
+            Attribuer un participant à la Piste {track.trackId}...
+          </option>
+          {waitingParticipants.length > 0 && (
+            <optgroup label="En attente (1er passage)">
+              {waitingParticipants.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {retryParticipants.length > 0 && (
+            <optgroup label="Déjà classés (Nouvelle tentative)">
+              {retryParticipants.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} (Record : {formatTime(p.timeMs!)})
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // ÉTAT 2 : PRÊT AU DÉPART (Participant assigné, chrono non démarré)
+  // ==========================================================================
+  if (!track.isRunning && time === 0) {
+    return (
+      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-amber-500/60 shadow-md shadow-amber-500/5 transition-all flex flex-col justify-between gap-2 min-h-[120px]">
+        {/* Faisceau lumineux ambre */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-black font-display text-primary uppercase">
+              Piste {track.trackId}
+            </span>
+            <span className="text-[9px] px-2 py-0.2 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40 font-bold uppercase">
+              Prêt au départ
+            </span>
+          </div>
+
+          <button
+            onClick={() => onAssign(null)}
+            className="text-[9px] px-2 py-0.5 rounded bg-app-input text-app-text-muted hover:text-white border border-app-card-border cursor-pointer transition"
+          >
+            Libérer
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none mb-0.5">
+              Participant
+            </span>
+            <h4 className="font-extrabold text-app-text text-sm sm:text-base font-display uppercase truncate">
+              {track.participantName}
+            </h4>
+          </div>
+          <span className="font-mono font-bold text-base text-app-text-muted tabular-nums">
+            00:00.00
+          </span>
+        </div>
+
+        <button
+          onClick={onStart}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
+        >
+          <Play size={13} fill="currentColor" />
+          <span>Démarrer le chronomètre</span>
+        </button>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // ÉTAT 3 : EN COURSE (Chrono actif) ou ARRÊTÉ AVEC TEMPS EN ATTENTE DE VALIDATION
+  // ==========================================================================
   return (
     <div
-      className={`relative overflow-hidden p-5 rounded-2xl bg-[#24123d]/60 border shadow-lg space-y-4 transition-all duration-300 ${
+      className={`relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 shadow-lg transition-all flex flex-col justify-between gap-2 ${
         track.isRunning
-          ? 'border-primary shadow-primary/15'
-          : track.participantId
-            ? 'border-purple-700/60'
-            : 'border-purple-900/40'
+          ? 'border-primary ring-2 ring-primary/20 shadow-primary/10'
+          : 'border-emerald-500/70 shadow-emerald-500/10'
       }`}
     >
-      {/* Faisceau lumineux supérieur de statut de piste */}
+      {/* Faisceau lumineux supérieur */}
       <div
         className={`absolute top-0 left-0 right-0 h-1 transition-all duration-500 ${
           track.isRunning
             ? 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse'
-            : track.participantId
-              ? 'bg-gradient-to-r from-purple-500 to-primary/60'
-              : 'bg-transparent'
+            : 'bg-emerald-500'
         }`}
       />
 
       {/* En-tête de piste */}
-      <div className="flex items-center justify-between pb-2 border-b border-purple-950">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-extrabold font-display text-primary uppercase">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-xs font-black font-display text-primary uppercase">
             Piste {track.trackId}
           </span>
           {track.isRunning ? (
-            <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 font-bold uppercase">
+            <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.2 rounded-full bg-primary/20 text-primary border border-primary/40 font-bold uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
               <span>En course</span>
             </span>
-          ) : track.participantId ? (
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800/50 font-bold uppercase">
-              Prêt
+          ) : (
+            <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold uppercase">
+              Temps arrêté
             </span>
-          ) : null}
+          )}
         </div>
-        {track.participantId && (
-          <button
-            onClick={() => onAssign(null)}
-            disabled={track.isRunning}
-            className="text-[9px] px-2.5 py-0.5 rounded bg-purple-950 text-slate-400 hover:text-white border border-purple-900/40 disabled:opacity-40 cursor-pointer transition"
-          >
-            Libérer la piste
-          </button>
-        )}
+
+        <h4 className="font-bold text-app-text text-xs font-display uppercase truncate max-w-[130px]">
+          {track.participantName}
+        </h4>
       </div>
 
-      {track.participantId ? (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <span className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">
-                Participant en piste
-              </span>
-              <h4 className="font-bold text-white text-base font-display uppercase truncate">
-                {track.participantName}
-              </h4>
-            </div>
-          </div>
+      {/* Grand Chronomètre digital */}
+      <div
+        className={`stopwatch-lcd py-1 px-3 rounded-xl bg-app-input border font-mono font-black text-2xl sm:text-3xl tracking-wider tabular-nums text-center shadow-inner ${
+          track.isRunning
+            ? 'text-primary border-primary/40'
+            : 'text-emerald-400 border-emerald-500/40'
+        }`}
+      >
+        {formatTime(time)}
+      </div>
 
-          <Stopwatch
-            state={track}
-            onStart={onStart}
-            onStop={onStop}
-            onReset={onReset}
-            bestTimeMs={bestTimeMs}
-          />
-
-          {/* Boutons rapides de pénalité / bonus d'arbitrage */}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <span className="text-[9px] uppercase font-bold text-slate-400">
-              Ajustement / Pénalité :
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => onAdjustTime(-5000)}
-                disabled={!hasElapsed}
-                title="Retirer 5 secondes (bonus)"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-950/50 border border-emerald-700/40 text-emerald-300 hover:bg-emerald-900/60 text-[10px] font-mono font-bold disabled:opacity-30 cursor-pointer transition"
-              >
-                <MinusCircle size={11} />
-                <span>5s</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onAdjustTime(5000)}
-                disabled={!hasElapsed}
-                title="Ajouter 5 secondes de pénalité (ex: vis oubliée)"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-950/50 border border-amber-700/40 text-amber-300 hover:bg-amber-900/60 text-[10px] font-mono font-bold disabled:opacity-30 cursor-pointer transition"
-              >
-                <PlusCircle size={11} />
-                <span>5s</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onAdjustTime(10000)}
-                disabled={!hasElapsed}
-                title="Ajouter 10 secondes de pénalité (ex: pièce mal montée)"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-950/50 border border-red-700/40 text-red-300 hover:bg-red-900/60 text-[10px] font-mono font-bold disabled:opacity-30 cursor-pointer transition"
-              >
-                <PlusCircle size={11} />
-                <span>10s</span>
-              </button>
-            </div>
-          </div>
-
+      {/* Barre d'ajustements / pénalités rapides */}
+      <div className="flex items-center justify-between gap-1 text-[9px]">
+        <span className="font-bold text-app-text-muted uppercase">Pénalités :</span>
+        <div className="flex items-center gap-1">
           <button
-            onClick={onSave}
+            type="button"
+            onClick={() => onAdjustTime(-5000)}
             disabled={!hasElapsed}
-            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
+            title="Retirer 5 secondes (bonus)"
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-emerald-950/50 border border-emerald-700/40 text-emerald-300 hover:bg-emerald-900/60 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
           >
-            <Check size={15} />
-            <span>
-              {track.isRunning ? 'Arrêter & Enregistrer le score' : 'Enregistrer le score'}
-            </span>
+            <MinusCircle size={10} />
+            <span>5s</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onAdjustTime(5000)}
+            disabled={!hasElapsed}
+            title="Ajouter 5 secondes de pénalité"
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-amber-950/50 border border-amber-700/40 text-amber-300 hover:bg-amber-900/60 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
+          >
+            <PlusCircle size={10} />
+            <span>+5s</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onAdjustTime(10000)}
+            disabled={!hasElapsed}
+            title="Ajouter 10 secondes de pénalité"
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg bg-red-950/50 border border-red-700/40 text-red-300 hover:bg-red-900/60 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
+          >
+            <PlusCircle size={10} />
+            <span>+10s</span>
           </button>
         </div>
-      ) : (
-        <div className="py-6 text-center space-y-3">
-          <User className="text-slate-600 mx-auto" size={24} />
-          <p className="text-xs text-slate-400 font-sans">Piste libre — aucun participant en course.</p>
+      </div>
 
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) onAssign(e.target.value);
-            }}
-            className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2.5 text-white text-xs focus:outline-none focus:border-primary transition cursor-pointer"
-          >
-            <option value="" disabled>
-              Attribuer un participant à la Piste {track.trackId}...
-            </option>
-            {waitingParticipants.length > 0 && (
-              <optgroup label="En attente (1er passage)">
-                {waitingParticipants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {retryParticipants.length > 0 && (
-              <optgroup label="Déjà classés (Nouvelle tentative)">
-                {retryParticipants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} (Record : {formatTime(p.timeMs!)})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </div>
-      )}
+      {/* Boutons d'actions selon l'état */}
+      <div className="flex items-center gap-1.5 pt-0.5">
+        {track.isRunning ? (
+          <>
+            <button
+              onClick={onStop}
+              title="Mettre en pause le chrono"
+              className="px-2.5 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text-muted hover:text-white hover:bg-red-900/40 transition cursor-pointer"
+            >
+              <Square size={13} />
+            </button>
+            <button
+              onClick={onSave}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-red-600/20"
+            >
+              <Check size={13} />
+              <span>Arrêter & Valider ({formatTime(time)})</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={onStart}
+              title="Reprendre le chronomètre"
+              className="p-2 rounded-xl bg-primary/20 text-primary hover:bg-primary hover:text-secondary border border-primary/30 transition cursor-pointer"
+            >
+              <Play size={13} fill="currentColor" />
+            </button>
+            <button
+              onClick={onReset}
+              title="Réinitialiser à 00:00.00"
+              className="p-2 rounded-xl bg-app-input text-app-text-muted hover:text-amber-400 border border-app-card-border transition cursor-pointer"
+            >
+              <RotateCcw size={13} />
+            </button>
+            <button
+              onClick={onSave}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
+            >
+              <Check size={13} />
+              <span>Valider le score</span>
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
