@@ -230,7 +230,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! [[ "$RELEASE_TAG" =~ ^[vV][0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "release_tag doit ressembler à v1.2.3 (reçu : $RELEASE_TAG)"
             exit 1
           fi
