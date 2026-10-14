@@ -6,6 +6,7 @@ import Stopwatch, { formatTime } from '../shared/Stopwatch';
 import Leaderboard from '../shared/Leaderboard';
 import RaffleSpinner from '../shared/RaffleSpinner';
 import { showToast } from '../shared/Toast';
+import { confirmDialog } from '../shared/ConfirmDialog';
 import PrizeEditorModal, { PrizeImage } from '../shared/PrizeEditorModal';
 import { ContestPrizes, getContestPrizes, serializeContestPrizes } from '../../utils/prizes';
 import { RaffleDraw, getRaffleDraws, getEligibleParticipants, readStoredRaffle, storeRaffle, RAFFLE_DURATION_MS } from '../../utils/raffle';
@@ -39,7 +40,8 @@ import {
   Gift,
   Zap,
   Pause,
-  Settings2
+  Settings2,
+  Medal
 } from 'lucide-react';
 
 interface TeardownMatrixProps {
@@ -264,10 +266,29 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   };
 
   const handleResetTimer = (trackId: number) => {
+    const track = tracks[trackId];
+    const previousElapsed =
+      track?.isRunning && track.startTime !== null
+        ? networkManager.now() - track.startTime + track.elapsedBeforeStart
+        : track?.elapsedBeforeStart ?? 0;
     networkManager.sendChronoAction({
       type: 'TIMER_RESET',
       trackId
     });
+    if (previousElapsed > 0) {
+      showToast(`Chrono de la piste ${trackId} remis à zéro (${formatTime(previousElapsed)}).`, 'info', {
+        label: 'Annuler',
+        onClick: () => {
+          const current = networkManager.tracksState[trackId];
+          // Ne pas écraser une nouvelle course démarrée entre-temps
+          if (!current || current.participantId !== track?.participantId || current.isRunning || current.elapsedBeforeStart > 0) {
+            showToast(`Le chrono de la piste ${trackId} a changé, impossible d'annuler.`, 'warning');
+            return;
+          }
+          networkManager.sendChronoAction({ type: 'TIMER_STOP', trackId, elapsed: previousElapsed });
+        }
+      });
+    }
   };
 
   // Ajuster le temps d'une piste (pénalité +5s / +10s pour vis oubliée, ou bonus -5s)
@@ -321,6 +342,31 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       participantId,
       participantName,
       eventId: event.id
+    });
+  };
+
+  // Libérer une piste depuis la régie, avec « Annuler » pour réattribuer le même participant
+  const handleReleaseTrack = (trackId: number) => {
+    const track = tracks[trackId];
+    if (!track?.participantId) return;
+    const { participantId, participantName } = track;
+    handleAssignParticipant(trackId, null);
+    showToast(`Piste ${trackId} libérée (${participantName}).`, 'info', {
+      label: 'Annuler',
+      onClick: () => {
+        // La piste a pu être réattribuée entre-temps : ne rien écraser
+        if (networkManager.tracksState[trackId]?.participantId) {
+          showToast(`La piste ${trackId} est déjà occupée.`, 'warning');
+          return;
+        }
+        networkManager.sendChronoAction({
+          type: 'TRACK_ASSIGN',
+          trackId,
+          participantId,
+          participantName,
+          eventId: event.id
+        });
+      }
     });
   };
 
@@ -380,11 +426,14 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         typeof participant.timeMs === 'number' && participant.timeMs > 0 ? participant.timeMs : null;
 
       if (previousBest !== null && finalTime > previousBest) {
-        const overwrite = confirm(
-          `${participant.name} possède déjà un meilleur temps (${formatTime(previousBest)}).\n\n` +
-            `Nouveau temps : ${formatTime(finalTime)}.\n` +
-            `Voulez-vous remplacer son record par ce nouveau temps ? (Annuler = conserver ${formatTime(previousBest)})`
-        );
+        const overwrite = await confirmDialog({
+          title: 'Remplacer le meilleur temps ?',
+          message:
+            `${participant.name} possède déjà un meilleur temps (${formatTime(previousBest)}).\n` +
+            `Nouveau temps : ${formatTime(finalTime)}.`,
+          confirmLabel: 'Remplacer',
+          cancelLabel: `Conserver ${formatTime(previousBest)}`
+        });
         if (!overwrite) {
           handleAssignParticipant(trackId, null);
           showToast(`Meilleur temps conservé pour ${participant.name} (${formatTime(previousBest)})`, 'info');
@@ -436,7 +485,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           }
         });
         showToast(
-          `🏆 NOUVEAU RECORD ! ${updatedParticipant.name} prend la 1re place en ${formatTime(finalTime)} !`,
+          `Nouveau record ! ${updatedParticipant.name} prend la 1re place en ${formatTime(finalTime)} !`,
           'success'
         );
       } else {
@@ -490,9 +539,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const handleResetParticipantScore = async (participantId: string) => {
     const participant = participants.find((p) => p.id === participantId);
     if (!participant) return;
-    if (!confirm(`Effacer le temps de ${participant.name} (${formatTime(participant.timeMs || 0)}) ?`)) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: 'Effacer ce temps ?',
+      message: `Le temps de ${participant.name} (${formatTime(participant.timeMs || 0)}) sera effacé et le participant repassera en attente.`,
+      confirmLabel: 'Effacer le temps',
+      tone: 'destructive'
+    });
+    if (!confirmed) return;
 
     try {
       const updatedParticipant: Participant = {
@@ -587,7 +640,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
   // Effacer l'historique (par exemple après un tirage d'essai) : tout le monde redevient éligible
   const clearRaffleHistory = async () => {
-    if (!confirm('Effacer l\'historique des tirages ? Tous les participants redeviendront éligibles.')) return;
+    const confirmed = await confirmDialog({
+      title: "Effacer l'historique des tirages ?",
+      message: 'Tous les participants redeviendront éligibles au tirage au sort.',
+      confirmLabel: "Effacer l'historique",
+      tone: 'destructive'
+    });
+    if (!confirmed) return;
     try {
       const currentEvent = (await db.events.get(event.id)) || event;
       const {
@@ -659,11 +718,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     );
     if (
       duplicate &&
-      !confirm(
-        `${duplicate.name}${duplicate.email ? ` (${duplicate.email})` : ''} est déjà inscrit.\n\n` +
-          `Pour une nouvelle tentative, utilisez plutôt le bouton ▶ à côté de son nom dans la file.\n\n` +
-          `Inscrire quand même un nouveau participant ?`
-      )
+      !(await confirmDialog({
+        title: 'Participant déjà inscrit',
+        message:
+          `${duplicate.name}${duplicate.email ? ` (${duplicate.email})` : ''} est déjà inscrit.\n` +
+          `Pour une nouvelle tentative, utilisez plutôt le bouton « Envoyer en piste » à côté de son nom dans la file.`,
+        confirmLabel: 'Inscrire quand même'
+      }))
     ) {
       return;
     }
@@ -714,7 +775,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
   const deleteParticipant = async (id: string) => {
     const target = participants.find((p) => p.id === id);
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${target?.name || 'ce participant'} ?`)) return;
+    const confirmed = await confirmDialog({
+      title: 'Supprimer ce participant ?',
+      message: `${target?.name || 'Ce participant'} et son temps seront retirés de l'événement.`,
+      confirmLabel: 'Supprimer',
+      tone: 'destructive'
+    });
+    if (!confirmed) return;
     try {
       await networkManager.writeToDatabase('participants', 'delete', id);
       setParticipants((prev) => prev.filter((p) => p.id !== id));
@@ -791,11 +858,9 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       return (
         <div className="h-full flex flex-col justify-center w-full max-w-7xl mx-auto space-y-6 p-4">
           <div className="bg-app-card border border-app-card-border p-6 rounded-3xl text-center space-y-3 shadow-xl">
-            <span className="px-3 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 text-kiosk-caption font-black uppercase font-display tracking-widest inline-flex items-center gap-1.5">
-              <Gift size={14} /> Grand Tirage au Sort Insertech
-            </span>
-            <h2 className="text-3xl font-display font-black text-app-text uppercase tracking-wider">
-              Tirage au Sort en Direct
+            <h2 className="text-3xl font-display font-black text-app-text uppercase tracking-wider inline-flex items-center gap-2.5">
+              <Gift size={26} className="text-primary" aria-hidden="true" />
+              Tirage au sort en direct
             </h2>
             <div className="flex items-center justify-center gap-3 py-1">
               <div className="w-20 h-20 xl:w-24 xl:h-24 rounded-xl bg-white p-1.5 border border-slate-200 shadow-sm shrink-0 flex items-center justify-center">
@@ -885,8 +950,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex items-center justify-between gap-3 shrink-0">
                   <div className="flex items-center gap-2.5 shrink-0">
                     <span className="relative flex h-3 w-3 shrink-0">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-danger"></span>
                     </span>
                     <span className="font-display font-black text-kiosk-caption uppercase tracking-wider text-danger flex items-center gap-1.5 whitespace-nowrap">
                       <span>Course en direct</span>
@@ -1097,8 +1162,9 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
       {/* Cockpit 3 Colonnes Zéro-Scroll */}
       <div
+        inert={raffle.status === 'spinning'}
         className={`grid grid-cols-12 gap-3.5 items-start transition-all duration-500 ${
-          raffle.status === 'spinning' ? 'opacity-40 pointer-events-none scale-[0.99]' : ''
+          raffle.status === 'spinning' ? 'opacity-40 scale-[0.99]' : ''
         }`}
       >
         {/* ================================================================ */}
@@ -1237,8 +1303,9 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   const last = raffleDraws[raffleDraws.length - 1];
                   return (
                     <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/30 space-y-1 relative overflow-hidden">
-                      <span className="text-micro uppercase font-black text-primary tracking-wider block">
-                        {last.status === 'gagnant' ? '🏆 Dernier gagnant du tirage' : 'Dernier tiré (absent)'}
+                      <span className="text-micro uppercase font-black text-primary tracking-wider flex items-center gap-1">
+                        {last.status === 'gagnant' && <Trophy size={11} aria-hidden="true" />}
+                        {last.status === 'gagnant' ? 'Dernier gagnant du tirage' : 'Dernier tiré (absent)'}
                       </span>
                       <h4 className={`text-xs font-bold font-display truncate ${last.status === 'gagnant' ? 'text-app-text' : 'text-app-text-muted line-through'}`}>
                         {last.name}
@@ -1362,6 +1429,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     assignableParticipants={assignableParticipants}
                     bestTimeMs={bestParticipant?.timeMs ?? null}
                     onAssign={(pId) => handleAssignParticipant(track.trackId, pId)}
+                    onRelease={() => handleReleaseTrack(track.trackId)}
                     onStart={() => handleStartTimer(track.trackId)}
                     onStop={() => handleStopTimer(track.trackId)}
                     onReset={() => handleResetTimer(track.trackId)}
@@ -1428,9 +1496,39 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             {/* Liste déroulante interne uniquement */}
             <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
               {filteredParticipants.length === 0 ? (
-                <p className="text-xs text-app-text-muted text-center py-8 font-sans">
-                  Aucun participant correspondant.
-                </p>
+                participants.length === 0 ? (
+                  <div className="text-center py-8 px-3 space-y-1.5">
+                    <UserPlus size={22} className="mx-auto text-primary" aria-hidden="true" />
+                    <p className="text-xs font-bold text-app-text">Aucun inscrit pour l'instant</p>
+                    <p className="text-micro text-app-text-muted">Inscrivez le premier participant avec le formulaire à gauche.</p>
+                  </div>
+                ) : searchQuery.trim() ? (
+                  <div className="text-center py-8 px-3 space-y-2">
+                    <p className="text-xs text-app-text-muted">
+                      Aucun résultat pour « {searchQuery.trim()} ».
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="min-h-9 px-3 rounded-lg bg-app-input border border-app-card-border text-xs font-bold text-app-text hover:border-primary transition cursor-pointer"
+                    >
+                      Effacer la recherche
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 px-3 space-y-2">
+                    <p className="text-xs text-app-text-muted">
+                      {participantFilter === 'waiting' ? 'Personne en attente : tout le monde a un temps.' : 'Aucun temps validé pour l\'instant.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setParticipantFilter('all')}
+                      className="min-h-9 px-3 rounded-lg bg-app-input border border-app-card-border text-xs font-bold text-app-text hover:border-primary transition cursor-pointer"
+                    >
+                      Voir tous les participants
+                    </button>
+                  </div>
+                )
               ) : (
                 filteredParticipants.map((p) => {
                   const hasTime = hasValidTime(p);
@@ -1463,8 +1561,9 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                           </div>
                           <div className="text-micro font-sans mt-0.5">
                             {isAssigned ? (
-                              <span className="text-primary font-bold">
-                                ⏱️ En course (Piste {assignedTrack?.trackId})
+                              <span className="text-primary font-bold inline-flex items-center gap-1">
+                                <Timer size={11} aria-hidden="true" />
+                                En course (Piste {assignedTrack?.trackId})
                               </span>
                             ) : hasTime ? (
                               <span className="font-mono text-primary font-bold">
@@ -1563,6 +1662,7 @@ interface AdminTrackBlockProps {
   assignableParticipants: Participant[];
   bestTimeMs: number | null;
   onAssign: (pId: string | null) => void;
+  onRelease: () => void;
   onStart: () => void;
   onStop: () => void;
   onReset: () => void;
@@ -1575,6 +1675,7 @@ function AdminTrackBlock({
   assignableParticipants,
   bestTimeMs,
   onAssign,
+  onRelease,
   onStart,
   onStop,
   onReset,
@@ -1702,7 +1803,7 @@ function AdminTrackBlock({
 
           <button
             type="button"
-            onClick={() => onAssign(null)}
+            onClick={onRelease}
             aria-label={`Libérer la piste ${track.trackId}`}
             className="min-h-10 text-xs font-bold px-3 py-1 rounded-lg bg-app-input text-app-text-muted hover:text-app-text hover:border-primary border border-app-card-border cursor-pointer transition"
           >
@@ -1921,10 +2022,12 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
   let beamClass = 'bg-gradient-to-r from-primary via-success to-primary animate-pulse';
   let digitsClass = 'text-primary stopwatch-digits-running';
   let paceBarColor = 'bg-primary shadow-sm shadow-primary/30';
-  let paceLabel = 'En route vers le record 🏆';
+  let paceLabel = 'En route vers le record';
+  let PaceIcon: typeof Trophy = Trophy;
 
   if (!hasBestRecord) {
-    paceLabel = 'En route pour établir le 1er record ! ⚡';
+    paceLabel = 'Premier record en jeu';
+    PaceIcon = Zap;
   } else if (paceRatio >= 1) {
     // Phase 3 : Record 1re place dépassé -> Objectif 2e ou 3e place (Podium) & Tirage au sort !
     borderClass = 'border-accent shadow-accent/20 ring-2 ring-accent/30';
@@ -1933,11 +2036,14 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
     paceBarColor = 'bg-gradient-to-r from-accent to-primary';
 
     if (secondTimeMs && time < secondTimeMs) {
-      paceLabel = `En course pour la 2e place (${formatTime(secondTimeMs)}) 🥈 & Tirage 🎁`;
+      paceLabel = `Vise la 2e place (${formatTime(secondTimeMs)})`;
+      PaceIcon = Medal;
     } else if (thirdTimeMs && time < thirdTimeMs) {
-      paceLabel = `En course pour le Podium 3e place (${formatTime(thirdTimeMs)}) 🥉 & Tirage 🎁`;
+      paceLabel = `Vise la 3e place (${formatTime(thirdTimeMs)})`;
+      PaceIcon = Medal;
     } else {
-      paceLabel = 'En course pour le Podium & Tirage au sort 🎁';
+      paceLabel = 'Chaque participant est au tirage';
+      PaceIcon = Gift;
     }
   } else if (paceRatio >= 0.8) {
     // Phase 2 : Zone critique (80% à 100% du record)
@@ -1946,7 +2052,8 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
     digitsClass = 'text-warning';
     paceBarColor = 'bg-warning animate-pulse';
     const remainingSec = Math.max(0, (bestTimeMs! - time) / 1000).toFixed(1);
-    paceLabel = `Zone critique du record ⚡ - Moins de ${remainingSec}s !`;
+    paceLabel = `Record dans moins de ${remainingSec} s`;
+    PaceIcon = Zap;
   }
 
   return (
@@ -1966,7 +2073,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
       <div className="flex items-start justify-between gap-2 shrink-0">
         <div className="min-w-0">
           <span className="text-kiosk-caption uppercase font-black text-primary tracking-widest font-sans flex items-center gap-1.5">
-            <Zap size={12} className={track.isRunning ? 'animate-bounce text-primary' : ''} />
+            <Zap size={12} aria-hidden="true" />
             Piste {track.trackId}
           </span>
           <h3
@@ -1979,7 +2086,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
         </div>
 
         {track.isRunning ? (
-          <span className="text-kiosk-caption px-3 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-black uppercase animate-pulse font-sans shrink-0">
+          <span className="text-kiosk-caption px-3 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 font-black uppercase font-sans shrink-0">
             En direct
           </span>
         ) : time === 0 ? (
@@ -2007,13 +2114,23 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
         {showPaceGauge && (
           <div className="space-y-1">
             <div className="flex items-center justify-between text-kiosk-caption font-black uppercase tracking-wider">
-              <span className="text-app-text truncate mr-2">{paceLabel}</span>
+              <span className="text-app-text truncate mr-2 flex items-center gap-1.5 min-w-0">
+                <PaceIcon size={14} className="shrink-0" aria-hidden="true" />
+                <span className="truncate">{paceLabel}</span>
+              </span>
               <span className="font-mono text-app-text-muted shrink-0">
                 <span className="hidden @md:inline">Record : </span>
                 {formatTime(bestTimeMs!)}
               </span>
             </div>
-            <div className="w-full h-2.5 sm:h-3 rounded-full bg-app-input border border-app-card-border overflow-hidden p-0.5 shadow-inner">
+            <div
+              role="progressbar"
+              aria-label={`Progression vers le record, piste ${track.trackId}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(pacePercent)}
+              className="w-full h-2.5 sm:h-3 rounded-full bg-app-input border border-app-card-border overflow-hidden p-0.5 shadow-inner"
+            >
               <div
                 className={`h-full rounded-full transition-all duration-75 ${paceBarColor}`}
                 style={{ width: `${pacePercent}%` }}
@@ -2078,11 +2195,16 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
 
             // Insérer une puce événementielle spéciale toutes les 4 personnes
             const isEventDivider = idx > 0 && idx % 4 === 0;
+            // Les copies servent seulement à la boucle visuelle : un lecteur d'écran lit la liste une fois
+            const isLoopCopy = idx >= sorted.length;
 
             return (
               <React.Fragment key={`${p.id}-${idx}`}>
                 {isEventDivider && (
-                  <div className="shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 border border-primary/30 text-kiosk-caption font-black uppercase text-primary tracking-wide shadow-sm">
+                  <div
+                    aria-hidden={isLoopCopy || undefined}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 border border-primary/30 text-kiosk-caption font-black uppercase text-primary tracking-wide shadow-sm"
+                  >
                     {idx % 8 === 0 ? (
                       <>
                         <Trophy size={12} className="text-warning shrink-0" />
@@ -2097,11 +2219,16 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
                   </div>
                 )}
 
-                <div className="shrink-0 flex items-center gap-2 px-3 py-1 rounded-xl bg-app-input border border-app-card-border shadow-sm text-kiosk-caption">
+                <div
+                  aria-hidden={isLoopCopy || undefined}
+                  className="shrink-0 flex items-center gap-2 px-3 py-1 rounded-xl bg-app-input border border-app-card-border shadow-sm text-kiosk-caption"
+                >
                   {rankIndex !== null ? (
                     <RankBadge rank={rankIndex} />
                   ) : (
-                    <span className="px-1 py-0.5 rounded bg-primary/10 text-primary font-bold" aria-hidden="true">⭐</span>
+                    <span className="p-1 rounded bg-primary/10 text-primary" aria-hidden="true">
+                      <Clock size={12} />
+                    </span>
                   )}
 
                   <span className="font-bold text-app-text truncate max-w-[16rem]">{p.name}</span>

@@ -24,6 +24,7 @@ const SIZES: Record<ButtonSize, string> = {
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export default function Button({

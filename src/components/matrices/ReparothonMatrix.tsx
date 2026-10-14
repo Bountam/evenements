@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { showToast } from '../shared/Toast';
+import { confirmDialog } from '../shared/ConfirmDialog';
 import { clampNumber } from '../../utils/security';
 
 interface ReparothonMatrixProps {
@@ -311,7 +312,13 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   };
 
   const handleDeleteTicket = async (id: string) => {
-    if (!confirm('Voulez-vous supprimer ce ticket ?')) return;
+    const confirmed = await confirmDialog({
+      title: 'Supprimer ce ticket ?',
+      message: 'Cette suppression est définitive.',
+      confirmLabel: 'Supprimer',
+      tone: 'destructive'
+    });
+    if (!confirmed) return;
     try {
       const ticketToDelete = await db.tickets.get(id);
       if (ticketToDelete && ticketToDelete.assignedTechId) {
@@ -360,7 +367,13 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   };
 
   const handleDeleteTech = async (id: string) => {
-    if (!confirm('Voulez-vous supprimer ce technicien ?')) return;
+    const confirmed = await confirmDialog({
+      title: 'Supprimer ce technicien ?',
+      message: 'Cette suppression est définitive.',
+      confirmLabel: 'Supprimer',
+      tone: 'destructive'
+    });
+    if (!confirmed) return;
     try {
       const tech = await db.technicians.get(id);
       if (tech && tech.currentTicketId) {

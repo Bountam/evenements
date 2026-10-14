@@ -7,7 +7,7 @@ import DashboardShell from './components/DashboardShell';
 import ReparothonMatrix from './components/matrices/ReparothonMatrix';
 import TeardownMatrix from './components/matrices/TeardownMatrix';
 import GenericMatrix from './components/matrices/GenericMatrix';
-import { showToast, ToastContainer } from './components/shared/Toast';
+import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
 import Modal from './components/shared/Modal';
 import ThemeToggle from './components/shared/ThemeToggle';
@@ -1716,7 +1716,6 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
         isStandalone={isStandalonePwa}
       />
-      <ToastContainer />
     </div>
   );
 }

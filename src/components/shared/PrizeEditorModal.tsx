@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Gift, Trophy, Upload, RotateCcw, ImageOff } from 'lucide-react';
+import { Gift, Trophy, Upload, RotateCcw, Undo2, ImageOff, Loader2 } from 'lucide-react';
 import Modal from './Modal';
+import { UNDO_WINDOW_MS } from './Toast';
 import { fieldInputClass, fieldLabelClass } from './TextField';
-import { showToast } from './Toast';
 import { ContestPrize, ContestPrizes, DEFAULT_CONTEST_PRIZES, resizeImageFile } from '../../utils/prizes';
 
 interface PrizeEditorModalProps {
@@ -36,11 +36,13 @@ export function PrizeImage({
 function PrizeFields({
   kind,
   prize,
-  onChange
+  onChange,
+  onError
 }: {
   kind: keyof ContestPrizes;
   prize: ContestPrize;
   onChange: (prize: ContestPrize) => void;
+  onError: (message: string) => void;
 }) {
   const label = kind === 'best' ? '1er prix : meilleur chrono' : 'Tirage au sort parmi tous les participants';
 
@@ -52,7 +54,7 @@ function PrizeFields({
       onChange({ ...prize, image: await resizeImageFile(file) });
     } catch (err) {
       console.error(err);
-      showToast("Impossible de lire cette image.", 'error');
+      onError("Impossible de lire cette image.");
     }
   };
 
@@ -74,7 +76,7 @@ function PrizeFields({
             <button
               type="button"
               onClick={() => onChange({ ...prize, image: '' })}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-red-500 text-xs font-bold text-app-text-muted cursor-pointer transition"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-danger text-xs font-bold text-app-text-muted cursor-pointer transition"
             >
               <ImageOff size={12} />
               <span>Retirer l'image</span>
@@ -135,17 +137,32 @@ function PrizeFields({
 export default function PrizeEditorModal({ isOpen, prizes, onClose, onSave }: PrizeEditorModalProps) {
   const [draft, setDraft] = useState<ContestPrizes>(prizes);
   const [isSaving, setIsSaving] = useState(false);
+  // Les toasts restent sous la boîte de dialogue : les erreurs s'affichent dans la modale
+  const [error, setError] = useState<string | null>(null);
+  // Brouillon avant « Prix par défaut », proposé en annulation pendant quelques secondes
+  const [draftBeforeReset, setDraftBeforeReset] = useState<ContestPrizes | null>(null);
 
   // Repartir des prix enregistrés à chaque ouverture
   useEffect(() => {
-    if (isOpen) setDraft(prizes);
+    if (isOpen) {
+      setDraft(prizes);
+      setError(null);
+      setDraftBeforeReset(null);
+    }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!draftBeforeReset) return;
+    const timer = window.setTimeout(() => setDraftBeforeReset(null), UNDO_WINDOW_MS);
+    return () => window.clearTimeout(timer);
+  }, [draftBeforeReset]);
 
   const handleSave = async () => {
     if (!draft.best.title.trim() || !draft.raffle.title.trim()) {
-      showToast('Chaque prix doit avoir un nom.', 'warning');
+      setError('Chaque prix doit avoir un nom.');
       return;
     }
+    setError(null);
     setIsSaving(true);
     try {
       await onSave({
@@ -153,6 +170,8 @@ export default function PrizeEditorModal({ isOpen, prizes, onClose, onSave }: Pr
         raffle: { ...draft.raffle, title: draft.raffle.title.trim(), shortTitle: draft.raffle.shortTitle.trim() }
       });
       onClose();
+    } catch {
+      setError("L'enregistrement des prix a échoué. Réessayez.");
     } finally {
       setIsSaving(false);
     }
@@ -169,14 +188,31 @@ export default function PrizeEditorModal({ isOpen, prizes, onClose, onSave }: Pr
       id="prize-editor-title"
       footer={
         <>
-          <button
-            type="button"
-            onClick={() => setDraft(DEFAULT_CONTEST_PRIZES)}
-            className="mr-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-app-text-muted hover:text-app-text cursor-pointer transition"
-          >
-            <RotateCcw size={12} />
-            <span>Prix par défaut</span>
-          </button>
+          {draftBeforeReset ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(draftBeforeReset);
+                setDraftBeforeReset(null);
+              }}
+              className="mr-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-primary bg-primary/10 border border-primary/40 cursor-pointer transition"
+            >
+              <Undo2 size={12} aria-hidden="true" />
+              <span>Annuler la réinitialisation</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setDraftBeforeReset(draft);
+                setDraft(DEFAULT_CONTEST_PRIZES);
+              }}
+              className="mr-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-app-text-muted hover:text-app-text cursor-pointer transition"
+            >
+              <RotateCcw size={12} aria-hidden="true" />
+              <span>Prix par défaut</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -188,9 +224,11 @@ export default function PrizeEditorModal({ isOpen, prizes, onClose, onSave }: Pr
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-3.5 py-2 rounded-xl bg-primary text-secondary text-xs font-black uppercase font-display cursor-pointer transition disabled:opacity-50"
+            aria-busy={isSaving}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-secondary text-xs font-black uppercase font-display cursor-pointer transition disabled:opacity-50"
           >
-            Enregistrer
+            {isSaving && <Loader2 size={12} className="animate-spin" aria-hidden="true" />}
+            {isSaving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </>
       }
@@ -198,8 +236,13 @@ export default function PrizeEditorModal({ isOpen, prizes, onClose, onSave }: Pr
       <p className="text-xs text-app-text-muted">
         Les prix s'affichent sur l'écran public, dans le ruban défilant et pendant le tirage. Ils sont propres à cet événement.
       </p>
-      <PrizeFields kind="best" prize={draft.best} onChange={(best) => setDraft((d) => ({ ...d, best }))} />
-      <PrizeFields kind="raffle" prize={draft.raffle} onChange={(raffle) => setDraft((d) => ({ ...d, raffle }))} />
+      {error && (
+        <p role="alert" className="text-xs font-bold text-danger bg-danger/10 border border-danger/40 rounded-xl px-3 py-2">
+          {error}
+        </p>
+      )}
+      <PrizeFields kind="best" prize={draft.best} onChange={(best) => setDraft((d) => ({ ...d, best }))} onError={setError} />
+      <PrizeFields kind="raffle" prize={draft.raffle} onChange={(raffle) => setDraft((d) => ({ ...d, raffle }))} onError={setError} />
     </Modal>,
     document.body
   );

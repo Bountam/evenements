@@ -7,6 +7,7 @@ import {
   UserPlus, Check, Trash2, Star, MessageSquare, Users, Award, Play, Pause, RotateCcw, HelpCircle, FileText, CheckSquare, Square
 } from 'lucide-react';
 import { formatTime } from '../shared/Stopwatch';
+import { confirmDialog } from '../shared/ConfirmDialog';
 
 interface GenericMatrixProps {
   event: EventSettings;
@@ -142,7 +143,13 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   };
 
   const handleDeleteAttendee = async (id: string) => {
-    if (!confirm('Voulez-vous supprimer ce participant ?')) return;
+    const confirmed = await confirmDialog({
+      title: 'Supprimer ce participant ?',
+      message: 'Cette suppression est définitive.',
+      confirmLabel: 'Supprimer',
+      tone: 'destructive'
+    });
+    if (!confirmed) return;
     try {
       await networkManager.writeToDatabase('attendees', 'delete', id);
       await loadAttendees();

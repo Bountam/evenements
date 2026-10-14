@@ -6,6 +6,8 @@ const FILES = [
   'src/components/matrices/TeardownMatrix.tsx',
   'src/components/DashboardShell.tsx',
   'src/components/shared/Button.tsx',
+  'src/components/shared/ConfirmDialog.tsx',
+  'src/components/shared/Modal.tsx',
   'src/components/shared/InlineTimeEditor.tsx',
   'src/components/shared/Leaderboard.tsx',
   'src/components/shared/PrizeCard.tsx',
