@@ -1,6 +1,6 @@
 # 📋 Insertech — Tableau de bords événementiel
 
-> **Documentation complète · Version 1.0.0 · Rédigée en français (Canada)**
+> **Documentation complète · Version 1.1.0 · Rédigée en français (Canada)**
 
 ---
 
