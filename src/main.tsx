@@ -2,6 +2,8 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {MotionConfig} from 'motion/react';
 import App from './App.tsx';
+import { ToastContainer } from './components/shared/Toast';
+import { ConfirmDialogHost } from './components/shared/ConfirmDialog';
 import './index.css';
 
 // Prevent benign sandbox WebSocket error from appearing as an unhandled rejection overlay
@@ -43,6 +45,9 @@ createRoot(document.getElementById('root')!).render(
     {/* Respecte « Réduire les animations » du système pour les animations JS (motion) */}
     <MotionConfig reducedMotion="user">
       <App />
+      {/* Montés une seule fois, hors des vues : notifications et confirmations disponibles partout */}
+      <ToastContainer />
+      <ConfirmDialogHost />
     </MotionConfig>
   </StrictMode>,
 );

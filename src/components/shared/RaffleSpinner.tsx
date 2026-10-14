@@ -13,6 +13,8 @@ interface RaffleSpinnerProps {
   onStartRaffle: () => void;
   onResetRaffle: () => void;
   readOnly?: boolean;
+  // Libellé au-dessus du tambour ; omis quand l'écran affiche déjà son propre titre
+  title?: string;
 }
 
 export default function RaffleSpinner({
@@ -21,7 +23,8 @@ export default function RaffleSpinner({
   candidates,
   onStartRaffle,
   onResetRaffle,
-  readOnly = false
+  readOnly = false,
+  title
 }: RaffleSpinnerProps) {
   const [displayName, setDisplayName] = useState<string>('Prêt pour le tirage');
   const [tickKey, setTickKey] = useState<number>(0);
@@ -112,10 +115,12 @@ export default function RaffleSpinner({
 
   return (
     <div className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-app-card border border-app-card-border rounded-3xl shadow-lg h-full min-h-[340px]">
-      <div className="text-kiosk-caption uppercase font-black tracking-widest text-app-text-muted mb-2 font-sans flex items-center gap-1.5 relative z-10">
-        <Sparkles size={12} className="text-primary" />
-        <span>Tirage Au Sort Éco-Concours</span>
-      </div>
+      {title && (
+        <div className="text-kiosk-caption uppercase font-black tracking-widest text-app-text-muted mb-2 font-sans flex items-center gap-1.5 relative z-10">
+          <Sparkles size={12} className="text-primary" aria-hidden="true" />
+          <span>{title}</span>
+        </div>
+      )}
 
       {state.status === 'idle' && (
         <motion.div
@@ -150,7 +155,9 @@ export default function RaffleSpinner({
       {state.status === 'spinning' && (
         <div className="w-full flex-1 flex flex-col justify-center items-center py-4 relative z-10">
           {/* Fenêtre de cylindre 3D (Slot-Machine Reel) */}
+          <p className="sr-only">Tirage en cours…</p>
           <div
+            aria-hidden="true"
             className="relative h-[clamp(8rem,14vw,14rem)] w-full max-w-5xl rounded-2xl bg-app-input border-2 border-primary/50 shadow-inner flex items-center justify-center overflow-hidden px-4"
             style={{ perspective: '600px' }}
           >
@@ -173,9 +180,16 @@ export default function RaffleSpinner({
           </div>
 
           {/* Jauge de progression du tirage */}
-          <div className="w-full max-w-2xl bg-app-input rounded-full h-3 border border-app-card-border overflow-hidden mt-6 p-0.5">
-            <div 
-              className="bg-gradient-to-r from-secondary via-purple-500 to-primary h-full rounded-full transition-all duration-100 ease-out"
+          <div
+            role="progressbar"
+            aria-label="Progression du tirage"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress)}
+            className="w-full max-w-2xl bg-app-input rounded-full h-3 border border-app-card-border overflow-hidden mt-6 p-0.5"
+          >
+            <div
+              className="bg-gradient-to-r from-secondary via-accent to-primary h-full rounded-full transition-all duration-100 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -202,7 +216,7 @@ export default function RaffleSpinner({
             <motion.span
               animate={{ scale: [1, 2.6], opacity: [0.4, 0] }}
               transition={{ duration: 1.8, delay: 0.4, repeat: Infinity, ease: 'easeOut' }}
-              className="absolute w-16 h-16 rounded-full border border-yellow-400 pointer-events-none"
+              className="absolute w-16 h-16 rounded-full border border-warning pointer-events-none"
             />
             <motion.div
               animate={{ y: [0, -6, 0], rotate: [0, -5, 5, 0] }}
@@ -214,7 +228,7 @@ export default function RaffleSpinner({
           </div>
           
           <span className="text-kiosk-body uppercase font-black text-primary tracking-widest font-sans">
-            🎉 Félicitations au gagnant ! 🎉
+            Félicitations au gagnant !
           </span>
           
           <motion.div

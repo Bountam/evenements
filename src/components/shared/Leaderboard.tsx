@@ -192,7 +192,7 @@ export default function Leaderboard({
     <div className={`bg-app-card border border-app-card-border ${compact ? 'p-3 sm:p-4 rounded-2xl' : 'p-5 sm:p-6 rounded-3xl'} shadow-lg flex flex-col h-full min-h-0`}>
       <div className={`flex items-center justify-between ${compact ? 'mb-2 pb-2' : 'mb-4 pb-3'} border-b border-app-card-border shrink-0`}>
         <h3 className={`${compact ? 'text-kiosk-body' : 'text-kiosk-title'} font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-2`}>
-          <Trophy className="text-primary animate-bounce shrink-0" size={compact ? 16 : 20} />
+          <Trophy className="text-primary shrink-0" size={compact ? 16 : 20} aria-hidden="true" />
           <span>Tableau des Champions</span>
         </h3>
         <span className="text-kiosk-caption font-semibold text-app-text-muted font-sans">
@@ -208,22 +208,27 @@ export default function Leaderboard({
       ) : (
         <div className="flex flex-col flex-1 min-h-0">
           {/* PODIUM OLYMPIQUE 3D ANIMÉ (Top 3) */}
-          <div className={`grid grid-cols-3 items-end gap-1.5 sm:gap-3 pt-1 ${compact ? 'pb-2 mb-2' : 'pb-4 mb-3'} border-b border-app-card-border shrink-0`}>
-            {/* 2e Place (Argent - Gauche) */}
-            <PodiumStep rank={2} participant={secondPlace} bestTimeMs={bestTimeMs} compact={compact} />
-
-            {/* 1re Place (Or - Centre Surélevé avec Halo) */}
-            <PodiumStep rank={1} participant={firstPlace} bestTimeMs={bestTimeMs} compact={compact} />
-
-            {/* 3e Place (Bronze - Droite) */}
-            <PodiumStep rank={3} participant={thirdPlace} bestTimeMs={bestTimeMs} compact={compact} />
-          </div>
+          {/* Ordre du DOM 1-2-3 pour les lecteurs d'écran ; la disposition visuelle reste 2-1-3 */}
+          <ol
+            aria-label="Podium"
+            className={`grid grid-cols-3 items-end gap-1.5 sm:gap-3 pt-1 ${compact ? 'pb-2 mb-2' : 'pb-4 mb-3'} border-b border-app-card-border shrink-0`}
+          >
+            <li className="order-2">
+              <PodiumStep rank={1} participant={firstPlace} bestTimeMs={bestTimeMs} compact={compact} />
+            </li>
+            <li className="order-1">
+              <PodiumStep rank={2} participant={secondPlace} bestTimeMs={bestTimeMs} compact={compact} />
+            </li>
+            <li className="order-3">
+              <PodiumStep rank={3} participant={thirdPlace} bestTimeMs={bestTimeMs} compact={compact} />
+            </li>
+          </ol>
 
           {/* LISTE DYNAMIQUE DES PARTICIPANTS (Poursuite : 4e rang et suivants) */}
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
             {pursuitParticipants.length === 0 ? (
               <div className="py-6 px-4 rounded-2xl bg-app-input/40 border border-dashed border-app-card-border text-center flex flex-col items-center justify-center my-auto">
-                <Sparkles size={24} className="text-primary mb-2 animate-pulse" />
+                <Sparkles size={24} className="text-primary mb-2" aria-hidden="true" />
                 <h5 className="text-kiosk-body font-bold text-app-text font-display uppercase tracking-wide">
                   Places disponibles dans le classement
                 </h5>

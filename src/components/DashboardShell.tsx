@@ -27,6 +27,8 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
+const PROJECTOR_IDLE_MS = 3000;
+
 export default function DashboardShell({
   event,
   currentTab,
@@ -46,6 +48,46 @@ export default function DashboardShell({
   const Icon = matrixInfo.icon;
   const isPublicView = currentTab === 'public';
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Écran public : commandes et curseur masqués après quelques secondes sans pointeur ni clavier
+  const [isPointerIdle, setIsPointerIdle] = useState(false);
+  useEffect(() => {
+    if (!isPublicView) {
+      setIsPointerIdle(false);
+      return;
+    }
+    let timer = window.setTimeout(() => setIsPointerIdle(true), PROJECTOR_IDLE_MS);
+    const wake = () => {
+      setIsPointerIdle(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setIsPointerIdle(true), PROJECTOR_IDLE_MS);
+    };
+    window.addEventListener('pointermove', wake);
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', wake);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pointermove', wake);
+      window.removeEventListener('pointerdown', wake);
+      window.removeEventListener('keydown', wake);
+    };
+  }, [isPublicView]);
+
+  // Navigation clavier des onglets (motif ARIA « tabs » à activation automatique)
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const index = tabs.findIndex((t) => t.id === currentTab);
+    if (index === -1) return;
+    let next = index;
+    if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    onTabChange(tabs[next].id);
+    // Le bouton existe déjà : seul son état sélectionné change
+    document.getElementById(`tab-${tabs[next].id}`)?.focus();
+  };
 
   // Hauteur réelle de l'en-tête régie, exposée en variable CSS pour les colonnes collantes
   const adminHeaderRef = useRef<HTMLElement>(null);
@@ -108,7 +150,7 @@ export default function DashboardShell({
 
   return (
     <div className={`min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10 ${
-      isPublicView ? 'min-h-screen lg:h-screen lg:h-[100dvh] lg:overflow-hidden kiosk-auto-scroll' : ''
+      isPublicView ? `min-h-screen lg:h-screen lg:h-[100dvh] lg:overflow-hidden kiosk-auto-scroll ${isPointerIdle ? 'cursor-none' : ''}` : ''
     }`}>
       {/* ==================================================================== */}
       {/* EN-TÊTE ÉCRAN PUBLIC (Kiosque immersif et épuré) */}
@@ -171,10 +213,14 @@ export default function DashboardShell({
             )}
 
             {/* Séparateur vertical discret */}
-            <div className="h-6 w-px bg-app-card-border shrink-0" />
+            <div className={`h-6 w-px bg-app-card-border shrink-0 transition-opacity duration-500 ${isPointerIdle ? 'opacity-0' : ''}`} aria-hidden="true" />
 
             {/* Groupe des commandes d'administration (contraste accessible 75% au repos, 100% au survol) */}
-            <div className="flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity duration-300 shrink-0">
+            <div
+              className={`flex items-center gap-1.5 transition-opacity duration-500 shrink-0 focus-within:opacity-100 ${
+                isPointerIdle ? 'opacity-0 pointer-events-none' : 'opacity-75 hover:opacity-100'
+              }`}
+            >
               {/* Bouton bascule vers l'écran d'administration / chrono (absent de la fenêtre projecteur) */}
               {!isPublicWindow && (
               <Button
@@ -253,6 +299,7 @@ export default function DashboardShell({
             <div 
               role="tablist" 
               aria-label="Navigation des vues de l'événement"
+              onKeyDown={handleTabKeyDown}
               className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative"
             >
               {tabs.map((tab) => {
@@ -340,6 +387,9 @@ export default function DashboardShell({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.99 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            role={isPublicView ? undefined : 'tabpanel'}
+            id={isPublicView ? undefined : `panel-${currentTab}`}
+            aria-labelledby={isPublicView ? undefined : `tab-${currentTab}`}
             className={isPublicView ? 'min-h-full lg:h-full flex flex-col kiosk-auto-scroll' : ''}
           >
             {children}
