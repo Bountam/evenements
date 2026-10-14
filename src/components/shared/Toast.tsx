@@ -96,8 +96,16 @@ export function ToastContainer() {
   useEffect(() => {
     const region = regionRef.current;
     if (!region || typeof region.showPopover !== 'function') return;
-    if (region.matches(':popover-open')) region.hidePopover();
-    region.showPopover();
+    if (!region.matches(':popover-open')) {
+      region.showPopover();
+      return;
+    }
+    // Replacer la pile au-dessus d'une boîte de dialogue ouverte après elle, seulement dans ce cas :
+    // masquer puis réafficher la région ferait relire toutes ses notifications par les lecteurs d'écran
+    if (document.querySelector('dialog:modal')) {
+      region.hidePopover();
+      region.showPopover();
+    }
   }, [toasts.length]);
 
   // Région toujours présente dans le DOM pour que les lecteurs d'écran annoncent les messages ajoutés
