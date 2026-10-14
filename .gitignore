@@ -35,3 +35,13 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Générés au build (assets Android copiés par Gradle, exécutables publiés dans les releases)
+android/app/src/main/assets/
+android/.gradle/
+android/app/build/
+android/build/
+/InsertechEvenements.exe
+/InsertechEvenements-linux-x64
+/InsertechEvenements-linux-x64.tar.gz
+/InsertechEvenements-Android.apk

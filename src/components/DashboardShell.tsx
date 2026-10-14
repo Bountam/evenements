@@ -156,7 +156,7 @@ export default function DashboardShell({
       {/* EN-TÊTE ÉCRAN PUBLIC (Kiosque immersif et épuré) */}
       {/* ==================================================================== */}
       {isPublicView ? (
-        <header className="shrink-0 bg-app-header border-b-2 border-primary/40 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 shadow-lg backdrop-blur-xl z-40">
+        <header className="shrink-0 bg-app-header border-b-2 border-primary/40 px-4 sm:px-6 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top,0px))] flex items-center justify-between gap-4 shadow-lg backdrop-blur-xl z-40">
           {/* Logo Insertech officiel & Titre adaptatif */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
             <BrandLogo size="lg" />
@@ -256,7 +256,7 @@ export default function DashboardShell({
         /* ==================================================================== */
         <header
           ref={adminHeaderRef}
-          className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 shadow-xl backdrop-blur-xl transition-colors duration-300"
+          className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 shadow-xl backdrop-blur-xl transition-colors duration-300"
         >
           {/* Identité visuelle */}
           <div className="flex items-center gap-3.5 shrink-0">

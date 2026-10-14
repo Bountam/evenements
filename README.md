@@ -2306,8 +2306,10 @@ Cela génère le binaire portable `InsertechEvenements-linux-x64` à la racine (
 ```bash
 npm run build:mobile
 ```
-Cela compile l'application, synchronise les assets mobiles dans le projet Android (`android/app/src/main/assets/`) et génère `dist/InsertechEvenements-Mobile.html`.
-Sur machine avec Android SDK ou via GitHub Actions, l'APK Android autonome est produit avec `./gradlew assembleDebug` sous le nom `InsertechEvenements-Android.apk`.
+Cela compile l'application et génère `dist/InsertechEvenements-Mobile.html`.
+Sur machine avec Android SDK ou via GitHub Actions, l'APK est produit par `gradle assembleDebug` (ou `assembleRelease` avec la clé de release) dans le dossier `android/`. Gradle copie lui-même `dist/` dans les assets de l'APK : lancer `npm run build` avant, sinon la compilation s'arrête.
+
+**Signature de l'APK.** L'APK debug est signé avec `android/app/debug.keystore`, commité pour que chaque APK puisse mettre à jour le précédent sans désinstallation. Quand les secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` et `ANDROID_KEY_PASSWORD` sont définis dans le dépôt, la CI produit à la place un APK release (`org.insertech.evenements`, sans suffixe `.debug`) signé avec cette clé. Passer de l'un à l'autre installe une autre application : exporter les données avant.
 
 Pour compiler simultanément l'ensemble des versions **Web + Windows + Linux Debian + Mobile Android** :
 ```bash
