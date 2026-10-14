@@ -85,7 +85,7 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
       height: compact ? 26 : 50,
       delay: 0.18,
       pillarClass: 'podium-pillar-bronze bg-gradient-to-b from-amber-600/40 to-amber-900/20 border-t-2 border-x border-amber-600/70',
-      textClass: 'text-amber-300 font-black',
+      textClass: 'text-warning font-black',
       badgeClass: 'score-badge-standard',
       medalIcon: <Medal size={compact ? 13 : 16} />,
       iconBoxClass: `${compact ? 'w-6 h-6 sm:w-7 sm:h-7' : 'w-8 h-8 sm:w-9 sm:h-9'} rounded-full bg-amber-700 text-white flex items-center justify-center font-black shadow mb-1 border border-amber-600`,
@@ -98,7 +98,7 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
   return (
     <div className={`flex flex-col items-center ${cfg.halo ? 'relative' : ''}`}>
       {cfg.halo && (
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-32 sm:w-44 h-32 sm:h-44 rounded-full bg-amber-400/15 dark:bg-amber-400/20 blur-2xl pointer-events-none -z-10" />
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-32 sm:w-44 h-32 sm:h-44 rounded-full bg-warning/15 blur-2xl pointer-events-none -z-10" />
       )}
       {participant ? (
         <motion.div
@@ -269,7 +269,7 @@ export default function Leaderboard({
 
                         <div className="flex items-center gap-2 shrink-0">
                           {deltaMs > 0 && (
-                            <span className="font-mono text-kiosk-caption font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
+                            <span className="font-mono text-kiosk-caption font-bold px-2 py-0.5 rounded-md bg-warning/15 text-warning border border-warning/40 shrink-0">
                               {formatDelta(deltaMs)}
                             </span>
                           )}

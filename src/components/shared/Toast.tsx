@@ -21,6 +21,14 @@ export function showToast(message: string, type: ToastType = 'info') {
   listeners.forEach(fn => fn(toast));
 }
 
+// Couleurs par type, basées sur les tokens sémantiques (lisibles dans les deux thèmes)
+const TOAST_STYLES: Record<ToastType, { Icon: typeof Info; tone: { border: string; icon: string } }> = {
+  info: { Icon: Info, tone: { border: 'border-primary/50', icon: 'text-primary' } },
+  success: { Icon: CheckCircle2, tone: { border: 'border-success/60', icon: 'text-success' } },
+  error: { Icon: AlertCircle, tone: { border: 'border-danger/60', icon: 'text-danger' } },
+  warning: { Icon: AlertTriangle, tone: { border: 'border-warning/60', icon: 'text-warning' } }
+};
+
 // Durée d'affichage : plus longue pour les avertissements et erreurs, qu'un animateur occupé doit pouvoir lire
 const TOAST_DURATION_MS: Record<ToastType, number> = {
   success: 3500,
@@ -80,23 +88,7 @@ export function ToastContainer() {
       className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
     >
       {toasts.map((toast) => {
-        let bg = 'bg-[#24123d] border-purple-800/80 text-white';
-        let Icon = Info;
-        let iconColor = 'text-primary';
-
-        if (toast.type === 'success') {
-          bg = 'bg-[#182814] border-emerald-600/70 text-emerald-100 shadow-emerald-950/40';
-          Icon = CheckCircle2;
-          iconColor = 'text-emerald-400';
-        } else if (toast.type === 'error') {
-          bg = 'bg-[#331118] border-rose-600/70 text-rose-100 shadow-rose-950/40';
-          Icon = AlertCircle;
-          iconColor = 'text-rose-400';
-        } else if (toast.type === 'warning') {
-          bg = 'bg-[#33220e] border-amber-600/70 text-amber-100 shadow-amber-950/40';
-          Icon = AlertTriangle;
-          iconColor = 'text-amber-400';
-        }
+        const { Icon, tone } = TOAST_STYLES[toast.type];
 
         const isUrgent = toast.type === 'error' || toast.type === 'warning';
 
@@ -104,16 +96,16 @@ export function ToastContainer() {
           <div
             key={toast.id}
             role={isUrgent ? 'alert' : 'status'}
-            className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-2xl border shadow-xl backdrop-blur-md transition-all duration-300 ${bg}`}
+            className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-2xl border-2 shadow-xl bg-app-bg text-app-text transition-all duration-300 ${tone.border}`}
           >
-            <Icon size={18} className={`shrink-0 mt-0.5 ${iconColor}`} aria-hidden="true" />
+            <Icon size={18} className={`shrink-0 mt-0.5 ${tone.icon}`} aria-hidden="true" />
             <div className="flex-1 text-sm font-sans font-medium leading-relaxed">
               {toast.message}
             </div>
             <button
               type="button"
               onClick={() => dismiss(toast.id)}
-              className="shrink-0 p-2 -mr-2 -mt-2 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+              className="shrink-0 p-2 -mr-2 -mt-2 rounded-lg text-app-text-muted hover:text-white transition cursor-pointer"
               aria-label="Fermer la notification"
             >
               <X size={16} />

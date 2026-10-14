@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const fieldLabelClass = 'text-[10px] font-bold uppercase text-app-text-muted block';
+export const fieldLabelClass = 'text-micro font-bold uppercase text-app-text-muted block';
 export const fieldInputClass =
   'w-full bg-app-input border border-app-input-border rounded-xl px-2.5 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition';
 

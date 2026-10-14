@@ -111,8 +111,8 @@ export default function RaffleSpinner({
   }, [state.status, state.spinStartTime, state.winnerId, participants.length]);
 
   return (
-    <div className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-[#24123d]/60 border border-purple-900/40 rounded-3xl shadow-lg h-full min-h-[340px]">
-      <div className="text-kiosk-caption uppercase font-black tracking-widest text-slate-400 mb-2 font-sans flex items-center gap-1.5 relative z-10">
+    <div className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-app-card border border-app-card-border rounded-3xl shadow-lg h-full min-h-[340px]">
+      <div className="text-kiosk-caption uppercase font-black tracking-widest text-app-text-muted mb-2 font-sans flex items-center gap-1.5 relative z-10">
         <Sparkles size={12} className="text-primary" />
         <span>Tirage Au Sort Éco-Concours</span>
       </div>
@@ -126,11 +126,11 @@ export default function RaffleSpinner({
           <motion.div
             animate={{ rotate: [0, 8, -8, 0], scale: [1, 1.05, 1] }}
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-16 h-16 bg-purple-950/80 border border-purple-800/40 rounded-2xl flex items-center justify-center text-primary mb-4 shadow-lg shadow-primary/10"
+            className="w-16 h-16 bg-app-input border border-app-card-border rounded-2xl flex items-center justify-center text-primary mb-4 shadow-lg shadow-primary/10"
           >
             <Shuffle size={28} />
           </motion.div>
-          <p className="text-sm text-slate-300 max-w-xs font-sans mb-6">
+          <p className="text-sm text-app-text-muted max-w-xs font-sans mb-6">
             Sélectionnez un gagnant au hasard parmi les {eligibleParticipants.length} participants inscrits.
           </p>
           
@@ -151,12 +151,12 @@ export default function RaffleSpinner({
         <div className="w-full flex-1 flex flex-col justify-center items-center py-4 relative z-10">
           {/* Fenêtre de cylindre 3D (Slot-Machine Reel) */}
           <div
-            className="relative h-[clamp(8rem,14vw,14rem)] w-full max-w-5xl rounded-2xl bg-[#180A2b]/90 border-2 border-primary/50 shadow-inner flex items-center justify-center overflow-hidden px-4"
+            className="relative h-[clamp(8rem,14vw,14rem)] w-full max-w-5xl rounded-2xl bg-app-input border-2 border-primary/50 shadow-inner flex items-center justify-center overflow-hidden px-4"
             style={{ perspective: '600px' }}
           >
             {/* Ombres haut/bas donnant l'effet de courbure de cylindre */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-[#180A2b] to-transparent z-20" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-[#180A2b] to-transparent z-20" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-app-input to-transparent z-20" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-app-input to-transparent z-20" />
 
             <AnimatePresence mode="popLayout">
               <motion.h2
@@ -173,13 +173,13 @@ export default function RaffleSpinner({
           </div>
 
           {/* Jauge de progression du tirage */}
-          <div className="w-full max-w-2xl bg-purple-950 rounded-full h-3 border border-purple-900/60 overflow-hidden mt-6 p-0.5">
+          <div className="w-full max-w-2xl bg-app-input rounded-full h-3 border border-app-card-border overflow-hidden mt-6 p-0.5">
             <div 
               className="bg-gradient-to-r from-secondary via-purple-500 to-primary h-full rounded-full transition-all duration-100 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="text-kiosk-caption text-slate-400 font-sans mt-2 uppercase tracking-widest font-bold">
+          <span className="text-kiosk-caption text-app-text-muted font-sans mt-2 uppercase tracking-widest font-bold">
             Ralentissement du tambour ({Math.round(progress)}%)...
           </span>
         </div>
@@ -224,7 +224,7 @@ export default function RaffleSpinner({
             role="status"
             className="min-h-[84px] max-w-full flex items-center justify-center px-6 py-3 rounded-2xl bg-primary/15 border-2 border-primary/50 mt-3 podium-shimmer shadow-lg"
           >
-            <h2 className="text-[clamp(3rem,8vw,9rem)] leading-none font-display font-bold text-white uppercase tracking-wider line-clamp-2 text-balance">
+            <h2 className="text-[clamp(3rem,8vw,9rem)] leading-none font-display font-bold text-app-text uppercase tracking-wider line-clamp-2 text-balance">
               {displayName}
             </h2>
           </motion.div>
@@ -232,7 +232,7 @@ export default function RaffleSpinner({
           {!readOnly && (
             <button
               onClick={onResetRaffle}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-purple-950 text-purple-300 font-bold font-display uppercase tracking-wider border border-purple-900/60 hover:text-white hover:border-purple-600 transition mt-6 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-app-input text-app-text font-bold font-display uppercase tracking-wider border border-app-card-border hover:border-primary transition mt-6 cursor-pointer"
             >
               <RefreshCw size={14} />
               <span>Recommencer</span>

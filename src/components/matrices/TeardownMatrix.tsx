@@ -890,7 +890,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     </span>
                     <span className="font-display font-black text-kiosk-caption uppercase tracking-wider text-danger flex items-center gap-1.5 whitespace-nowrap">
                       <span>Course en direct</span>
-                      <span className="px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-kiosk-caption font-mono font-bold text-danger">
+                      <span className="px-2 py-0.5 rounded-full bg-danger/15 border border-danger/30 text-kiosk-caption font-mono font-bold text-danger">
                         {activeTracks.length} piste{activeTracks.length > 1 ? 's' : ''} active{activeTracks.length > 1 ? 's' : ''}
                       </span>
                     </span>
@@ -1051,7 +1051,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
             <Sparkles className="text-primary shrink-0" size={18} aria-hidden="true" />
             <div className="min-w-0">
-              <span className="text-[9px] uppercase font-bold text-primary tracking-widest block leading-none">
+              <span className="text-micro uppercase font-bold text-primary tracking-widest block leading-none">
                 {raffle.status === 'spinning'
                   ? "Tirage en cours sur l'écran public"
                   : 'Gagnant sélectionné sur l\'écran public'}
@@ -1080,7 +1080,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           )}
           <button
             onClick={resetRaffle}
-            className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-red-950/60 border border-red-900/60 text-xs font-bold font-display uppercase text-red-300 hover:text-white hover:bg-red-900 transition cursor-pointer"
+            className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-danger/10 border border-danger/40 text-xs font-bold font-display uppercase text-danger hover:text-white hover:bg-danger/20 transition cursor-pointer"
           >
             Fermer le tirage et revenir aux chronos
           </button>
@@ -1158,7 +1158,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 />
               </div>
 
-              <label className="flex items-start gap-1.5 text-[10px] leading-snug text-app-text-muted cursor-pointer">
+              <label className="flex items-start gap-1.5 text-micro leading-snug text-app-text-muted cursor-pointer">
                 <input
                   type="checkbox"
                   checked={newParticipantConsent}
@@ -1173,7 +1173,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 <span>
                   La personne accepte que son courriel et son code postal servent uniquement à la joindre pour ce concours.
                   {(newParticipantEmail.trim() || newParticipantPostal.trim()) && !newParticipantConsent && (
-                    <span className="text-amber-500 font-bold"> Requis si un courriel ou un code postal est saisi.</span>
+                    <span className="text-warning font-bold"> Requis si un courriel ou un code postal est saisi.</span>
                   )}
                 </span>
               </label>
@@ -1193,7 +1193,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 >
                   <UserPlus size={14} />
                   <span>Inscrire</span>
-                  <span className="text-[9px] text-app-text-muted font-mono hidden sm:inline">[↵]</span>
+                  <span className="text-micro text-app-text-muted font-mono hidden sm:inline">[↵]</span>
                 </button>
 
                 <button
@@ -1213,10 +1213,10 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           {/* Bloc Tirage au sort unifié */}
           <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-primary font-display flex items-center gap-1.5">
+              <span className="text-micro uppercase font-bold text-primary font-display flex items-center gap-1.5">
                 <Gift size={13} /> Tirage au Sort
               </span>
-              <span className="text-[10px] font-mono text-app-text-muted" title="Participants pas encore tirés au sort">
+              <span className="text-micro font-mono text-app-text-muted" title="Participants pas encore tirés au sort">
                 {eligibleForRaffle.length} éligible{eligibleForRaffle.length > 1 ? 's' : ''} / {participants.length}
               </span>
             </div>
@@ -1224,7 +1224,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             <button
               onClick={() => startRaffle()}
               disabled={eligibleForRaffle.length === 0}
-              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-primary to-lime-400 text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
+              className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-primary to-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
             >
               <Sparkles size={13} />
               <span>Lancer le tirage ({eligibleForRaffle.length})</span>
@@ -1237,16 +1237,16 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   const last = raffleDraws[raffleDraws.length - 1];
                   return (
                     <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/30 space-y-1 relative overflow-hidden">
-                      <span className="text-[8px] uppercase font-black text-primary tracking-wider block">
+                      <span className="text-micro uppercase font-black text-primary tracking-wider block">
                         {last.status === 'gagnant' ? '🏆 Dernier gagnant du tirage' : 'Dernier tiré (absent)'}
                       </span>
                       <h4 className={`text-xs font-bold font-display truncate ${last.status === 'gagnant' ? 'text-app-text' : 'text-app-text-muted line-through'}`}>
                         {last.name}
                       </h4>
-                      <div className="text-[9px] text-app-text-muted space-y-0.5 font-sans">
+                      <div className="text-micro text-app-text-muted space-y-0.5 font-sans">
                         {last.email && <p className="truncate">Courriel : {last.email}</p>}
                         {last.postalCode && <p>Code postal : {last.postalCode}</p>}
-                        <p className="text-[8px] text-app-text-muted/70 pt-0.5">
+                        <p className="text-micro text-app-text-muted/70 pt-0.5">
                           Tiré à {new Date(last.at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
@@ -1256,7 +1256,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                           onClick={() => startRaffle(true)}
                           disabled={eligibleForRaffle.length === 0}
                           title="Marquer cette personne absente et tirer un autre nom"
-                          className="w-full mt-1 py-1 px-2 rounded-lg bg-app-input border border-app-card-border text-[9px] font-bold uppercase text-app-text-muted hover:text-app-text hover:border-primary disabled:opacity-40 transition cursor-pointer"
+                          className="w-full mt-1 py-1 px-2 rounded-lg bg-app-input border border-app-card-border text-micro font-bold uppercase text-app-text-muted hover:text-app-text hover:border-primary disabled:opacity-40 transition cursor-pointer"
                         >
                           Absent ? Retirer un autre nom
                         </button>
@@ -1266,7 +1266,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 })()}
 
                 {raffleDraws.length > 1 && (
-                  <ul className="text-[9px] font-sans space-y-0.5 max-h-24 overflow-y-auto pr-1">
+                  <ul className="text-micro font-sans space-y-0.5 max-h-24 overflow-y-auto pr-1">
                     {raffleDraws
                       .slice(0, -1)
                       .reverse()
@@ -1282,13 +1282,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 <button
                   type="button"
                   onClick={clearRaffleHistory}
-                  className="w-full text-[9px] text-app-text-muted hover:text-red-400 underline cursor-pointer"
+                  className="w-full text-micro text-app-text-muted hover:text-danger underline cursor-pointer"
                 >
                   Effacer l'historique des tirages
                 </button>
               </div>
             ) : (
-              <p className="text-[9px] text-app-text-muted text-center font-sans truncate">
+              <p className="text-micro text-app-text-muted text-center font-sans truncate">
                 Prix : {prizes.raffle.title}
               </p>
             )}
@@ -1296,7 +1296,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             <button
               type="button"
               onClick={() => setIsPrizeEditorOpen(true)}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-app-input border border-app-card-border text-app-text-muted hover:text-app-text hover:border-primary text-[10px] font-bold uppercase tracking-wider transition cursor-pointer"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-app-input border border-app-card-border text-app-text-muted hover:text-app-text hover:border-primary text-micro font-bold uppercase tracking-wider transition cursor-pointer"
             >
               <Settings2 size={12} />
               <span>Modifier les prix</span>
@@ -1319,7 +1319,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             <StatTile icon={Check} label="Scores validés" tone="info">
               <span className="text-sm font-display font-black text-app-text">
                 {rankedParticipants.length}{' '}
-                <span className="text-[10px] font-sans text-app-text-muted font-normal">/ {participants.length}</span>
+                <span className="text-micro font-sans text-app-text-muted font-normal">/ {participants.length}</span>
               </span>
             </StatTile>
 
@@ -1331,7 +1331,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
                 </span>
                 {bestParticipant && (
-                  <span className="text-[10px] text-app-text-muted font-medium truncate max-w-[6rem]">({bestParticipant.name})</span>
+                  <span className="text-micro text-app-text-muted font-medium truncate max-w-[6rem]">({bestParticipant.name})</span>
                 )}
               </div>
             </StatTile>
@@ -1379,7 +1379,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             <div className="flex items-center justify-between shrink-0">
               <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-1.5">
                 <span>File & Classement</span>
-                <span className="text-[10px] font-mono font-bold text-primary px-1.5 py-0.5 rounded-md bg-primary/15">
+                <span className="text-micro font-mono font-bold text-primary px-1.5 py-0.5 rounded-md bg-primary/15">
                   {filteredParticipants.length}/{participants.length}
                 </span>
               </h3>
@@ -1405,7 +1405,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     type="button"
                     onClick={() => setParticipantFilter(filterKey)}
                     aria-pressed={participantFilter === filterKey}
-                    className={`flex-1 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                    className={`flex-1 py-1 rounded-lg text-micro font-bold uppercase tracking-wider transition cursor-pointer ${
                       participantFilter === filterKey
                         ? 'bg-primary text-secondary font-black shadow-sm'
                         : 'text-app-text-muted hover:text-app-text'
@@ -1451,13 +1451,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             {rankIndex !== null ? (
-                              <RankBadge rank={rankIndex} className="text-[10px]" />
+                              <RankBadge rank={rankIndex} className="text-micro" />
                             ) : (
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
                             )}
                             <h4 className="text-xs font-bold text-app-text truncate">{p.name}</h4>
                           </div>
-                          <div className="text-[10px] font-sans mt-0.5">
+                          <div className="text-micro font-sans mt-0.5">
                             {isAssigned ? (
                               <span className="text-primary font-bold">
                                 ⏱️ En course (Piste {assignedTrack?.trackId})
@@ -1510,7 +1510,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                               onClick={() => handleResetParticipantScore(p.id)}
                               title="Réinitialiser le score"
                               aria-label={`Effacer le temps de ${p.name}`}
-                              className="p-2 rounded-lg text-app-text-muted hover:text-amber-400 hover:bg-amber-500/10 transition cursor-pointer"
+                              className="p-2 rounded-lg text-app-text-muted hover:text-warning hover:bg-warning/10 transition cursor-pointer"
                             >
                               <RotateCcw size={14} aria-hidden="true" />
                             </button>
@@ -1521,7 +1521,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                             disabled={isAssigned}
                             title="Supprimer le participant"
                             aria-label={`Supprimer ${p.name}`}
-                            className="ml-1.5 p-2 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 cursor-pointer"
+                            className="ml-1.5 p-2 rounded-lg text-app-text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-30 cursor-pointer"
                           >
                             <Trash2 size={14} aria-hidden="true" />
                           </button>
@@ -1596,17 +1596,17 @@ function AdminTrackBlock({
   // ==========================================================================
   if (!track.participantId) {
     return (
-      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-purple-800/40 hover:border-purple-600/60 transition-all flex flex-col justify-between gap-2 shadow-sm min-h-[92px]">
+      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-app-card-border hover:border-primary/50 transition-all flex flex-col justify-between gap-2 shadow-sm min-h-[92px]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-black font-display text-primary uppercase">
               Piste {track.trackId}
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase">
+            <span className="text-micro px-2 py-0.5 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase">
               Libre
             </span>
           </div>
-          <span className="text-[10px] text-app-text-muted flex items-center gap-1">
+          <span className="text-micro text-app-text-muted flex items-center gap-1">
             <User size={11} />
             <span>En attente</span>
           </span>
@@ -1682,7 +1682,7 @@ function AdminTrackBlock({
   // ==========================================================================
   if (!track.isRunning && time === 0) {
     return (
-      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-amber-500/60 shadow-md shadow-amber-500/5 transition-all flex flex-col justify-between gap-2 min-h-[120px]">
+      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-warning/60 shadow-md shadow-amber-500/5 transition-all flex flex-col justify-between gap-2 min-h-[120px]">
         {/* Faisceau lumineux ambre */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />
 
@@ -1691,7 +1691,7 @@ function AdminTrackBlock({
             <span className="text-xs font-black font-display text-primary uppercase">
               Piste {track.trackId}
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40 font-bold uppercase">
+            <span className="text-micro px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 font-bold uppercase">
               Prêt au départ
             </span>
           </div>
@@ -1708,7 +1708,7 @@ function AdminTrackBlock({
 
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none mb-0.5">
+            <span className="text-micro uppercase font-bold text-app-text-muted block leading-none mb-0.5">
               Participant
             </span>
             <h4 className="font-extrabold text-app-text text-sm sm:text-base font-display uppercase truncate">
@@ -1740,7 +1740,7 @@ function AdminTrackBlock({
       className={`relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 shadow-lg transition-all flex flex-col justify-between gap-2 ${
         track.isRunning
           ? 'border-primary ring-2 ring-primary/20 shadow-primary/10'
-          : 'border-emerald-500/70 shadow-emerald-500/10'
+          : 'border-success/70 shadow-emerald-500/10'
       }`}
     >
       {/* Faisceau lumineux supérieur */}
@@ -1759,12 +1759,12 @@ function AdminTrackBlock({
             Piste {track.trackId}
           </span>
           {track.isRunning ? (
-            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 font-bold uppercase">
+            <span className="inline-flex items-center gap-1 text-micro px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 font-bold uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
               <span>En course</span>
             </span>
           ) : (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/40 font-bold uppercase">
+            <span className="text-micro px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/40 font-bold uppercase">
               Temps arrêté
             </span>
           )}
@@ -1788,7 +1788,7 @@ function AdminTrackBlock({
 
       {/* Barre d'ajustements / pénalités rapides */}
       <div className="flex items-center justify-between gap-1.5 text-xs">
-        <span className="font-bold text-app-text-muted uppercase text-[10px]">Pénalités</span>
+        <span className="font-bold text-app-text-muted uppercase text-micro">Pénalités</span>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -1796,7 +1796,7 @@ function AdminTrackBlock({
             disabled={!hasElapsed}
             title="Retirer 5 secondes (bonus)"
             aria-label={`Retirer 5 secondes, piste ${track.trackId}`}
-            className="min-h-11 min-w-11 flex items-center justify-center gap-1 px-2 rounded-lg bg-emerald-950/50 border border-emerald-700/40 text-emerald-300 hover:bg-emerald-900/60 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
+            className="min-h-11 min-w-11 flex items-center justify-center gap-1 px-2 rounded-lg bg-success/10 border border-success/40 text-success hover:bg-success/20 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
           >
             <MinusCircle size={14} aria-hidden="true" />
             <span>5s</span>
@@ -1807,7 +1807,7 @@ function AdminTrackBlock({
             disabled={!hasElapsed}
             title="Ajouter 5 secondes de pénalité"
             aria-label={`Ajouter 5 secondes de pénalité, piste ${track.trackId}`}
-            className="min-h-11 min-w-11 flex items-center justify-center gap-1 px-2 rounded-lg bg-amber-950/50 border border-amber-700/40 text-amber-300 hover:bg-amber-900/60 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
+            className="min-h-11 min-w-11 flex items-center justify-center gap-1 px-2 rounded-lg bg-warning/10 border border-warning/40 text-warning hover:bg-warning/20 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
           >
             <PlusCircle size={14} aria-hidden="true" />
             <span>5s</span>
@@ -1818,7 +1818,7 @@ function AdminTrackBlock({
             disabled={!hasElapsed}
             title="Ajouter 10 secondes de pénalité"
             aria-label={`Ajouter 10 secondes de pénalité, piste ${track.trackId}`}
-            className="min-h-11 min-w-11 flex items-center justify-center gap-1 px-2 rounded-lg bg-red-950/50 border border-red-700/40 text-red-300 hover:bg-red-900/60 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
+            className="min-h-11 min-w-11 flex items-center justify-center gap-1 px-2 rounded-lg bg-danger/10 border border-danger/40 text-danger hover:bg-danger/20 font-mono font-bold disabled:opacity-30 cursor-pointer transition"
           >
             <PlusCircle size={14} aria-hidden="true" />
             <span>10s</span>
@@ -1864,7 +1864,7 @@ function AdminTrackBlock({
               onClick={onReset}
               title="Réinitialiser à 00:00.00"
               aria-label={`Réinitialiser le chrono à zéro, piste ${track.trackId}`}
-              className="min-h-11 min-w-11 flex items-center justify-center rounded-xl bg-app-input text-app-text-muted hover:text-amber-400 border border-app-card-border transition cursor-pointer"
+              className="min-h-11 min-w-11 flex items-center justify-center rounded-xl bg-app-input text-app-text-muted hover:text-warning border border-app-card-border transition cursor-pointer"
             >
               <RotateCcw size={16} aria-hidden="true" />
             </button>
@@ -1922,7 +1922,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
     // Phase 3 : Record 1re place dépassé -> Objectif 2e ou 3e place (Podium) & Tirage au sort !
     borderClass = 'border-purple-500 shadow-purple-500/20 ring-2 ring-purple-500/30';
     beamClass = 'bg-gradient-to-r from-purple-500 via-indigo-400 to-primary';
-    digitsClass = 'text-purple-300 dark:text-purple-200';
+    digitsClass = 'text-accent';
     paceBarColor = 'bg-gradient-to-r from-purple-500 to-primary';
 
     if (secondTimeMs && time < secondTimeMs) {
@@ -1936,7 +1936,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
     // Phase 2 : Zone critique (80% à 100% du record)
     borderClass = 'border-amber-400 shadow-amber-500/25 ring-2 ring-amber-400/40';
     beamClass = 'bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 animate-pulse';
-    digitsClass = 'text-amber-400';
+    digitsClass = 'text-warning';
     paceBarColor = 'bg-amber-400 animate-pulse';
     const remainingSec = Math.max(0, (bestTimeMs! - time) / 1000).toFixed(1);
     paceLabel = `Zone critique du record ⚡ - Moins de ${remainingSec}s !`;
@@ -1976,7 +1976,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
             En direct
           </span>
         ) : time === 0 ? (
-          <span className="text-kiosk-caption px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40 font-bold uppercase font-sans shrink-0">
+          <span className="text-kiosk-caption px-2.5 py-1 rounded-full bg-warning/15 text-warning border border-warning/40 font-bold uppercase font-sans shrink-0">
             Prêt au départ
           </span>
         ) : (
@@ -2081,12 +2081,12 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
                   <div className="shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary/10 border border-primary/30 text-kiosk-caption font-black uppercase text-primary tracking-wide shadow-sm">
                     {idx % 8 === 0 ? (
                       <>
-                        <Trophy size={12} className="text-amber-500 shrink-0" />
+                        <Trophy size={12} className="text-warning shrink-0" />
                         <span>1er Prix : {prizes.best.shortTitle || prizes.best.title}</span>
                       </>
                     ) : (
                       <>
-                        <Gift size={12} className="text-purple-400 shrink-0" />
+                        <Gift size={12} className="text-accent shrink-0" />
                         <span>Tirage : {prizes.raffle.shortTitle || prizes.raffle.title}</span>
                       </>
                     )}

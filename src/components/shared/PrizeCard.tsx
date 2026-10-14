@@ -13,15 +13,15 @@ export const PRIZE_STYLES: Record<
     badge: '1er Prix',
     shortBadge: '1er Prix',
     subtitle: 'Meilleur chrono',
-    badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-400/50',
-    valueClass: 'bg-amber-500/15 text-amber-500 border border-amber-500/40',
+    badgeClass: 'bg-warning/15 text-warning border border-warning/40',
+    valueClass: 'bg-warning/15 text-warning border border-warning/40',
     gradient: 'from-amber-500/10',
-    border: 'border-amber-500/40'
+    border: 'border-warning/40'
   },
   raffle: {
     badge: 'Tirage au sort',
     shortBadge: 'Tirage',
-    badgeClass: 'bg-purple-500/25 text-purple-200 border border-purple-400/50',
+    badgeClass: 'bg-accent/20 text-accent border border-accent/40',
     valueClass: 'bg-primary/20 text-primary border border-primary/40',
     gradient: 'from-purple-500/10',
     border: 'border-primary/50'

@@ -29,7 +29,7 @@ export function PrizeImage({
     return <img src={src} alt={alt} className={className} />;
   }
   const Icon = kind === 'best' ? Trophy : Gift;
-  return <Icon className={kind === 'best' ? 'w-1/2 h-1/2 text-amber-500' : 'w-1/2 h-1/2 text-purple-500'} />;
+  return <Icon className={kind === 'best' ? 'w-1/2 h-1/2 text-warning' : 'w-1/2 h-1/2 text-accent'} />;
 }
 
 
@@ -58,7 +58,7 @@ function PrizeFields({
 
   return (
     <fieldset className="space-y-2 p-3 rounded-2xl border border-app-card-border bg-app-input/40">
-      <legend className="px-1.5 text-[10px] font-black uppercase tracking-wider text-primary font-display">{label}</legend>
+      <legend className="px-1.5 text-micro font-black uppercase tracking-wider text-primary font-display">{label}</legend>
 
       <div className="flex items-start gap-3">
         <div className="w-20 h-20 rounded-xl bg-white p-1.5 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">

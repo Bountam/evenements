@@ -4,9 +4,9 @@ export type StatTone = 'primary' | 'info' | 'warning' | 'accent';
 
 const TONES: Record<StatTone, string> = {
   primary: 'bg-primary/15 border-primary/30 text-primary',
-  info: 'bg-blue-500/15 border-blue-500/30 text-info',
-  warning: 'bg-amber-500/15 border-amber-500/30 text-amber-500',
-  accent: 'bg-purple-500/15 border-purple-500/30 text-accent'
+  info: 'bg-info/15 border-info/30 text-info',
+  warning: 'bg-warning/15 border-warning/30 text-warning',
+  accent: 'bg-accent/15 border-accent/30 text-accent'
 };
 
 interface StatTileProps {
@@ -23,7 +23,7 @@ export default function StatTile({ icon: Icon, label, tone = 'primary', children
         <Icon size={14} />
       </div>
       <div className="min-w-0">
-        <span className="text-[10px] uppercase font-bold text-app-text-muted block leading-none">{label}</span>
+        <span className="text-micro uppercase font-bold text-app-text-muted block leading-none">{label}</span>
         {children}
       </div>
     </div>

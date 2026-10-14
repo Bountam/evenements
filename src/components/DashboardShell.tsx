@@ -121,7 +121,7 @@ export default function DashboardShell({
             {/* Dock Partenaire Standardisé */}
             {(partnerLogos.length > 0 || event.partner) && (
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-app-text-muted hidden md:inline shrink-0 uppercase tracking-wider">
+                <span className="text-xs font-bold text-app-text-muted hidden md:inline shrink-0 uppercase tracking-wider">
                   Propulsé avec
                 </span>
                 <div className="flex items-center gap-1.5">
@@ -197,7 +197,7 @@ export default function DashboardShell({
               <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none">
                 Insertech <span className="text-primary font-black">Événements</span>
               </h1>
-              <p className="text-[10px] text-app-text-muted font-semibold mt-1">
+              <p className="text-micro text-app-text-muted font-semibold mt-1">
                 Tableau de bord autonome et 100% hors-ligne
               </p>
             </div>
@@ -327,7 +327,7 @@ export default function DashboardShell({
 
       {/* Pied de page informatif sur IndexedDB - MASQUÉ COMPLÈTEMENT SUR L'ÉCRAN PUBLIC */}
       {!isPublicView && (
-        <footer className="py-4 border-t border-app-card-border bg-app-bg-footer text-center text-[10px] text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300">
+        <footer className="py-4 border-t border-app-card-border bg-app-bg-footer text-center text-micro text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300">
           <Database size={11} className="text-primary animate-pulse" />
           <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur</span>
         </footer>
