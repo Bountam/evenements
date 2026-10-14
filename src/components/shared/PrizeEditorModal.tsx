@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Gift, Trophy, Upload, RotateCcw, ImageOff } from 'lucide-react';
 import Modal from './Modal';
+import { fieldInputClass, fieldLabelClass } from './TextField';
 import { showToast } from './Toast';
 import { ContestPrize, ContestPrizes, DEFAULT_CONTEST_PRIZES, resizeImageFile } from '../../utils/prizes';
 
@@ -31,8 +32,6 @@ export function PrizeImage({
   return <Icon className={kind === 'best' ? 'w-1/2 h-1/2 text-amber-500' : 'w-1/2 h-1/2 text-purple-500'} />;
 }
 
-const inputClass =
-  'w-full bg-app-input border border-app-input-border rounded-xl px-2.5 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition';
 
 function PrizeFields({
   kind,
@@ -86,42 +85,47 @@ function PrizeFields({
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div className="sm:col-span-2 space-y-0.5">
-          <label className="text-[9px] font-bold uppercase text-app-text-muted block">Nom du prix *</label>
+          <label htmlFor={`prize-${kind}-title`} className={fieldLabelClass}>Nom du prix *</label>
           <input
+            id={`prize-${kind}-title`}
+            required
             type="text"
             value={prize.title}
             onChange={(e) => onChange({ ...prize, title: e.target.value })}
-            className={inputClass}
+            className={fieldInputClass}
           />
         </div>
         <div className="space-y-0.5">
-          <label className="text-[9px] font-bold uppercase text-app-text-muted block">Valeur (optionnelle)</label>
+          <label htmlFor={`prize-${kind}-value`} className={fieldLabelClass}>Valeur (optionnelle)</label>
           <input
+            id={`prize-${kind}-value`}
             type="text"
             value={prize.value}
             onChange={(e) => onChange({ ...prize, value: e.target.value })}
             placeholder="500$"
-            className={inputClass}
+            className={fieldInputClass}
           />
         </div>
       </div>
       <div className="space-y-0.5">
-        <label className="text-[9px] font-bold uppercase text-app-text-muted block">Titre court (cartes compactes et ruban)</label>
+        <label htmlFor={`prize-${kind}-short`} className={fieldLabelClass}>Titre court (cartes compactes et ruban)</label>
         <input
+          id={`prize-${kind}-short`}
           type="text"
           value={prize.shortTitle}
           onChange={(e) => onChange({ ...prize, shortTitle: e.target.value })}
           placeholder={prize.title}
-          className={inputClass}
+          className={fieldInputClass}
         />
       </div>
       <div className="space-y-0.5">
-        <label className="text-[9px] font-bold uppercase text-app-text-muted block">Description</label>
+        <label htmlFor={`prize-${kind}-description`} className={fieldLabelClass}>Description</label>
         <textarea
+          id={`prize-${kind}-description`}
           value={prize.description}
           onChange={(e) => onChange({ ...prize, description: e.target.value })}
           rows={2}
-          className={inputClass}
+          className={fieldInputClass}
         />
       </div>
     </fieldset>
