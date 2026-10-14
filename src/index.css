@@ -424,6 +424,13 @@
     overflow-x: hidden;
   }
 
+  /* Encoche en paysage (PWA standalone, APK) : rien ne passe sous la découpe de l'écran.
+     Le haut est géré par les en-têtes, qui ajoutent env(safe-area-inset-top). */
+  body {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
   /* Indicateur de focus visible accessible WCAG 2.4.7 */
   :focus-visible {
     outline: 2px solid var(--color-primary);

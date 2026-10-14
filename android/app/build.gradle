@@ -2,6 +2,27 @@ plugins {
     id 'com.android.application'
 }
 
+// Le bundle web (dist/ à la racine du dépôt) est copié au build dans les assets de l'APK :
+// impossible de compiler un APK avec une ancienne interface. Lancer `npm run build` avant Gradle.
+def webDist = file("${rootDir}/../dist")
+def webAssetsDir = layout.buildDirectory.dir('generated/webAssets').get().asFile
+
+def copyWebAssets = tasks.register('copyWebAssets', Sync) {
+    from(webDist) {
+        // Doublon de index.html destiné au téléchargement direct, inutile dans l'APK
+        exclude 'InsertechEvenements-Mobile.html'
+    }
+    into webAssetsDir
+    doFirst {
+        if (!new File(webDist, 'index.html').exists()) {
+            throw new GradleException("dist/index.html introuvable : lancer `npm run build` à la racine avant Gradle.")
+        }
+    }
+}
+
+// Clé de release fournie par la CI (secrets GitHub) ; sans elle, seul le build debug est signé.
+def releaseKeystore = System.getenv('ANDROID_KEYSTORE_PATH')
+
 android {
     namespace 'org.insertech.evenements'
     compileSdk 34
@@ -16,14 +37,42 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // Clé debug commitée : la même sur tous les runners, donc un APK debug peut
+        // mettre à jour le précédent sans désinstallation (et sans perte de données).
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        if (releaseKeystore) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (releaseKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             applicationIdSuffix ".debug"
             debuggable true
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDir webAssetsDir
         }
     }
 
@@ -31,6 +80,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+tasks.named('preBuild') {
+    dependsOn copyWebAssets
 }
 
 dependencies {
