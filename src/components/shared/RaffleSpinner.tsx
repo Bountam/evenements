@@ -122,6 +122,11 @@ export default function RaffleSpinner({
         </div>
       )}
 
+      {/* Région d'annonce présente dès le départ : le nom du gagnant y est ajouté à la fin du tirage */}
+      <p role="status" className="sr-only">
+        {state.status === 'celebrating' ? `Gagnant du tirage : ${displayName}` : ''}
+      </p>
+
       {state.status === 'idle' && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -235,7 +240,6 @@ export default function RaffleSpinner({
             initial={{ y: 16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
-            role="status"
             className="min-h-[84px] max-w-full flex items-center justify-center px-6 py-3 rounded-2xl bg-primary/15 border-2 border-primary/50 mt-3 podium-shimmer shadow-lg"
           >
             <h2 className="text-[clamp(3rem,8vw,9rem)] leading-none font-display font-bold text-app-text uppercase tracking-wider line-clamp-2 text-balance">

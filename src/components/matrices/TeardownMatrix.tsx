@@ -124,6 +124,23 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const [formError, setFormError] = useState<{ field: 'name' | 'consent'; message: string } | null>(null);
   const raffleWinnerName = participants.find((p) => p.id === raffle.winnerId)?.name || 'Tirage complété';
 
+  // Focus clavier pendant le tirage : le cockpit devient inert, le focus passe au bandeau,
+  // puis revient au bouton « Lancer le tirage » quand le bandeau disparaît
+  const raffleBannerRef = useRef<HTMLDivElement>(null);
+  const previousRaffleStatus = useRef(raffle.status);
+  useEffect(() => {
+    const previous = previousRaffleStatus.current;
+    previousRaffleStatus.current = raffle.status;
+    if (activeTab === 'public' || previous === raffle.status) return;
+    const active = document.activeElement;
+    const focusLost = !active || active === document.body || Boolean(active.closest('[inert]'));
+    if (raffle.status === 'idle') {
+      if (focusLost) document.getElementById('launch-raffle')?.focus();
+    } else if (focusLost) {
+      raffleBannerRef.current?.focus();
+    }
+  }, [raffle.status, activeTab]);
+
   // Charger les participants depuis IndexedDB
   const loadParticipants = async () => {
     try {
@@ -1110,9 +1127,23 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   // ============================================================================
   return (
     <div className="space-y-3">
+      {/* Annonce du tirage pour les lecteurs d'écran (région présente avant le changement) */}
+      <p role="status" className="sr-only">
+        {raffle.status === 'spinning'
+          ? "Tirage en cours sur l'écran public."
+          : raffle.status === 'celebrating' && raffleWinnerName
+            ? `Gagnant du tirage : ${raffleWinnerName}.`
+            : ''}
+      </p>
+
       {/* Bandeau de contrôle du tirage au sort lorsqu'il est actif */}
       {raffle.status !== 'idle' && (
-        <div className="bg-primary/10 border border-primary/30 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+        <div
+          ref={raffleBannerRef}
+          tabIndex={-1}
+          role="region"
+          aria-label="Tirage au sort en cours"
+          className="focus:outline-none bg-primary/10 border border-primary/30 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
             <Sparkles className="text-primary shrink-0" size={18} aria-hidden="true" />
             <div className="min-w-0">
@@ -1279,15 +1310,16 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           {/* Bloc Tirage au sort unifié */}
           <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-micro uppercase font-bold text-primary font-display flex items-center gap-1.5">
-                <Gift size={13} /> Tirage au Sort
-              </span>
+              <h3 className="text-micro uppercase font-bold text-primary font-display flex items-center gap-1.5">
+                <Gift size={13} aria-hidden="true" /> Tirage au sort
+              </h3>
               <span className="text-micro font-mono text-app-text-muted" title="Participants pas encore tirés au sort">
                 {eligibleForRaffle.length} éligible{eligibleForRaffle.length > 1 ? 's' : ''} / {participants.length}
               </span>
             </div>
 
             <button
+              id="launch-raffle"
               onClick={() => startRaffle()}
               disabled={eligibleForRaffle.length === 0}
               className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-primary to-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
@@ -1470,7 +1502,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   className="w-full bg-app-input border border-app-input-border rounded-xl pl-7 pr-2.5 py-1 text-app-text text-xs focus:outline-none focus:border-primary transition"
                 />
               </div>
-              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-app-input border border-app-card-border">
+              <div role="group" aria-label="Filtrer la file" className="flex items-center gap-1 p-0.5 rounded-xl bg-app-input border border-app-card-border">
                 {(['waiting', 'ranked', 'all'] as const).map((filterKey) => (
                   <button
                     key={filterKey}
@@ -1567,7 +1599,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                               </span>
                             ) : hasTime ? (
                               <span className="font-mono text-primary font-bold">
-                                ✓ {formatTime(p.timeMs!)}
+                                <span aria-hidden="true">✓ </span>
+                                {formatTime(p.timeMs!)}
                               </span>
                             ) : (
                               <span className="text-app-text-muted italic">En attente</span>
@@ -1701,7 +1734,10 @@ function AdminTrackBlock({
   // ==========================================================================
   if (!track.participantId) {
     return (
-      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-app-card-border hover:border-primary/50 transition-all flex flex-col justify-between gap-2 shadow-sm">
+      <div
+        role="group"
+        aria-label={`Piste ${track.trackId}, libre`}
+        className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-app-card-border hover:border-primary/50 transition-all flex flex-col justify-between gap-2 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-black font-display text-primary uppercase">
@@ -1787,7 +1823,10 @@ function AdminTrackBlock({
   // ==========================================================================
   if (!track.isRunning && time === 0) {
     return (
-      <div className="@container relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-warning/60 shadow-md shadow-warning/5 transition-all flex flex-col justify-between gap-2">
+      <div
+        role="group"
+        aria-label={`Piste ${track.trackId}, prêt au départ`}
+        className="@container relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-warning/60 shadow-md shadow-warning/5 transition-all flex flex-col justify-between gap-2">
         {/* Faisceau lumineux ambre */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-warning via-warning/70 to-warning" />
 
@@ -1828,6 +1867,7 @@ function AdminTrackBlock({
         <button
           type="button"
           onClick={onStart}
+          aria-label={`Démarrer le chronomètre, piste ${track.trackId}`}
           className="w-full min-h-11 flex items-center justify-center gap-2 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
         >
           <Play size={13} fill="currentColor" />
@@ -1842,6 +1882,8 @@ function AdminTrackBlock({
   // ==========================================================================
   return (
     <div
+      role="group"
+      aria-label={`Piste ${track.trackId}, ${track.isRunning ? 'en course' : 'temps arrêté'}`}
       className={`@container relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 shadow-lg transition-all flex flex-col justify-between gap-2 ${
         track.isRunning
           ? 'border-primary ring-2 ring-primary/20 shadow-primary/10'
@@ -1948,6 +1990,7 @@ function AdminTrackBlock({
             <button
               type="button"
               onClick={onSave}
+              aria-label={`Arrêter et valider le temps, piste ${track.trackId}`}
               className="flex-1 min-h-11 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
             >
               <Check size={14} aria-hidden="true" />
@@ -1979,9 +2022,10 @@ function AdminTrackBlock({
             <button
               type="button"
               onClick={onSave}
+              aria-label={`Valider le score, piste ${track.trackId}`}
               className="flex-1 min-h-11 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
             >
-              <Check size={13} />
+              <Check size={13} aria-hidden="true" />
               <span>Valider le score</span>
             </button>
           </>

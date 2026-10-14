@@ -67,8 +67,8 @@ function PrizeFields({
           <PrizeImage src={prize.image} alt={prize.title} kind={kind} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-primary text-xs font-bold cursor-pointer transition">
-            <Upload size={12} />
+          <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-primary focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary text-xs font-bold cursor-pointer transition">
+            <Upload size={12} aria-hidden="true" />
             <span>Choisir une image</span>
             <input type="file" accept="image/*" className="sr-only" onChange={handleImage} />
           </label>
