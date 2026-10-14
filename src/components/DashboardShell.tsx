@@ -401,7 +401,7 @@ export default function DashboardShell({
       {!isPublicView && (
         <footer className="py-4 border-t border-app-card-border bg-app-bg-footer text-center text-micro text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300">
           <Database size={11} className="text-primary animate-pulse" />
-          <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur</span>
+          <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur • v{__APP_VERSION__}</span>
         </footer>
       )}
     </div>
