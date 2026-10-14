@@ -1106,7 +1106,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         {/* ================================================================ */}
         <div className="col-span-12 lg:col-span-3 space-y-3">
           {/* Formulaire Nouveau Participant compacté */}
-          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm">
+          <div className="@container bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm">
             <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
               <UserPlus size={15} className="text-primary" />
               <span>Nouveau Participant</span>
@@ -1131,8 +1131,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 aria-describedby={formError?.field === 'name' ? 'participant-form-error' : undefined}
               />
 
-              {/* Courriel et Code Postal sur la même ligne (responsive mobile) */}
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+              {/* Courriel et code postal côte à côte quand la colonne est assez large */}
+              <div className="grid grid-cols-1 @xs:grid-cols-5 gap-2">
                 <TextField
                   id="participant-email"
                   label="Courriel"
@@ -1142,7 +1142,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   value={newParticipantEmail}
                   onChange={(e) => setNewParticipantEmail(e.target.value)}
                   placeholder="jean@email.com"
-                  className="sm:col-span-3"
+                  className="@xs:col-span-3"
                 />
                 <TextField
                   id="participant-postal"
@@ -1153,7 +1153,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   value={newParticipantPostal}
                   onChange={(e) => setNewParticipantPostal(e.target.value)}
                   placeholder="H2W 1Y4"
-                  className="sm:col-span-2"
+                  className="@xs:col-span-2"
                   inputClassName="uppercase"
                 />
               </div>
@@ -1345,15 +1345,18 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             </StatTile>
           </div>
 
-          {/* Grille des 5 pistes d'arbitrage */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {Object.values(tracks).map((track, idx) => {
-
-              // La 5e piste s'étale sur les 2 colonnes pour un équilibre parfait
-              const isFifthTrack = Object.values(tracks).length === 5 && idx === 4;
+          {/* Grille des pistes : autant de colonnes de 18rem que la largeur le permet */}
+          <div className="@container">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(18rem,100%),1fr))] gap-2.5">
+            {Object.values(tracks).map((track, idx, all) => {
+              // Sur 2 colonnes, une dernière piste seule occupe toute la ligne
+              const isLoneLastTrack = all.length % 2 === 1 && idx === all.length - 1;
 
               return (
-                <div key={track.trackId} className={isFifthTrack ? 'sm:col-span-2' : ''}>
+                <div
+                  key={track.trackId}
+                  className={isLoneLastTrack ? '@min-[36.625rem]:@max-[55.25rem]:col-span-2' : ''}
+                >
                   <AdminTrackBlock
                     track={track}
                     assignableParticipants={assignableParticipants}
@@ -1369,13 +1372,14 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               );
             })}
           </div>
+          </div>
         </div>
 
         {/* ================================================================ */}
         {/* COLONNE 3 (DROITE ~25%) : File d'attente & Classement Unifiés    */}
         {/* ================================================================ */}
-        <div className="col-span-12 lg:col-span-3">
-          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5 flex flex-col h-full min-h-[350px] lg:max-h-[calc(100vh-140px)]">
+        <div className="col-span-12 lg:col-span-3 lg:self-stretch">
+          <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5 flex flex-col max-h-[70dvh] lg:max-h-none lg:sticky lg:top-[calc(var(--app-header-h,0px)+0.75rem)] lg:h-[calc(100dvh-var(--app-header-h,0px)-1.5rem)]">
             <div className="flex items-center justify-between shrink-0">
               <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-1.5">
                 <span>File & Classement</span>
@@ -1422,7 +1426,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             </div>
 
             {/* Liste déroulante interne uniquement */}
-            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[350px]">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
               {filteredParticipants.length === 0 ? (
                 <p className="text-xs text-app-text-muted text-center py-8 font-sans">
                   Aucun participant correspondant.
@@ -1596,7 +1600,7 @@ function AdminTrackBlock({
   // ==========================================================================
   if (!track.participantId) {
     return (
-      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-app-card-border hover:border-primary/50 transition-all flex flex-col justify-between gap-2 shadow-sm min-h-[92px]">
+      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card/60 border-2 border-dashed border-app-card-border hover:border-primary/50 transition-all flex flex-col justify-between gap-2 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-black font-display text-primary uppercase">
@@ -1682,9 +1686,9 @@ function AdminTrackBlock({
   // ==========================================================================
   if (!track.isRunning && time === 0) {
     return (
-      <div className="relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-warning/60 shadow-md shadow-amber-500/5 transition-all flex flex-col justify-between gap-2 min-h-[120px]">
+      <div className="@container relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 border-warning/60 shadow-md shadow-warning/5 transition-all flex flex-col justify-between gap-2">
         {/* Faisceau lumineux ambre */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-warning via-warning/70 to-warning" />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
@@ -1692,7 +1696,7 @@ function AdminTrackBlock({
               Piste {track.trackId}
             </span>
             <span className="text-micro px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 font-bold uppercase">
-              Prêt au départ
+              Prêt<span className="hidden @[17rem]:inline"> au départ</span>
             </span>
           </div>
 
@@ -1726,7 +1730,7 @@ function AdminTrackBlock({
           className="w-full min-h-11 flex items-center justify-center gap-2 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
         >
           <Play size={13} fill="currentColor" />
-          <span>Démarrer le chronomètre</span>
+          <span>Démarrer<span className="hidden @[16rem]:inline"> le chronomètre</span></span>
         </button>
       </div>
     );
@@ -1737,18 +1741,18 @@ function AdminTrackBlock({
   // ==========================================================================
   return (
     <div
-      className={`relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 shadow-lg transition-all flex flex-col justify-between gap-2 ${
+      className={`@container relative overflow-hidden p-3 rounded-2xl bg-app-card border-2 shadow-lg transition-all flex flex-col justify-between gap-2 ${
         track.isRunning
           ? 'border-primary ring-2 ring-primary/20 shadow-primary/10'
-          : 'border-success/70 shadow-emerald-500/10'
+          : 'border-success/70 shadow-success/10'
       }`}
     >
       {/* Faisceau lumineux supérieur */}
       <div
         className={`absolute top-0 left-0 right-0 h-1 transition-all duration-500 ${
           track.isRunning
-            ? 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse'
-            : 'bg-emerald-500'
+            ? 'bg-gradient-to-r from-primary via-success to-primary animate-pulse'
+            : 'bg-success'
         }`}
       />
 
@@ -1765,19 +1769,20 @@ function AdminTrackBlock({
             </span>
           ) : (
             <span className="text-micro px-2 py-0.5 rounded-full bg-success/15 text-success border border-success/40 font-bold uppercase">
-              Temps arrêté
+              <span className="@[17rem]:hidden">Arrêté</span>
+              <span className="hidden @[17rem]:inline">Temps arrêté</span>
             </span>
           )}
         </div>
 
-        <h4 className="font-bold text-app-text text-xs font-display uppercase truncate max-w-[130px]">
+        <h4 className="font-bold text-app-text text-xs font-display uppercase truncate min-w-0 max-w-[45cqi]">
           {track.participantName}
         </h4>
       </div>
 
       {/* Grand Chronomètre digital */}
       <div
-        className={`stopwatch-lcd py-1 px-3 rounded-xl bg-app-input border font-mono font-black text-2xl sm:text-3xl tracking-wider tabular-nums text-center shadow-inner ${
+        className={`stopwatch-lcd py-1 px-3 rounded-xl bg-app-input border font-mono font-black text-[clamp(1.5rem,12cqi,2.5rem)] tracking-wider tabular-nums text-center shadow-inner ${
           track.isRunning
             ? 'text-primary border-primary/40'
             : 'text-success border-success/40'
@@ -1788,7 +1793,7 @@ function AdminTrackBlock({
 
       {/* Barre d'ajustements / pénalités rapides */}
       <div className="flex items-center justify-between gap-1.5 text-xs">
-        <span className="font-bold text-app-text-muted uppercase text-micro">Pénalités</span>
+        <span className="font-bold text-app-text-muted uppercase text-micro hidden @[15rem]:inline">Pénalités</span>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -1845,7 +1850,9 @@ function AdminTrackBlock({
               className="flex-1 min-h-11 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.01] active:scale-95 transition cursor-pointer shadow-md shadow-primary/20"
             >
               <Check size={14} aria-hidden="true" />
-              <span>Arrêter & Valider</span>
+              <span>
+                <span className="hidden @[16rem]:inline">Arrêter & </span>Valider
+              </span>
             </button>
           </>
         ) : (
@@ -1911,7 +1918,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
   // 3 PHASES VISUELLES DYNAMIQUES DE COURSE
   // ========================================================================
   let borderClass = 'border-primary shadow-primary/20 ring-2 ring-primary/20';
-  let beamClass = 'bg-gradient-to-r from-primary via-emerald-400 to-primary animate-pulse';
+  let beamClass = 'bg-gradient-to-r from-primary via-success to-primary animate-pulse';
   let digitsClass = 'text-primary stopwatch-digits-running';
   let paceBarColor = 'bg-primary shadow-sm shadow-primary/30';
   let paceLabel = 'En route vers le record 🏆';
@@ -1920,10 +1927,10 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
     paceLabel = 'En route pour établir le 1er record ! ⚡';
   } else if (paceRatio >= 1) {
     // Phase 3 : Record 1re place dépassé -> Objectif 2e ou 3e place (Podium) & Tirage au sort !
-    borderClass = 'border-purple-500 shadow-purple-500/20 ring-2 ring-purple-500/30';
-    beamClass = 'bg-gradient-to-r from-purple-500 via-indigo-400 to-primary';
+    borderClass = 'border-accent shadow-accent/20 ring-2 ring-accent/30';
+    beamClass = 'bg-gradient-to-r from-accent via-info to-primary';
     digitsClass = 'text-accent';
-    paceBarColor = 'bg-gradient-to-r from-purple-500 to-primary';
+    paceBarColor = 'bg-gradient-to-r from-accent to-primary';
 
     if (secondTimeMs && time < secondTimeMs) {
       paceLabel = `En course pour la 2e place (${formatTime(secondTimeMs)}) 🥈 & Tirage 🎁`;
@@ -1934,24 +1941,24 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
     }
   } else if (paceRatio >= 0.8) {
     // Phase 2 : Zone critique (80% à 100% du record)
-    borderClass = 'border-amber-400 shadow-amber-500/25 ring-2 ring-amber-400/40';
-    beamClass = 'bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 animate-pulse';
+    borderClass = 'border-warning shadow-warning/25 ring-2 ring-warning/40';
+    beamClass = 'bg-gradient-to-r from-warning via-warning/60 to-warning animate-pulse';
     digitsClass = 'text-warning';
-    paceBarColor = 'bg-amber-400 animate-pulse';
+    paceBarColor = 'bg-warning animate-pulse';
     const remainingSec = Math.max(0, (bestTimeMs! - time) / 1000).toFixed(1);
     paceLabel = `Zone critique du record ⚡ - Moins de ${remainingSec}s !`;
   }
 
   return (
     <div
-      className={`relative overflow-hidden p-4 sm:p-5 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between h-full ${
+      className={`@container relative overflow-hidden p-4 sm:p-5 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between h-full ${
         track.isRunning ? borderClass : 'border-app-card-border'
       }`}
     >
       {/* Faisceau lumineux supérieur */}
       <div
         className={`absolute top-0 left-0 right-0 h-1.5 transition-all duration-500 ${
-          track.isRunning ? beamClass : 'bg-gradient-to-r from-primary/30 to-purple-600/30'
+          track.isRunning ? beamClass : 'bg-gradient-to-r from-primary/30 to-accent/30'
         }`}
       />
 
@@ -1964,7 +1971,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
           </span>
           <h3
             className={`font-display font-black uppercase text-app-text line-clamp-2 text-balance mt-0.5 leading-tight ${
-              isSingle ? 'text-3xl sm:text-5xl lg:text-6xl' : 'text-lg sm:text-2xl md:text-3xl'
+              isSingle ? 'text-[clamp(1.5rem,6cqi,3.75rem)]' : 'text-[clamp(1.125rem,7cqi,1.875rem)]'
             }`}
           >
             {track.participantName}
@@ -1977,11 +1984,11 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
           </span>
         ) : time === 0 ? (
           <span className="text-kiosk-caption px-2.5 py-1 rounded-full bg-warning/15 text-warning border border-warning/40 font-bold uppercase font-sans shrink-0">
-            Prêt au départ
+            Prêt<span className="hidden @sm:inline"> au départ</span>
           </span>
         ) : (
           <span className="text-kiosk-caption px-2.5 py-1 rounded-full bg-success/15 text-success border border-success/40 font-bold uppercase font-sans shrink-0">
-            Temps final
+            <span className="hidden @sm:inline">Temps </span>final
           </span>
         )}
       </div>
@@ -1989,11 +1996,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
       {/* Zone Chronomètre Géant LCD */}
       <div className="my-auto py-2 space-y-2">
         <div
-          className={`stopwatch-lcd py-2 sm:py-3.5 px-4 rounded-2xl bg-app-input border border-primary/30 font-mono font-black tracking-wider tabular-nums text-center shadow-inner flex items-center justify-center ${
-            isSingle
-              ? 'text-6xl sm:text-7xl md:text-8xl lg:text-9xl'
-              : 'text-4xl sm:text-5xl md:text-6xl lg:text-7xl'
-          }`}
+          className="stopwatch-lcd py-2 sm:py-3.5 px-4 rounded-2xl bg-app-input border border-primary/30 font-mono font-black text-[clamp(2.5rem,15cqi,10rem)] leading-none tracking-wider tabular-nums text-center shadow-inner flex items-center justify-center"
         >
           <span className={track.isRunning ? digitsClass : time > 0 ? 'text-success' : 'text-app-text stopwatch-digits-idle'}>
             {formatTime(time)}
@@ -2006,7 +2009,8 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
             <div className="flex items-center justify-between text-kiosk-caption font-black uppercase tracking-wider">
               <span className="text-app-text truncate mr-2">{paceLabel}</span>
               <span className="font-mono text-app-text-muted shrink-0">
-                Record : {formatTime(bestTimeMs!)}
+                <span className="hidden @md:inline">Record : </span>
+                {formatTime(bestTimeMs!)}
               </span>
             </div>
             <div className="w-full h-2.5 sm:h-3 rounded-full bg-app-input border border-app-card-border overflow-hidden p-0.5 shadow-inner">
