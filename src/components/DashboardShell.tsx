@@ -8,7 +8,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
-import logoInsertechImage from '../assets/logo-insertech.png';
+import BrandLogo from './shared/BrandLogo';
+import Button from './shared/Button';
 
 interface DashboardShellProps {
   event: EventSettings;
@@ -97,16 +98,7 @@ export default function DashboardShell({
         <header className="shrink-0 bg-app-header border-b-2 border-primary/40 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 shadow-lg backdrop-blur-xl z-40">
           {/* Logo Insertech officiel & Titre adaptatif */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
-            <motion.div
-              whileHover={{ scale: 1.04 }}
-              className="h-10 sm:h-11 px-3 py-1 rounded-2xl bg-white dark:bg-white/10 border-2 border-primary/60 shadow-md shadow-primary/20 shrink-0 flex items-center justify-center"
-            >
-              <img
-                src={logoInsertechImage}
-                alt="Insertech"
-                className="h-full w-auto max-h-8 object-contain"
-              />
-            </motion.div>
+            <BrandLogo size="lg" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 text-kiosk-caption font-black uppercase font-display tracking-widest shrink-0">
@@ -166,29 +158,30 @@ export default function DashboardShell({
             <div className="flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity duration-300 shrink-0">
               {/* Bouton bascule vers l'écran d'administration / chrono (absent de la fenêtre projecteur) */}
               {!isPublicWindow && (
-              <button
+              <Button
+                size="sm"
                 onClick={() => onTabChange(event.type === 'kiosque_concours' ? 'admin' : tabs[0].id)}
                 title="Basculer vers la console Chronomètre & Inscriptions"
                 aria-label="Basculer vers la console d'administration"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-primary/60 text-xs font-bold text-app-text hover:text-primary transition cursor-pointer shadow-sm"
               >
-                <Settings2 size={14} className="text-primary" />
+                <Settings2 size={14} className="text-primary" aria-hidden="true" />
                 <span className="hidden md:inline">Mode Régie</span>
-              </button>
+              </Button>
               )}
 
               {/* Basculeur de thème partagé */}
               <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
 
               {/* Plein écran télé / moniteur */}
-              <button
+              <Button
+                variant="primary"
+                size="icon-sm"
                 onClick={toggleFullscreen}
                 title={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran télé (Kiosque)"}
                 aria-label={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran télé"}
-                className="flex items-center justify-center p-2 rounded-xl bg-primary text-secondary hover:brightness-110 font-bold transition cursor-pointer shadow-md shadow-primary/20"
               >
-                {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
-              </button>
+                {isFullscreen ? <Minimize size={14} aria-hidden="true" /> : <Maximize size={14} aria-hidden="true" />}
+              </Button>
             </div>
           </div>
         </header>
@@ -199,18 +192,7 @@ export default function DashboardShell({
         <header className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-6 py-3.5 flex flex-col xl:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-xl transition-colors duration-300">
           {/* Identité visuelle */}
           <div className="flex items-center gap-3.5 w-full xl:w-auto">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 14 }}
-              className="h-10 px-2.5 py-1 rounded-xl bg-white dark:bg-white/10 border-2 border-primary shadow-lg shadow-primary/20 shrink-0 flex items-center justify-center"
-            >
-              <img
-                src={logoInsertechImage}
-                alt="Insertech Événements"
-                className="h-full w-auto max-h-7 object-contain"
-              />
-            </motion.div>
+            <BrandLogo alt="Insertech Événements" />
             <div>
               <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none">
                 Insertech <span className="text-primary font-black">Événements</span>
@@ -282,50 +264,40 @@ export default function DashboardShell({
             </div>
 
             <div className="flex items-center gap-1.5">
-              <button
+              <Button
+                size="sm"
                 onClick={onOpenPublicWindow}
                 title="Ouvrir l'écran public dans une nouvelle fenêtre, à glisser sur le projecteur ou la télé"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/15 border border-primary/50 text-primary hover:bg-primary hover:text-secondary text-xs font-bold cursor-pointer transition shadow-sm"
+                className="!bg-primary/15 !border-primary/50 text-primary"
               >
-                <MonitorUp size={13} />
+                <MonitorUp size={13} aria-hidden="true" />
                 <span>Projecteur</span>
-              </button>
+              </Button>
 
-              <button
+              <Button
+                size="sm"
                 onClick={onOpenNetModal}
                 title={`Statut réseau : ${netStatus}`}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition ${
-                  sessionCode 
-                    ? 'bg-primary/20 text-primary border-primary/50' 
-                    : 'bg-app-card border-app-card-border text-app-text hover:border-primary/50'
-                }`}
+                className={sessionCode ? '!bg-primary/20 text-primary !border-primary/50' : ''}
               >
-                <Wifi size={13} className={sessionCode ? 'animate-pulse' : ''} />
+                <Wifi size={13} aria-hidden="true" />
                 <span>{sessionCode ? sessionCode : 'Réseau LAN'}</span>
-              </button>
+              </Button>
 
               <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
 
-              <button
-                onClick={onExportData}
-                title="Exporter une sauvegarde JSON de cet événement"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-primary text-app-text hover:text-primary text-xs font-bold cursor-pointer transition shadow-sm"
-              >
-                <Download size={13} />
+              <Button size="sm" onClick={onExportData} title="Exporter une sauvegarde JSON de cet événement">
+                <Download size={13} aria-hidden="true" />
                 <span>Sauvegarder</span>
-              </button>
+              </Button>
 
               {/* Séparateur pour isoler le bouton Quitter de Sauvegarder */}
               <div className="w-px h-5 bg-app-card-border mx-1 hidden sm:block" />
 
-              <button
-                onClick={onLeaveEvent}
-                title="Quitter cet événement et retourner au menu principal"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/30 border border-red-900/50 text-red-400 hover:bg-red-900/50 hover:text-white text-xs font-bold cursor-pointer transition"
-              >
-                <LogOut size={13} />
+              <Button variant="danger" size="sm" onClick={onLeaveEvent} title="Quitter cet événement et retourner au menu principal">
+                <LogOut size={13} aria-hidden="true" />
                 <span>Quitter</span>
-              </button>
+              </Button>
             </div>
           </div>
         </header>

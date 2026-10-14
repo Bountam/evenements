@@ -3,18 +3,25 @@ import { EventSettings, Participant, TrackState, RaffleState } from '../../types
 import { db, registerSyncListener } from '../../db';
 import { networkManager } from '../../network';
 import Stopwatch, { formatTime } from '../shared/Stopwatch';
-import Leaderboard, { parseTimeInputToMs } from '../shared/Leaderboard';
+import Leaderboard from '../shared/Leaderboard';
 import RaffleSpinner from '../shared/RaffleSpinner';
 import { showToast } from '../shared/Toast';
 import PrizeEditorModal, { PrizeImage } from '../shared/PrizeEditorModal';
 import { ContestPrizes, getContestPrizes, serializeContestPrizes } from '../../utils/prizes';
-import { RaffleDraw, getRaffleDraws, getEligibleParticipants, readStoredRaffle, storeRaffle } from '../../utils/raffle';
+import { RaffleDraw, getRaffleDraws, getEligibleParticipants, readStoredRaffle, storeRaffle, RAFFLE_DURATION_MS } from '../../utils/raffle';
+import { hasValidTime, getRankedParticipants, compareByRank, buildRankMap } from '../../utils/ranking';
+import { useTrackElapsed } from '../../hooks/useTrackElapsed';
+import PrizeCard from '../shared/PrizeCard';
+import RankBadge from '../shared/RankBadge';
+import StatTile from '../shared/StatTile';
+import RecordChip from '../shared/RecordChip';
+import InlineTimeEditor from '../shared/InlineTimeEditor';
+import TextField from '../shared/TextField';
 import confetti from 'canvas-confetti';
 import {
   UserPlus,
   Play,
   RotateCcw,
-  Award,
   Trash2,
   Check,
   Sparkles,
@@ -25,13 +32,10 @@ import {
   Trophy,
   Search,
   Edit3,
-  X,
   PlusCircle,
   MinusCircle,
   Clock,
   Users,
-  HardDrive,
-  Laptop,
   Gift,
   Zap,
   Pause,
@@ -67,61 +71,6 @@ function playRecordFanfare() {
   }
 }
 
-interface PrizeShowcaseCardProps {
-  badgeText: string;
-  badgeClass: string;
-  tag?: string;
-  title: string;
-  imageSrc: string;
-  imageAlt: string;
-  imageKind: keyof ContestPrizes;
-  description: string;
-  gradientClass: string;
-  borderClass: string;
-}
-
-function PrizeShowcaseCard({
-  badgeText,
-  badgeClass,
-  tag,
-  title,
-  imageSrc,
-  imageAlt,
-  imageKind,
-  description,
-  gradientClass,
-  borderClass
-}: PrizeShowcaseCardProps) {
-  return (
-    <div className={`bg-gradient-to-br ${gradientClass} via-app-card to-app-card border-2 ${borderClass} p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group`}>
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-14 h-14 xl:w-16 xl:h-16 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-          <PrizeImage
-            src={imageSrc}
-            alt={imageAlt}
-            kind={imageKind}
-            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1 flex-wrap">
-            <span className={`px-1.5 py-0.5 rounded ${badgeClass} text-kiosk-caption font-black uppercase font-display tracking-wider block w-fit leading-tight`}>
-              {badgeText}
-            </span>
-            {tag && <span className="text-kiosk-caption font-bold font-mono text-primary leading-tight">{tag}</span>}
-          </div>
-          <h4 className="text-kiosk-body font-black text-app-text font-display uppercase tracking-tight leading-tight line-clamp-2 mt-0.5">
-            {title}
-          </h4>
-        </div>
-      </div>
-      <p className="text-kiosk-caption text-app-text-muted leading-snug font-sans line-clamp-2">
-        {description}
-      </p>
-    </div>
-  );
-}
-
 export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps) {
   // 1. États principaux
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -129,7 +78,6 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [participantFilter, setParticipantFilter] = useState<'all' | 'waiting' | 'ranked'>('all');
   const [manualScoreParticipantId, setManualScoreParticipantId] = useState<string | null>(null);
-  const [manualScoreInput, setManualScoreInput] = useState<string>('');
 
   // État des 5 pistes (géré en local et synchronisé via networkManager + BroadcastChannel)
   const [rawTracks, setTracks] = useState<Record<number, TrackState>>(() => ({
@@ -172,23 +120,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const [newParticipantPostal, setNewParticipantPostal] = useState('');
   const [newParticipantConsent, setNewParticipantConsent] = useState(false);
   const [formError, setFormError] = useState<{ field: 'name' | 'consent'; message: string } | null>(null);
-  const [raffleDisplayValue, setRaffleDisplayValue] = useState<string>('');
-
-  useEffect(() => {
-    if (raffle.status === 'spinning' && participants.length > 0) {
-      const interval = setInterval(() => {
-        const eligible = participants.filter((p) => p.name);
-        if (eligible.length > 0) {
-          const randomIndex = Math.floor(Math.random() * eligible.length);
-          setRaffleDisplayValue(eligible[randomIndex].name);
-        }
-      }, 80);
-      return () => clearInterval(interval);
-    } else if (raffle.status === 'celebrating' && raffle.winnerId) {
-      const winner = participants.find((p) => p.id === raffle.winnerId);
-      setRaffleDisplayValue(winner ? winner.name : 'Tirage complété');
-    }
-  }, [raffle.status, raffle.winnerId, participants]);
+  const raffleWinnerName = participants.find((p) => p.id === raffle.winnerId)?.name || 'Tirage complété';
 
   // Charger les participants depuis IndexedDB
   const loadParticipants = async () => {
@@ -290,7 +222,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   useEffect(() => {
     if (raffle.status === 'spinning' && raffle.spinStartTime) {
       const elapsed = networkManager.now() - raffle.spinStartTime;
-      const timeLeft = 10000 - elapsed;
+      const timeLeft = RAFFLE_DURATION_MS - elapsed;
 
       if (timeLeft <= 0) {
         setRaffle((prev) => ({ ...prev, status: 'celebrating' }));
@@ -546,7 +478,6 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       );
       setLastSavedParticipantId(participantId);
       setManualScoreParticipantId(null);
-      setManualScoreInput('');
       showToast(`Score mis à jour pour ${participant.name} : ${formatTime(newTimeMs)}`, 'success');
       await loadParticipants();
     } catch (e) {
@@ -795,12 +726,16 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   };
 
   // Calcul des statistiques en temps réel
-  const rankedParticipants = participants
-    .filter((p) => typeof p.timeMs === 'number' && p.timeMs > 0)
-    .sort((a, b) => a.timeMs! - b.timeMs!);
+  const rankedParticipants = getRankedParticipants(participants);
+  const rankMap = buildRankMap(participants);
   const bestParticipant = rankedParticipants.length > 0 ? rankedParticipants[0] : null;
   const secondParticipant = rankedParticipants.length > 1 ? rankedParticipants[1] : null;
   const thirdParticipant = rankedParticipants.length > 2 ? rankedParticipants[2] : null;
+  const podiumTimes: PodiumTimes = {
+    best: bestParticipant?.timeMs ?? null,
+    second: secondParticipant?.timeMs ?? null,
+    third: thirdParticipant?.timeMs ?? null
+  };
   const averageTimeMs =
     rankedParticipants.length > 0
       ? Math.round(
@@ -813,7 +748,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const waitingForLiveRace = participants
     .filter(
       (p) =>
-        (p.timeMs === null || p.timeMs <= 0) &&
+        !hasValidTime(p) &&
         !Object.values(tracks).some((t) => t.participantId === p.id)
     )
     .sort((a, b) => a.registeredAt - b.registeredAt);
@@ -829,29 +764,21 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
       if (!matchesSearch) return false;
 
-      const hasValidTime = typeof p.timeMs === 'number' && p.timeMs > 0;
-      if (participantFilter === 'waiting') return !hasValidTime;
-      if (participantFilter === 'ranked') return hasValidTime;
+      if (participantFilter === 'waiting') return !hasValidTime(p);
+      if (participantFilter === 'ranked') return hasValidTime(p);
       return true;
     })
     .sort((a, b) => {
-      const aHasTime = typeof a.timeMs === 'number' && a.timeMs > 0;
-      const bHasTime = typeof b.timeMs === 'number' && b.timeMs > 0;
-      if (participantFilter === 'ranked') {
-        return (a.timeMs || 0) - (b.timeMs || 0);
-      }
-      if (participantFilter === 'waiting') {
-        return (a.registeredAt || 0) - (b.registeredAt || 0);
-      }
-      // 'all' : classés en tête triés par score, puis ceux en attente
-      if (aHasTime && bHasTime) return a.timeMs! - b.timeMs!;
-      if (aHasTime && !bHasTime) return -1;
-      if (!aHasTime && bHasTime) return 1;
-      return (b.registeredAt || 0) - (a.registeredAt || 0);
+      if (participantFilter === 'ranked') return (a.timeMs || 0) - (b.timeMs || 0);
+      if (participantFilter === 'waiting') return (a.registeredAt || 0) - (b.registeredAt || 0);
+      return compareByRank(a, b);
     });
 
   // Rendu des Chronomètres Individuels Adaptatifs sur l'Écran Public
   const activeTracks = Object.values(tracks).filter((t) => t.participantId !== null);
+  const assignableParticipants = participants.filter(
+    (p) => !Object.values(tracks).some((t) => t.participantId === p.id)
+  );
   const freeTrackIds = Object.values(tracks)
     .filter((t) => t.participantId === null)
     .map((t) => t.trackId);
@@ -925,12 +852,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                   {/* Badge Record du moment */}
                   {bestParticipant && (
-                    <div className="mt-2.5 w-full py-1.5 px-3 rounded-2xl bg-primary/10 border border-primary/30 text-app-text flex items-center justify-center gap-2 shadow-sm">
-                      <Trophy size={15} className="text-yellow-400 shrink-0" />
-                      <span className="text-kiosk-caption font-black uppercase tracking-wide line-clamp-2">
-                        Record : <span className="font-mono text-kiosk-body text-primary">{formatTime(bestParticipant.timeMs!)}</span> ({bestParticipant.name})
-                      </span>
-                    </div>
+                    <RecordChip label="Record" timeMs={bestParticipant.timeMs!} name={bestParticipant.name} className="mt-2.5 w-full justify-center" />
                   )}
 
                   {/* Compteur intégré : Inscriptions du jour */}
@@ -947,66 +869,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                 {/* Vitrine officielle des 2 Prix en jeu avec photos agrandies */}
                 <div className="grid grid-cols-1 gap-2.5 flex-1 min-h-0">
-                  {/* Prix #1 : Meilleur chrono */}
-                  <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-500/40 p-3 sm:p-3.5 rounded-3xl shadow-md flex items-center gap-3.5 relative overflow-hidden group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md overflow-hidden">
-                      <PrizeImage
-                        src={prizes.best.image}
-                        alt={prizes.best.title}
-                        kind="best"
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/50 text-kiosk-caption font-black uppercase font-display tracking-wider shadow-sm">
-                          1er Prix
-                        </span>
-                        <span className="text-kiosk-caption font-bold text-app-text-muted uppercase">Meilleur chrono</span>
-                        {prizes.best.value && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 border border-amber-500/40 text-kiosk-caption font-black font-mono">
-                            Valeur {prizes.best.value}
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-kiosk-title font-black text-app-text font-display uppercase tracking-tight mt-0.5 leading-tight line-clamp-2">
-                        {prizes.best.title}
-                      </h4>
-                      <p className="text-kiosk-caption text-app-text-muted mt-0.5 leading-snug line-clamp-2">
-                        {prizes.best.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Prix de participation : tirage au sort parmi tous les participants */}
-                  <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-3 sm:p-3.5 rounded-3xl shadow-md flex items-center gap-3.5 relative overflow-hidden group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md overflow-hidden">
-                      <PrizeImage
-                        src={prizes.raffle.image}
-                        alt={prizes.raffle.title}
-                        kind="raffle"
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded-md bg-purple-500/25 text-purple-200 border border-purple-400/50 text-kiosk-caption font-black uppercase font-display tracking-wider shadow-sm">
-                          Tirage au sort
-                        </span>
-                        {prizes.raffle.value && (
-                          <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/40 text-kiosk-caption font-black font-mono">
-                            Valeur {prizes.raffle.value}
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-kiosk-title font-black text-app-text font-display uppercase tracking-tight mt-0.5 leading-tight line-clamp-2">
-                        {prizes.raffle.title}
-                      </h4>
-                      <p className="text-kiosk-caption text-app-text-muted mt-0.5 leading-snug line-clamp-2">
-                        {prizes.raffle.description}
-                      </p>
-                    </div>
-                  </div>
+                  <PrizeCard kind="best" prize={prizes.best} size="lg" />
+                  <PrizeCard kind="raffle" prize={prizes.raffle} size="lg" />
                 </div>
               </div>
             </div>
@@ -1033,13 +897,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   </div>
 
                   {bestParticipant ? (
-                    <div className="flex items-center gap-1.5 min-w-0 bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-xl text-app-text shadow-sm">
-                      <Trophy size={13} className="text-yellow-400 shrink-0" />
-                      <span className="text-kiosk-caption uppercase font-black tracking-wide truncate">
-                        Temps à battre : <span className="font-mono text-kiosk-body text-primary">{formatTime(bestParticipant.timeMs!)}</span>
-                        <span className="font-bold text-app-text-muted hidden md:inline ml-1">({bestParticipant.name})</span>
-                      </span>
-                    </div>
+                    <RecordChip label="Temps à battre" timeMs={bestParticipant.timeMs!} name={bestParticipant.name} />
                   ) : (
                     <div className="flex items-center gap-1.5 shrink-0 bg-primary/15 border border-primary/30 px-2.5 py-1 rounded-xl text-primary text-kiosk-caption font-black uppercase">
                       <Sparkles size={13} />
@@ -1057,9 +915,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                         <PublicTrackBlock
                           track={activeTracks[0]}
                           isSingle={true}
-                          bestTimeMs={bestParticipant?.timeMs ?? null}
-                          secondTimeMs={secondParticipant?.timeMs ?? null}
-                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                          podiumTimes={podiumTimes}
                         />
                       </div>
                     </div>
@@ -1073,9 +929,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                           key={track.trackId}
                           track={track}
                           isSingle={false}
-                          bestTimeMs={bestParticipant?.timeMs ?? null}
-                          secondTimeMs={secondParticipant?.timeMs ?? null}
-                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                          podiumTimes={podiumTimes}
                         />
                       ))}
 
@@ -1109,9 +963,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                           <PublicTrackBlock
                             track={track}
                             isSingle={false}
-                            bestTimeMs={bestParticipant?.timeMs ?? null}
-                            secondTimeMs={secondParticipant?.timeMs ?? null}
-                            thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                            podiumTimes={podiumTimes}
                           />
                         </div>
                       ))}
@@ -1120,9 +972,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                           <PublicTrackBlock
                             track={track}
                             isSingle={false}
-                            bestTimeMs={bestParticipant?.timeMs ?? null}
-                            secondTimeMs={secondParticipant?.timeMs ?? null}
-                            thirdTimeMs={thirdParticipant?.timeMs ?? null}
+                            podiumTimes={podiumTimes}
                           />
                         </div>
                       ))}
@@ -1176,30 +1026,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                 {/* Vitrine officielle permanente des 2 Prix (côte à côte en 2 colonnes sans superposition) */}
                 <div className="grid grid-cols-2 gap-2.5 shrink-0">
-                  <PrizeShowcaseCard
-                    badgeText="1er Prix"
-                    badgeClass="bg-amber-500/20 text-amber-300 border border-amber-400/50"
-                    tag={prizes.best.value || undefined}
-                    title={prizes.best.shortTitle || prizes.best.title}
-                    imageSrc={prizes.best.image}
-                    imageAlt={prizes.best.title}
-                    imageKind="best"
-                    description={prizes.best.description}
-                    gradientClass="from-amber-500/10"
-                    borderClass="border-amber-500/40"
-                  />
-                  <PrizeShowcaseCard
-                    badgeText="Tirage"
-                    badgeClass="bg-purple-500/25 text-purple-200 border border-purple-400/50"
-                    tag={prizes.raffle.value || undefined}
-                    title={prizes.raffle.shortTitle || prizes.raffle.title}
-                    imageSrc={prizes.raffle.image}
-                    imageAlt={prizes.raffle.title}
-                    imageKind="raffle"
-                    description={prizes.raffle.description}
-                    gradientClass="from-purple-500/10"
-                    borderClass="border-primary/50"
-                  />
+                  <PrizeCard kind="best" prize={prizes.best} size="sm" />
+                  <PrizeCard kind="raffle" prize={prizes.raffle} size="sm" />
                 </div>
               </div>
             </div>
@@ -1221,7 +1049,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       {raffle.status !== 'idle' && (
         <div className="bg-primary/10 border border-primary/30 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
-            <Sparkles className="text-primary animate-spin shrink-0" size={18} />
+            <Sparkles className="text-primary shrink-0" size={18} aria-hidden="true" />
             <div className="min-w-0">
               <span className="text-[9px] uppercase font-bold text-primary tracking-widest block leading-none">
                 {raffle.status === 'spinning'
@@ -1230,15 +1058,10 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               </span>
               <span className="font-bold text-app-text text-xs block mt-0.5 truncate">
                 {raffle.status === 'spinning' ? (
-                  <span className="flex items-center gap-1.5 text-app-text-muted">
-                    Défilement :{' '}
-                    <span className="font-mono text-primary font-black animate-pulse">
-                      {raffleDisplayValue}
-                    </span>
-                  </span>
+                  <span className="text-app-text-muted">Le gagnant s'affiche à la fin du défilement…</span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-primary font-black text-sm">
-                    🏆 {raffleDisplayValue}
+                    <Trophy size={14} aria-hidden="true" /> {raffleWinnerName}
                   </span>
                 )}
               </span>
@@ -1289,68 +1112,50 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               <span>Nouveau Participant</span>
             </h3>
 
-            <form onSubmit={(e) => addParticipant(e, false)} className="space-y-2">
-              <div className="space-y-0.5">
-                <label htmlFor="participant-name" className="text-[10px] font-bold uppercase text-app-text-muted block">
-                  Nom complet *
-                </label>
-                <div className="relative">
-                  <User className="absolute left-2.5 top-2 text-app-text-muted" size={12} aria-hidden="true" />
-                  <input
-                    id="participant-name"
-                    type="text"
-                    autoComplete="name"
-                    required
-                    aria-invalid={formError?.field === 'name'}
-                    aria-describedby={formError?.field === 'name' ? 'participant-form-error' : undefined}
-                    value={newParticipantName}
-                    onChange={(e) => {
-                      setNewParticipantName(e.target.value);
-                      setFormError(null);
-                    }}
-                    placeholder="Jean Tremblay"
-                    className="w-full bg-app-input border border-app-input-border rounded-xl pl-8 pr-2.5 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition"
-                  />
-                </div>
-              </div>
+            <form onSubmit={(e) => addParticipant(e, false)} className="space-y-2" noValidate>
+              <TextField
+                id="participant-name"
+                label="Nom complet *"
+                icon={User}
+                type="text"
+                autoComplete="name"
+                required
+                aria-required="true"
+                value={newParticipantName}
+                onChange={(e) => {
+                  setNewParticipantName(e.target.value);
+                  setFormError(null);
+                }}
+                placeholder="Jean Tremblay"
+                aria-invalid={formError?.field === 'name' ? true : undefined}
+                aria-describedby={formError?.field === 'name' ? 'participant-form-error' : undefined}
+              />
 
               {/* Courriel et Code Postal sur la même ligne (responsive mobile) */}
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-                <div className="sm:col-span-3 space-y-0.5">
-                  <label htmlFor="participant-email" className="text-[10px] font-bold uppercase text-app-text-muted block">
-                    Courriel
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-2.5 top-2 text-app-text-muted" size={12} aria-hidden="true" />
-                    <input
-                      id="participant-email"
-                      type="email"
-                      autoComplete="email"
-                      value={newParticipantEmail}
-                      onChange={(e) => setNewParticipantEmail(e.target.value)}
-                      placeholder="jean@email.com"
-                      className="w-full bg-app-input border border-app-input-border rounded-xl pl-7 pr-2 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition"
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2 space-y-0.5">
-                  <label htmlFor="participant-postal" className="text-[10px] font-bold uppercase text-app-text-muted block">
-                    Code postal
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-2 top-2 text-app-text-muted" size={12} aria-hidden="true" />
-                    <input
-                      id="participant-postal"
-                      type="text"
-                      autoComplete="postal-code"
-                      value={newParticipantPostal}
-                      onChange={(e) => setNewParticipantPostal(e.target.value)}
-                      placeholder="H2W 1Y4"
-                      className="w-full bg-app-input border border-app-input-border rounded-xl pl-6 pr-2 py-1.5 text-app-text text-xs focus:outline-none focus:border-primary transition uppercase"
-                    />
-                  </div>
-                </div>
+                <TextField
+                  id="participant-email"
+                  label="Courriel"
+                  icon={Mail}
+                  type="email"
+                  autoComplete="email"
+                  value={newParticipantEmail}
+                  onChange={(e) => setNewParticipantEmail(e.target.value)}
+                  placeholder="jean@email.com"
+                  className="sm:col-span-3"
+                />
+                <TextField
+                  id="participant-postal"
+                  label="Code postal"
+                  icon={MapPin}
+                  type="text"
+                  autoComplete="postal-code"
+                  value={newParticipantPostal}
+                  onChange={(e) => setNewParticipantPostal(e.target.value)}
+                  placeholder="H2W 1Y4"
+                  className="sm:col-span-2"
+                  inputClassName="uppercase"
+                />
               </div>
 
               <label className="flex items-start gap-1.5 text-[10px] leading-snug text-app-text-muted cursor-pointer">
@@ -1505,77 +1310,44 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         <div className="col-span-12 lg:col-span-6 space-y-3">
           {/* Bandeau de statistiques compact (stat-bar en 1 ligne) */}
           <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
-            {/* Participants */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center text-primary shrink-0">
-                <Users size={13} />
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Participants</span>
-                <span className="text-xs font-display font-black text-app-text">{participants.length}</span>
-              </div>
-            </div>
+            <StatTile icon={Users} label="Participants">
+              <span className="text-sm font-display font-black text-app-text">{participants.length}</span>
+            </StatTile>
 
-            <div className="hidden sm:block h-5 w-px bg-app-card-border" />
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
 
-            {/* Scores validés */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-info shrink-0">
-                <Check size={13} />
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Scores validés</span>
-                <span className="text-xs font-display font-black text-app-text">
-                  {rankedParticipants.length}{' '}
-                  <span className="text-[9px] font-sans text-app-text-muted font-normal">/ {participants.length}</span>
+            <StatTile icon={Check} label="Scores validés" tone="info">
+              <span className="text-sm font-display font-black text-app-text">
+                {rankedParticipants.length}{' '}
+                <span className="text-[10px] font-sans text-app-text-muted font-normal">/ {participants.length}</span>
+              </span>
+            </StatTile>
+
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
+
+            <StatTile icon={Trophy} label="Record actuel" tone="warning">
+              <div className="flex items-baseline gap-1 min-w-0">
+                <span className="text-sm font-mono font-black text-primary">
+                  {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
                 </span>
+                {bestParticipant && (
+                  <span className="text-[10px] text-app-text-muted font-medium truncate max-w-[6rem]">({bestParticipant.name})</span>
+                )}
               </div>
-            </div>
+            </StatTile>
 
-            <div className="hidden sm:block h-5 w-px bg-app-card-border" />
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
 
-            {/* Record actuel */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
-                <Trophy size={13} />
-              </div>
-              <div className="min-w-0">
-                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Record actuel</span>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs font-mono font-black text-primary">
-                    {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
-                  </span>
-                  {bestParticipant && (
-                    <span className="text-[9px] text-app-text-muted font-medium truncate max-w-[80px]">
-                      ({bestParticipant.name})
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="hidden sm:block h-5 w-px bg-app-card-border" />
-
-            {/* Temps moyen */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-accent shrink-0">
-                <Clock size={13} />
-              </div>
-              <div>
-                <span className="text-[9px] uppercase font-bold text-app-text-muted block leading-none">Temps moyen</span>
-                <span className="text-xs font-mono font-bold text-app-text">
-                  {averageTimeMs ? formatTime(averageTimeMs) : '--:--.--'}
-                </span>
-              </div>
-            </div>
+            <StatTile icon={Clock} label="Temps moyen" tone="accent">
+              <span className="text-sm font-mono font-bold text-app-text">
+                {averageTimeMs ? formatTime(averageTimeMs) : '--:--.--'}
+              </span>
+            </StatTile>
           </div>
 
           {/* Grille des 5 pistes d'arbitrage */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {Object.values(tracks).map((track, idx) => {
-              const assignableParticipants = participants.filter(
-                (p) => !Object.values(tracks).some((t) => t.participantId === p.id)
-              );
 
               // La 5e piste s'étale sur les 2 colonnes pour un équilibre parfait
               const isFifthTrack = Object.values(tracks).length === 5 && idx === 4;
@@ -1657,15 +1429,12 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 </p>
               ) : (
                 filteredParticipants.map((p) => {
-                  const hasTime = typeof p.timeMs === 'number' && p.timeMs > 0;
+                  const hasTime = hasValidTime(p);
                   const assignedTrack = Object.values(tracks).find((t) => t.participantId === p.id);
                   const isAssigned = Boolean(assignedTrack);
                   const isManualEditing = manualScoreParticipantId === p.id;
 
-                  // Rang calculé parmi les classés
-                  const rankIndex = hasTime
-                    ? rankedParticipants.findIndex((rp) => rp.id === p.id) + 1
-                    : null;
+                  const rankIndex = rankMap.get(p.id) ?? null;
 
                   return (
                     <div
@@ -1682,19 +1451,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             {rankIndex !== null ? (
-                              <span
-                                className={`font-mono font-black text-[9px] px-1.5 py-0.5 rounded ${
-                                  rankIndex === 1
-                                    ? 'bg-amber-400 text-slate-950'
-                                    : rankIndex === 2
-                                      ? 'bg-slate-200 text-slate-950'
-                                      : rankIndex === 3
-                                        ? 'bg-amber-700 text-amber-100'
-                                        : 'bg-primary/20 text-primary font-bold'
-                                }`}
-                              >
-                                #{rankIndex}
-                              </span>
+                              <RankBadge rank={rankIndex} className="text-[10px]" />
                             ) : (
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
                             )}
@@ -1738,7 +1495,6 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                                 setManualScoreParticipantId(null);
                               } else {
                                 setManualScoreParticipantId(p.id);
-                                setManualScoreInput(hasTime ? formatTime(p.timeMs!) : '');
                               }
                             }}
                             title="Saisir ou corriger le temps manuellement"
@@ -1774,42 +1530,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                       {/* Zone de saisie manuelle de score inline */}
                       {isManualEditing && (
-                        <div className="pt-1.5 border-t border-app-card-border flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={manualScoreInput}
-                            onChange={(e) => setManualScoreInput(e.target.value)}
-                            placeholder="01:24.50"
-                            aria-label={`Temps de ${p.name} (MM:SS.cc ou secondes)`}
-                            className="flex-1 bg-app-input border border-primary rounded-lg px-2 py-0.5 text-app-text font-mono text-xs focus:outline-none"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const ms = parseTimeInputToMs(manualScoreInput);
-                                if (ms) handleUpdateScoreManually(p.id, ms);
-                                else showToast('Format attendu : MM:SS.cc ou secondes', 'warning');
-                              }
-                              if (e.key === 'Escape') setManualScoreParticipantId(null);
-                            }}
-                            autoFocus
+                        <div className="pt-1.5 border-t border-app-card-border">
+                          <InlineTimeEditor
+                            initialValue={hasTime ? formatTime(p.timeMs!) : ''}
+                            participantName={p.name}
+                            onSubmit={(ms) => handleUpdateScoreManually(p.id, ms)}
+                            onCancel={() => setManualScoreParticipantId(null)}
                           />
-                          <button
-                            onClick={() => {
-                              const ms = parseTimeInputToMs(manualScoreInput);
-                              if (ms) handleUpdateScoreManually(p.id, ms);
-                              else showToast('Format attendu : MM:SS.cc ou secondes', 'warning');
-                            }}
-                            className="px-2 py-0.5 rounded-lg bg-primary text-secondary font-bold text-[9px] uppercase cursor-pointer"
-                          >
-                            OK
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setManualScoreParticipantId(null)}
-                            aria-label="Annuler la saisie du temps"
-                            className="p-1.5 rounded-lg text-app-text-muted hover:text-app-text cursor-pointer"
-                          >
-                            <X size={14} aria-hidden="true" />
-                          </button>
                         </div>
                       )}
                     </div>
@@ -1851,37 +1578,11 @@ function AdminTrackBlock({
   onSave
 }: AdminTrackBlockProps) {
   const waitingParticipants = assignableParticipants
-    .filter((p) => p.timeMs === null || p.timeMs <= 0)
+    .filter((p) => !hasValidTime(p))
     .sort((a, b) => a.registeredAt - b.registeredAt);
-  const retryParticipants = assignableParticipants.filter(
-    (p) => typeof p.timeMs === 'number' && p.timeMs > 0
-  );
+  const retryParticipants = assignableParticipants.filter(hasValidTime);
 
-  // Chronométrage interne fluide et ultra-réactif
-  const [time, setTime] = useState(0);
-  const intervalRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (track.isRunning && track.startTime !== null) {
-      const tick = () => {
-        setTime(networkManager.now() - track.startTime! + track.elapsedBeforeStart);
-      };
-      tick();
-      intervalRef.current = window.setInterval(tick, 10);
-    } else {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      setTime(track.elapsedBeforeStart);
-    }
-
-    return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [track.isRunning, track.startTime, track.elapsedBeforeStart]);
+  const time = useTrackElapsed(track);
 
   const hasElapsed = track.isRunning || time > 0;
 
@@ -2185,47 +1886,21 @@ function AdminTrackBlock({
 // ============================================================================
 // COMPOSANT : Bloc de Piste de l'Écran Public
 // ============================================================================
-interface PublicTrackBlockProps {
-  track: TrackState;
-  heightClass?: string;
-  isSingle?: boolean;
-  bestTimeMs?: number | null;
-  secondTimeMs?: number | null;
-  thirdTimeMs?: number | null;
+interface PodiumTimes {
+  best: number | null;
+  second: number | null;
+  third: number | null;
 }
 
-function PublicTrackBlock({
-  track,
-  heightClass = 'h-full',
-  isSingle = false,
-  bestTimeMs = null,
-  secondTimeMs = null,
-  thirdTimeMs = null
-}: PublicTrackBlockProps) {
-  const [time, setTime] = useState(0);
-  const intervalRef = useRef<number | null>(null);
+interface PublicTrackBlockProps {
+  track: TrackState;
+  isSingle?: boolean;
+  podiumTimes: PodiumTimes;
+}
 
-  useEffect(() => {
-    if (track.isRunning && track.startTime !== null) {
-      const tick = () => {
-        setTime(networkManager.now() - track.startTime! + track.elapsedBeforeStart);
-      };
-      tick();
-      intervalRef.current = window.setInterval(tick, 10);
-    } else {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      setTime(track.elapsedBeforeStart);
-    }
-
-    return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [track.isRunning, track.startTime, track.elapsedBeforeStart]);
+function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackBlockProps) {
+  const { best: bestTimeMs, second: secondTimeMs, third: thirdTimeMs } = podiumTimes;
+  const time = useTrackElapsed(track);
 
   const hasBestRecord = typeof bestTimeMs === 'number' && bestTimeMs > 0;
   const showPaceGauge = hasBestRecord && (track.isRunning || time > 0);
@@ -2269,7 +1944,7 @@ function PublicTrackBlock({
 
   return (
     <div
-      className={`relative overflow-hidden p-4 sm:p-5 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between ${heightClass} ${
+      className={`relative overflow-hidden p-4 sm:p-5 rounded-3xl bg-app-card border shadow-lg flex flex-col justify-between h-full ${
         track.isRunning ? borderClass : 'border-app-card-border'
       }`}
     >
@@ -2358,14 +2033,8 @@ interface PublicParticipantsTickerProps {
 
 function PublicParticipantsTicker({ participants, eventName, prizes }: PublicParticipantsTickerProps) {
   // Trier les participants : ceux avec un temps valide d'abord (du meilleur au moins bon), puis inscrits récents
-  const sorted = [...participants].sort((a, b) => {
-    const aHasTime = typeof a.timeMs === 'number' && a.timeMs > 0;
-    const bHasTime = typeof b.timeMs === 'number' && b.timeMs > 0;
-    if (aHasTime && bHasTime) return a.timeMs! - b.timeMs!;
-    if (aHasTime && !bHasTime) return -1;
-    if (!aHasTime && bHasTime) return 1;
-    return b.registeredAt - a.registeredAt;
-  });
+  const sorted = [...participants].sort(compareByRank);
+  const rankMap = buildRankMap(participants);
 
   if (sorted.length === 0) {
     return (
@@ -2400,11 +2069,8 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
       >
         <div className="animate-ticker flex items-center gap-2 sm:gap-3 py-1">
           {displayItems.map((p, idx) => {
-            const hasTime = typeof p.timeMs === 'number' && p.timeMs > 0;
-            // Calculer le rang parmi ceux qui ont un temps
-            const rankIndex = hasTime
-              ? sorted.filter((sp) => typeof sp.timeMs === 'number' && sp.timeMs! < p.timeMs!).length + 1
-              : null;
+            const hasTime = hasValidTime(p);
+            const rankIndex = rankMap.get(p.id) ?? null;
 
             // Insérer une puce événementielle spéciale toutes les 4 personnes
             const isEventDivider = idx > 0 && idx % 4 === 0;
@@ -2429,19 +2095,7 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
 
                 <div className="shrink-0 flex items-center gap-2 px-3 py-1 rounded-xl bg-app-input border border-app-card-border shadow-sm text-kiosk-caption">
                   {rankIndex !== null ? (
-                    <span
-                      className={`font-mono font-black px-2 py-0.5 rounded-md ${
-                        rankIndex === 1
-                          ? 'bg-amber-500/25 text-amber-300 border border-amber-400/60 shadow-sm'
-                          : rankIndex === 2
-                          ? 'bg-slate-300/20 text-slate-200 border border-slate-300/50 shadow-sm'
-                          : rankIndex === 3
-                          ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
-                          : 'bg-primary/20 text-primary border border-primary/40'
-                      }`}
-                    >
-                      #{rankIndex}
-                    </span>
+                    <RankBadge rank={rankIndex} />
                   ) : (
                     <span className="px-1 py-0.5 rounded bg-primary/10 text-primary font-bold" aria-hidden="true">⭐</span>
                   )}

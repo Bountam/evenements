@@ -3,6 +3,7 @@ import { Participant, RaffleState } from '../../types';
 import { Sparkles, Trophy, Shuffle, RefreshCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { networkManager } from '../../network';
+import { RAFFLE_DURATION_MS } from '../../utils/raffle';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface RaffleSpinnerProps {
@@ -35,7 +36,7 @@ export default function RaffleSpinner({
   useEffect(() => {
     if (state.status === 'spinning' && state.spinStartTime && eligibleParticipants.length > 0) {
       let intervalId: number;
-      const duration = 10000; // 10 secondes strictes
+      const duration = RAFFLE_DURATION_MS;
       
       const animate = () => {
         const elapsed = networkManager.now() - state.spinStartTime!;

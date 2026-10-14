@@ -1,39 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Participant } from '../../types';
 import { formatTime } from './Stopwatch';
-import { Trophy, Clock, Medal, RotateCcw, Edit3, Check, X, Play, Crown, Sparkles } from 'lucide-react';
+import { Trophy, Clock, Medal, Crown, Sparkles } from 'lucide-react';
+import { getRankedParticipants } from '../../utils/ranking';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface LeaderboardProps {
   participants: Participant[];
   highlightId?: string | null;
-  isAdmin?: boolean;
   compact?: boolean;
-  onResetScore?: (participantId: string) => void;
-  onUpdateScore?: (participantId: string, newTimeMs: number) => void;
-  onSendToTrack?: (participantId: string) => void;
-}
-
-export function parseTimeInputToMs(input: string): number | null {
-  const clean = input.trim();
-  if (!clean) return null;
-
-  // Format MM:SS.cc ou MM:SS
-  if (clean.includes(':')) {
-    const [minPart, secPart] = clean.split(':');
-    const minutes = parseInt(minPart, 10);
-    const secondsFloat = parseFloat(secPart.replace(',', '.'));
-    if (isNaN(minutes) || isNaN(secondsFloat) || minutes < 0 || secondsFloat < 0) return null;
-    return Math.round((minutes * 60 + secondsFloat) * 1000);
-  }
-
-  // Format secondes (ex: "45.5" ou "82")
-  const secondsOnly = parseFloat(clean.replace(',', '.'));
-  if (!isNaN(secondsOnly) && secondsOnly > 0) {
-    return Math.round(secondsOnly * 1000);
-  }
-
-  return null;
 }
 
 function formatDelta(deltaMs: number): string {
@@ -45,72 +20,34 @@ function formatDelta(deltaMs: number): string {
   return `+${formatTime(deltaMs)}`;
 }
 
-export default function Leaderboard({
-  participants,
-  highlightId = null,
-  isAdmin = false,
-  compact = false,
-  onResetScore,
-  onUpdateScore,
-  onSendToTrack
-}: LeaderboardProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
-
-  // Filtrer les participants qui ont complété le défi (temps strictement positif) et trier par temps croissant
-  const rankedParticipants = participants
-    .filter((p) => typeof p.timeMs === 'number' && p.timeMs > 0)
-    .sort((a, b) => a.timeMs! - b.timeMs!);
-
-  const bestTimeMs = rankedParticipants.length > 0 ? rankedParticipants[0].timeMs! : null;
-  const firstPlace = rankedParticipants[0] || null;
-  const secondPlace = rankedParticipants[1] || null;
-  const thirdPlace = rankedParticipants[2] || null;
-
-  // Sur l'écran public, n'afficher que les participants à partir du 4e rang pour éviter le doublon avec le podium Top 3
-  const pursuitParticipants = isAdmin ? rankedParticipants : rankedParticipants.slice(3);
-
-  const startEditing = (p: Participant) => {
-    setEditingId(p.id);
-    setEditValue(formatTime(p.timeMs || 0));
-  };
-
-  const saveEdit = (participantId: string) => {
-    const parsedMs = parseTimeInputToMs(editValue);
-    if (parsedMs !== null && parsedMs > 0 && onUpdateScore) {
-      onUpdateScore(participantId, parsedMs);
-      setEditingId(null);
-    }
-  };
-
-  const getRankBadge = (index: number) => {
-    switch (index) {
-      case 0:
-        return (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0 border-2 border-yellow-200">
-            <Trophy size={16} />
-          </div>
-        );
-      case 1:
-        return (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0 border-2 border-slate-200">
-            <Medal size={16} />
-          </div>
-        );
-      case 2:
-        return (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-amber-100 flex items-center justify-center font-black shadow-md shrink-0 border-2 border-amber-500">
-            <Medal size={16} />
-          </div>
-        );
-      default:
-        return (
-          <div className="w-8 h-8 rounded-full bg-app-card border-2 border-app-card-border flex items-center justify-center text-app-text-muted font-bold text-xs shrink-0">
-            {index + 1}
-          </div>
-        );
-    }
-  };
+function getRankBadge(index: number) {
+  switch (index) {
+    case 0:
+      return (
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0 border-2 border-yellow-200">
+          <Trophy size={16} />
+        </div>
+      );
+    case 1:
+      return (
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0 border-2 border-slate-200">
+          <Medal size={16} />
+        </div>
+      );
+    case 2:
+      return (
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-amber-100 flex items-center justify-center font-black shadow-md shrink-0 border-2 border-amber-500">
+          <Medal size={16} />
+        </div>
+      );
+    default:
+      return (
+        <div className="w-8 h-8 rounded-full bg-app-card border-2 border-app-card-border flex items-center justify-center text-app-text-muted font-bold text-xs shrink-0">
+          {index + 1}
+        </div>
+      );
+  }
+}
 
 interface PodiumStepProps {
   rank: 1 | 2 | 3;
@@ -235,6 +172,22 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
   );
 }
 
+
+export default function Leaderboard({
+  participants,
+  highlightId = null,
+  compact = false
+}: LeaderboardProps) {
+  const rankedParticipants = getRankedParticipants(participants);
+
+  const bestTimeMs = rankedParticipants.length > 0 ? rankedParticipants[0].timeMs! : null;
+  const firstPlace = rankedParticipants[0] || null;
+  const secondPlace = rankedParticipants[1] || null;
+  const thirdPlace = rankedParticipants[2] || null;
+
+  // Le podium affiche le top 3 : la liste reprend à partir du 4e rang
+  const pursuitParticipants = rankedParticipants.slice(3);
+
   return (
     <div className={`bg-app-card border border-app-card-border ${compact ? 'p-3 sm:p-4 rounded-2xl' : 'p-5 sm:p-6 rounded-3xl'} shadow-lg flex flex-col h-full min-h-0`}>
       <div className={`flex items-center justify-between ${compact ? 'mb-2 pb-2' : 'mb-4 pb-3'} border-b border-app-card-border shrink-0`}>
@@ -279,22 +232,17 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
                 </p>
               </div>
             ) : (
-              <ol role="list" className="space-y-2">
+              <ol start={4} className="space-y-2">
                 <AnimatePresence mode="popLayout">
                   {pursuitParticipants.map((participant, index) => {
                     const isHighlighted = participant.id === highlightId;
-                    const isEditing = editingId === participant.id;
-                    const actualRank = isAdmin ? index + 1 : index + 4;
-                    const deltaMs =
-                      bestTimeMs !== null && participant.timeMs! > bestTimeMs
-                        ? participant.timeMs! - bestTimeMs
-                        : 0;
+                    const rank = index + 4;
+                    const deltaMs = bestTimeMs !== null ? participant.timeMs! - bestTimeMs : 0;
 
                     return (
                       <motion.li
                         key={participant.id}
                         layout
-                        role="listitem"
                         initial={{ opacity: 0, y: 10, scale: 0.98 }}
                         animate={{
                           opacity: 1,
@@ -306,134 +254,31 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
                         className={`flex items-center justify-between p-3 rounded-xl transition gap-2 ${
                           isHighlighted
                             ? 'bg-primary/20 border-2 border-primary shadow-md shadow-primary/15'
-                            : 'bg-app-card border border-app-card-border hover:border-primary/50'
+                            : 'bg-app-card border border-app-card-border'
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          {getRankBadge(actualRank - 1)}
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4
-                                className={`font-bold text-app-text font-sans ${compact ? 'text-kiosk-caption' : 'text-kiosk-body'} truncate`}
-                                title={participant.name}
-                              >
-                                {participant.name}
-                              </h4>
-                              {actualRank === 1 && (
-                                <span className="text-kiosk-caption px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 font-display uppercase font-black shrink-0">
-                                  Record
-                                </span>
-                              )}
-                            </div>
-                            {isAdmin && participant.postalCode && (
-                              <span className="text-[10px] text-app-text-muted font-sans uppercase block mt-0.5">
-                                {participant.postalCode}
-                              </span>
-                            )}
-                          </div>
+                          {getRankBadge(rank - 1)}
+                          <h4
+                            className={`font-bold text-app-text font-sans ${compact ? 'text-kiosk-caption' : 'text-kiosk-body'} truncate`}
+                            title={participant.name}
+                          >
+                            {participant.name}
+                          </h4>
                         </div>
 
-                        {/* Temps chronométré + Écart à droite + actions admin */}
                         <div className="flex items-center gap-2 shrink-0">
-                          {isEditing ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="text"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                placeholder="01:23.45"
-                                aria-label={`Modifier le temps chronométré de ${participant.name}`}
-                                className="w-24 bg-app-input border border-primary rounded-lg px-2 py-1 text-app-text font-mono text-xs focus:outline-none"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveEdit(participant.id);
-                                  if (e.key === 'Escape') setEditingId(null);
-                                }}
-                                autoFocus
-                              />
-                              <button
-                                type="button"
-                                onClick={() => saveEdit(participant.id)}
-                                title="Valider le nouveau temps"
-                                aria-label="Valider le nouveau temps"
-                                className="p-1 rounded bg-primary text-secondary hover:scale-105 cursor-pointer"
-                              >
-                                <Check size={12} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingId(null)}
-                                title="Annuler"
-                                aria-label="Annuler l'édition"
-                                className="p-1 rounded bg-app-input text-app-text-muted hover:text-app-text cursor-pointer"
-                              >
-                                <X size={12} />
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              {deltaMs > 0 && (
-                                <span className="font-mono text-kiosk-caption font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
-                                  {formatDelta(deltaMs)}
-                                </span>
-                              )}
-
-                              <div
-                                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border ${
-                                  actualRank === 1
-                                    ? 'score-badge-gold bg-primary/15 border-primary/40 text-primary'
-                                    : 'score-badge-standard border-app-card-border'
-                                }`}
-                              >
-                                <Clock size={12} className={actualRank === 1 ? 'text-primary' : 'text-app-text-muted'} />
-                                <span
-                                  className={`font-mono font-extrabold text-kiosk-body tabular-nums ${
-                                    actualRank === 1 ? 'text-primary' : 'text-app-text'
-                                  }`}
-                                >
-                                  {formatTime(participant.timeMs!)}
-                                </span>
-                              </div>
-
-                              {isAdmin && (
-                                <div className="flex items-center gap-1 ml-1 pl-2 border-l border-app-card-border">
-                                  {onSendToTrack && (
-                                    <button
-                                      type="button"
-                                      onClick={() => onSendToTrack(participant.id)}
-                                      title="Nouvelle tentative (envoyer sur une piste libre)"
-                                      aria-label="Nouvelle tentative"
-                                      className="p-1 rounded-lg text-app-text-muted hover:text-primary hover:bg-primary/10 transition cursor-pointer"
-                                    >
-                                      <Play size={12} />
-                                    </button>
-                                  )}
-                                  {onUpdateScore && (
-                                    <button
-                                      type="button"
-                                      onClick={() => startEditing(participant)}
-                                      title="Corriger / modifier ce temps manuellement"
-                                      aria-label="Modifier le temps manuellement"
-                                      className="p-1 rounded-lg text-app-text-muted hover:text-app-text hover:bg-app-input transition cursor-pointer"
-                                    >
-                                      <Edit3 size={12} />
-                                    </button>
-                                  )}
-                                  {onResetScore && (
-                                    <button
-                                      type="button"
-                                      onClick={() => onResetScore(participant.id)}
-                                      title="Effacer ce temps (remettre en attente)"
-                                      aria-label="Effacer ce temps"
-                                      className="p-1 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer"
-                                    >
-                                      <RotateCcw size={12} />
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </>
+                          {deltaMs > 0 && (
+                            <span className="font-mono text-kiosk-caption font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
+                              {formatDelta(deltaMs)}
+                            </span>
                           )}
+                          <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg border score-badge-standard border-app-card-border">
+                            <Clock size={12} className="text-app-text-muted" aria-hidden="true" />
+                            <span className="font-mono font-extrabold text-kiosk-body tabular-nums text-app-text">
+                              {formatTime(participant.timeMs!)}
+                            </span>
+                          </div>
                         </div>
                       </motion.li>
                     );

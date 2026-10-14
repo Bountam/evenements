@@ -57,3 +57,6 @@ export function storeRaffle(eventId: string, state: RaffleState) {
     // Ignorer quota localStorage
   }
 }
+
+// Durée de l'animation du tirage, partagée par l'écran public et la console
+export const RAFFLE_DURATION_MS = 10000;
