@@ -109,7 +109,7 @@ export default function DashboardShell({
             </motion.div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 text-[10px] font-black uppercase font-display tracking-widest shrink-0">
+                <span className="px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 text-kiosk-caption font-black uppercase font-display tracking-widest shrink-0">
                   Concours Insertech
                 </span>
                 <h1
@@ -334,7 +334,7 @@ export default function DashboardShell({
       {/* Zone de contenu principale débridée en largeur (jusqu'à 1850px) */}
       <main className={`flex-1 w-full transition-all duration-300 ${
         isPublicView 
-          ? 'min-h-[calc(100vh-64px)] lg:h-[calc(100vh-64px)] overflow-y-auto lg:overflow-hidden p-2 sm:p-4 flex flex-col kiosk-auto-scroll' 
+          ? 'flex-1 min-h-0 overflow-y-auto lg:overflow-hidden p-2 sm:p-4 flex flex-col kiosk-auto-scroll' 
           : event.type === 'kiosque_concours'
             ? 'max-w-[1850px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex-1 flex flex-col min-h-0'
             : 'max-w-[1850px] mx-auto px-4 md:px-6 py-4 md:py-6'

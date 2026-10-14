@@ -10,6 +10,12 @@
   --app-input: rgba(24, 10, 43, 0.8);
   --app-input-border: rgba(147, 51, 234, 0.3);
   --app-header: rgba(24, 10, 43, 0.6);
+
+  /* Couleurs d'état lisibles dans les deux thèmes */
+  --app-success: #34d399;
+  --app-danger: #f87171;
+  --app-info: #60a5fa;
+  --app-accent: #c084fc;
 }
 
 .light, html.light, body.light {
@@ -22,6 +28,10 @@
   --app-input: #ffffff;
   --app-input-border: #cbd5e1;
   --app-header: rgba(255, 255, 255, 0.8);
+  --app-success: #15803d;
+  --app-danger: #b91c1c;
+  --app-info: #1d4ed8;
+  --app-accent: #7e22ce;
 
   /* --- AMÉLIORATION DU CONTRASTE ET LISIBILITÉ EN MODE CLAIR --- */
   
@@ -329,6 +339,15 @@
   --color-app-input: var(--app-input);
   --color-app-input-border: var(--app-input-border);
   --color-app-header: var(--app-header);
+  --color-success: var(--app-success);
+  --color-danger: var(--app-danger);
+  --color-info: var(--app-info);
+  --color-accent: var(--app-accent);
+
+  /* Échelle typographique de l'écran projeté (lisible à plusieurs mètres) */
+  --text-kiosk-caption: clamp(0.875rem, 0.95vw, 1.25rem);
+  --text-kiosk-body: clamp(1rem, 1.25vw, 1.6rem);
+  --text-kiosk-title: clamp(1.15rem, 1.6vw, 2.1rem);
 
   /* Fallbacks de compatibilité */
   --color-accent-dark: var(--app-bg);
@@ -378,6 +397,11 @@
   :focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
+  }
+
+  /* Le vert Insertech est trop clair sur fond blanc : contour violet en thème clair (WCAG 2.4.11) */
+  .light :focus-visible {
+    outline-color: var(--color-secondary);
   }
 
   .tabular-nums {
@@ -443,7 +467,8 @@
   }
 }
 
-main, .grid, form, section, .glass-card {
+/* Animation d'entrée en opt-in (l'ancienne règle globale rejouait à chaque bascule de vue du kiosque) */
+.enter-fade, .glass-card {
   animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -494,15 +519,15 @@ button:disabled {
 }
 
 /* Effets Hover Premium sur les grilles de sélection de matrices d'activité */
-[class*="grid-cols-1"] button {
+.matrix-grid button {
   transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
-[class*="grid-cols-1"] button:hover {
+.matrix-grid button:hover {
   transform: translateY(-4px) scale(1.015) !important;
   border-color: rgba(158, 205, 51, 0.6) !important;
   box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3) !important;
 }
-.light [class*="grid-cols-1"] button:hover {
+.light .matrix-grid button:hover {
   border-color: rgba(72, 10, 148, 0.4) !important;
   box-shadow: 0 20px 40px -15px rgba(72, 10, 148, 0.12) !important;
 }
@@ -540,6 +565,13 @@ button:disabled {
 
 .animate-spin-slow {
   animation: spin-slow 10s linear infinite;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Scrollbars personnalisés */
