@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { EventSettings, Participant, TrackState, RaffleState } from '../../types';
 import { db, registerSyncListener } from '../../db';
 import { networkManager } from '../../network';
@@ -6,6 +6,8 @@ import Stopwatch, { formatTime } from '../shared/Stopwatch';
 import Leaderboard, { parseTimeInputToMs } from '../shared/Leaderboard';
 import RaffleSpinner from '../shared/RaffleSpinner';
 import { showToast } from '../shared/Toast';
+import PrizeEditorModal, { PrizeImage } from '../shared/PrizeEditorModal';
+import { ContestPrizes, getContestPrizes, serializeContestPrizes } from '../../utils/prizes';
 import confetti from 'canvas-confetti';
 import {
   UserPlus,
@@ -31,7 +33,8 @@ import {
   Laptop,
   Gift,
   Zap,
-  Square
+  Square,
+  Settings2
 } from 'lucide-react';
 
 interface TeardownMatrixProps {
@@ -70,6 +73,7 @@ interface PrizeShowcaseCardProps {
   title: string;
   imageSrc: string;
   imageAlt: string;
+  imageKind: keyof ContestPrizes;
   description: string;
   gradientClass: string;
   borderClass: string;
@@ -82,6 +86,7 @@ function PrizeShowcaseCard({
   title,
   imageSrc,
   imageAlt,
+  imageKind,
   description,
   gradientClass,
   borderClass
@@ -90,9 +95,10 @@ function PrizeShowcaseCard({
     <div className={`bg-gradient-to-br ${gradientClass} via-app-card to-app-card border-2 ${borderClass} p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group`}>
       <div className="flex items-center gap-2 mb-1">
         <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-          <img
+          <PrizeImage
             src={imageSrc}
             alt={imageAlt}
+            kind={imageKind}
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
           />
         </div>
@@ -108,7 +114,7 @@ function PrizeShowcaseCard({
           </h4>
         </div>
       </div>
-      <p className="text-[10px] text-app-text-muted leading-tight font-sans">
+      <p className="text-[10px] text-app-text-muted leading-tight font-sans line-clamp-2">
         {description}
       </p>
     </div>
@@ -125,9 +131,27 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const [manualScoreInput, setManualScoreInput] = useState<string>('');
 
   // État des 5 pistes (géré en local et synchronisé via networkManager + BroadcastChannel)
-  const [tracks, setTracks] = useState<Record<number, TrackState>>(() => ({
+  const [rawTracks, setTracks] = useState<Record<number, TrackState>>(() => ({
     ...networkManager.tracksState
   }));
+
+  // Les pistes sont partagées entre tous les événements : une piste assignée par un autre
+  // événement est affichée comme libre ici (aucune écriture, simple filtre d'affichage)
+  const tracks = useMemo(() => {
+    const ownIds = new Set(participants.map((p) => p.id));
+    const result: Record<number, TrackState> = {};
+    Object.values(rawTracks).forEach((t) => {
+      const belongsHere =
+        !t.participantId || (t.eventId ? t.eventId === event.id : ownIds.has(t.participantId));
+      result[t.trackId] = belongsHere
+        ? t
+        : { trackId: t.trackId, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0, eventId: null };
+    });
+    return result;
+  }, [rawTracks, participants, event.id]);
+
+  const prizes = getContestPrizes(event);
+  const [isPrizeEditorOpen, setIsPrizeEditorOpen] = useState(false);
 
   const [raffle, setRaffle] = useState<RaffleState>({
     status: 'idle',
@@ -211,7 +235,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     };
 
     networkManager.onCelebration = (payload) => {
-      if (payload && payload.participantName) {
+      if (payload && (payload.participantName || payload.visitorName)) {
         confetti({
           particleCount: 70,
           spread: 70,
@@ -352,7 +376,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       type: 'TRACK_ASSIGN',
       trackId,
       participantId,
-      participantName
+      participantName,
+      eventId: event.id
     });
   };
 
@@ -602,11 +627,44 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     channel.close();
   };
 
+  // PRIX DU CONCOURS (propres à l'événement)
+  const handleSavePrizes = async (updated: ContestPrizes) => {
+    try {
+      const currentEvent = (await db.events.get(event.id)) || event;
+      await networkManager.writeToDatabase('events', 'put', {
+        ...currentEvent,
+        extraData: { ...currentEvent.extraData, contestPrizes: serializeContestPrizes(updated) }
+      });
+      showToast('Prix du concours enregistrés.', 'success');
+    } catch (e) {
+      console.error('Erreur enregistrement des prix :', e);
+      showToast("Erreur lors de l'enregistrement des prix.", 'error');
+      throw e;
+    }
+  };
+
   // ACTIONS PARTICIPANTS
   const addParticipant = async (e: React.FormEvent, autoAssignTrack: boolean = false) => {
     e.preventDefault();
     if (!newParticipantName.trim()) {
       showToast('Veuillez saisir le nom du participant.', 'warning');
+      return;
+    }
+
+    // Prévenir les inscriptions en double (une seule chance au tirage par personne)
+    const nameKey = normalizeName(newParticipantName);
+    const emailKey = newParticipantEmail.trim().toLowerCase();
+    const duplicate = participants.find(
+      (p) => normalizeName(p.name) === nameKey || (emailKey !== '' && (p.email || '').trim().toLowerCase() === emailKey)
+    );
+    if (
+      duplicate &&
+      !confirm(
+        `${duplicate.name}${duplicate.email ? ` (${duplicate.email})` : ''} est déjà inscrit.\n\n` +
+          `Pour une nouvelle tentative, utilisez plutôt le bouton ▶ à côté de son nom dans la file.\n\n` +
+          `Inscrire quand même un nouveau participant ?`
+      )
+    ) {
       return;
     }
 
@@ -634,7 +692,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             type: 'TRACK_ASSIGN',
             trackId: freeTrack.trackId,
             participantId: newP.id,
-            participantName: newP.name
+            participantName: newP.name,
+            eventId: event.id
           });
           showToast(`${newP.name} inscrit et assigné à la Piste ${freeTrack.trackId} !`, 'success');
         } else {
@@ -679,11 +738,14 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       : null;
 
   // Inscrits au statut "En attente" non assignés sur une piste en direct
-  const waitingForLiveRace = participants.filter(
-    (p) =>
-      (p.timeMs === null || p.timeMs <= 0) &&
-      !Object.values(tracks).some((t) => t.participantId === p.id)
-  );
+  // (ordre d'arrivée : le premier inscrit passe en premier)
+  const waitingForLiveRace = participants
+    .filter(
+      (p) =>
+        (p.timeMs === null || p.timeMs <= 0) &&
+        !Object.values(tracks).some((t) => t.participantId === p.id)
+    )
+    .sort((a, b) => a.registeredAt - b.registeredAt);
 
   // Filtrage et tri de la liste des participants
   const filteredParticipants = participants
@@ -735,16 +797,15 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               Tirage au Sort en Direct
             </h2>
             <div className="flex items-center justify-center gap-3 py-1">
-              <div className="w-12 h-12 rounded-xl bg-white p-1 border border-slate-200 shadow-sm shrink-0">
-                <img src="./prize-laptop.png" alt="TOSHIBA Dynabook" className="w-full h-full object-contain" />
+              <div className="w-12 h-12 rounded-xl bg-white p-1 border border-slate-200 shadow-sm shrink-0 flex items-center justify-center">
+                <PrizeImage src={prizes.raffle.image} alt={prizes.raffle.title} kind="raffle" />
               </div>
               <div className="text-left">
                 <p className="text-sm font-black text-app-text">
-                  TOSHIBA Dynabook Portégé X40-G i5 (10e gen) <span className="text-primary font-mono">• Valeur 500$</span>
+                  {prizes.raffle.title}
+                  {prizes.raffle.value && <span className="text-primary font-mono"> • Valeur {prizes.raffle.value}</span>}
                 </p>
-                <p className="text-xs text-app-text-muted">
-                  Reconditionné par Insertech • Tiré au sort parmi TOUS les participants !
-                </p>
+                <p className="text-xs text-app-text-muted">{prizes.raffle.description}</p>
               </div>
             </div>
           </div>
@@ -811,12 +872,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                 {/* Vitrine officielle des 2 Prix en jeu avec photos agrandies */}
                 <div className="grid grid-cols-1 gap-2.5 flex-1 min-h-0">
-                  {/* Prix #1 : Meilleur Temps - Disque SSD portable 128 Go */}
+                  {/* Prix #1 : Meilleur chrono */}
                   <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-500/40 p-3 sm:p-3.5 rounded-3xl shadow-md flex items-center gap-3.5 relative overflow-hidden group">
                     <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md overflow-hidden">
-                      <img
-                        src="./prize-ssd.png"
-                        alt="Disque SSD Portable 128 Go"
+                      <PrizeImage
+                        src={prizes.best.image}
+                        alt={prizes.best.title}
+                        kind="best"
                         className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                       />
                     </div>
@@ -826,22 +888,28 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                           1er Prix
                         </span>
                         <span className="text-[10px] font-bold text-app-text-muted uppercase">Meilleur chrono</span>
+                        {prizes.best.value && (
+                          <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-500 border border-amber-500/40 text-[9px] font-black font-mono">
+                            Valeur {prizes.best.value}
+                          </span>
+                        )}
                       </div>
                       <h4 className="text-sm sm:text-base font-black text-app-text font-display uppercase tracking-tight mt-0.5 leading-tight truncate">
-                        Disque SSD portable 128 Go
+                        {prizes.best.title}
                       </h4>
-                      <p className="text-[11px] text-app-text-muted mt-0.5 leading-snug">
-                        Boîtier rapide USB-C avec outils de diagnostic PC intégrés.
+                      <p className="text-[11px] text-app-text-muted mt-0.5 leading-snug line-clamp-2">
+                        {prizes.best.description}
                       </p>
                     </div>
                   </div>
 
-                  {/* Prix de Participation : Tirage TOSHIBA Dynabook Portégé X40-G i5 (10e gen) 500$ */}
+                  {/* Prix de participation : tirage au sort parmi tous les participants */}
                   <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-3 sm:p-3.5 rounded-3xl shadow-md flex items-center gap-3.5 relative overflow-hidden group">
                     <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md overflow-hidden">
-                      <img
-                        src="./prize-laptop.png"
-                        alt="TOSHIBA Dynabook Portégé X40-G"
+                      <PrizeImage
+                        src={prizes.raffle.image}
+                        alt={prizes.raffle.title}
+                        kind="raffle"
                         className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                       />
                     </div>
@@ -850,15 +918,17 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                         <span className="px-2.5 py-0.5 rounded-md bg-purple-500/25 text-purple-200 border border-purple-400/50 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
                           Tirage au sort
                         </span>
-                        <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary border border-primary/40 text-[9px] font-black font-mono">
-                          Valeur 500$
-                        </span>
+                        {prizes.raffle.value && (
+                          <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary border border-primary/40 text-[9px] font-black font-mono">
+                            Valeur {prizes.raffle.value}
+                          </span>
+                        )}
                       </div>
                       <h4 className="text-sm sm:text-base font-black text-app-text font-display uppercase tracking-tight mt-0.5 leading-tight truncate">
-                        TOSHIBA Dynabook Portégé X40-G
+                        {prizes.raffle.title}
                       </h4>
-                      <p className="text-[11px] text-app-text-muted mt-0.5 leading-snug">
-                        Intel Core i5 (10e gen) reconditionné par Insertech. Tiré parmi TOUS les participants !
+                      <p className="text-[11px] text-app-text-muted mt-0.5 leading-snug line-clamp-2">
+                        {prizes.raffle.description}
                       </p>
                     </div>
                   </div>
@@ -1032,21 +1102,24 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   <PrizeShowcaseCard
                     badgeText="1er Prix"
                     badgeClass="bg-amber-500/20 text-amber-300 border border-amber-400/50"
-                    title="SSD 128 Go"
-                    imageSrc="./prize-ssd.png"
-                    imageAlt="Disque SSD Portable 128 Go"
-                    description="Boîtier USB-C avec diagnostic PC."
+                    tag={prizes.best.value || undefined}
+                    title={prizes.best.shortTitle || prizes.best.title}
+                    imageSrc={prizes.best.image}
+                    imageAlt={prizes.best.title}
+                    imageKind="best"
+                    description={prizes.best.description}
                     gradientClass="from-amber-500/10"
                     borderClass="border-amber-500/40"
                   />
                   <PrizeShowcaseCard
                     badgeText="Tirage"
                     badgeClass="bg-purple-500/25 text-purple-200 border border-purple-400/50"
-                    tag="500$"
-                    title="Portégé X40-G"
-                    imageSrc="./prize-laptop.png"
-                    imageAlt="TOSHIBA Dynabook Portégé X40-G"
-                    description="Laptop i5 tiré parmi tous !"
+                    tag={prizes.raffle.value || undefined}
+                    title={prizes.raffle.shortTitle || prizes.raffle.title}
+                    imageSrc={prizes.raffle.image}
+                    imageAlt={prizes.raffle.title}
+                    imageKind="raffle"
+                    description={prizes.raffle.description}
                     gradientClass="from-purple-500/10"
                     borderClass="border-primary/50"
                   />
@@ -1057,7 +1130,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         </div>
 
         {/* Ruban Défilant Continu (Ticker de tous les participants et leurs scores) */}
-        <PublicParticipantsTicker participants={participants} eventName={event.name} />
+        <PublicParticipantsTicker participants={participants} eventName={event.name} prizes={prizes} />
       </div>
     );
   }
@@ -1102,6 +1175,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           </button>
         </div>
       )}
+
+      <PrizeEditorModal
+        isOpen={isPrizeEditorOpen}
+        prizes={prizes}
+        onClose={() => setIsPrizeEditorOpen(false)}
+        onSave={handleSavePrizes}
+      />
 
       {/* Cockpit 3 Colonnes Zéro-Scroll */}
       <div
@@ -1241,10 +1321,19 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 </div>
               </div>
             ) : (
-              <p className="text-[9px] text-app-text-muted text-center font-sans">
-                Prix : Laptop Dynabook Portégé X40-G Insertech
+              <p className="text-[9px] text-app-text-muted text-center font-sans truncate">
+                Prix : {prizes.raffle.title}
               </p>
             )}
+
+            <button
+              type="button"
+              onClick={() => setIsPrizeEditorOpen(true)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-app-input border border-app-card-border text-app-text-muted hover:text-app-text hover:border-primary text-[10px] font-bold uppercase tracking-wider transition cursor-pointer"
+            >
+              <Settings2 size={12} />
+              <span>Modifier les prix</span>
+            </button>
           </div>
         </div>
 
@@ -1587,9 +1676,9 @@ function AdminTrackBlock({
   onAdjustTime,
   onSave
 }: AdminTrackBlockProps) {
-  const waitingParticipants = assignableParticipants.filter(
-    (p) => p.timeMs === null || p.timeMs <= 0
-  );
+  const waitingParticipants = assignableParticipants
+    .filter((p) => p.timeMs === null || p.timeMs <= 0)
+    .sort((a, b) => a.registeredAt - b.registeredAt);
   const retryParticipants = assignableParticipants.filter(
     (p) => typeof p.timeMs === 'number' && p.timeMs > 0
   );
@@ -1941,7 +2030,7 @@ function PublicTrackBlock({
     } else if (thirdTimeMs && time < thirdTimeMs) {
       paceLabel = `En course pour le Podium 3e place (${formatTime(thirdTimeMs)}) 🥉 & Tirage 🎁`;
     } else {
-      paceLabel = 'En course pour le Podium & Tirage au sort Laptop 🎁';
+      paceLabel = 'En course pour le Podium & Tirage au sort 🎁';
     }
   } else if (paceRatio >= 0.8) {
     // Phase 2 : Zone critique (80% à 100% du record)
@@ -2035,9 +2124,10 @@ function PublicTrackBlock({
 interface PublicParticipantsTickerProps {
   participants: Participant[];
   eventName?: string;
+  prizes: ContestPrizes;
 }
 
-function PublicParticipantsTicker({ participants, eventName }: PublicParticipantsTickerProps) {
+function PublicParticipantsTicker({ participants, eventName, prizes }: PublicParticipantsTickerProps) {
   // Trier les participants : ceux avec un temps valide d'abord (du meilleur au moins bon), puis inscrits récents
   const sorted = [...participants].sort((a, b) => {
     const aHasTime = typeof a.timeMs === 'number' && a.timeMs > 0;
@@ -2097,12 +2187,12 @@ function PublicParticipantsTicker({ participants, eventName }: PublicParticipant
                     {idx % 8 === 0 ? (
                       <>
                         <Trophy size={12} className="text-amber-500 shrink-0" />
-                        <span>1er Prix : SSD 128 Go</span>
+                        <span>1er Prix : {prizes.best.shortTitle || prizes.best.title}</span>
                       </>
                     ) : (
                       <>
                         <Gift size={12} className="text-purple-400 shrink-0" />
-                        <span>Tirage : Laptop Dynabook X40</span>
+                        <span>Tirage : {prizes.raffle.shortTitle || prizes.raffle.title}</span>
                       </>
                     )}
                   </div>
@@ -2147,3 +2237,12 @@ function PublicParticipantsTicker({ participants, eventName }: PublicParticipant
 }
 
 
+// Nom normalisé pour la détection de doublons (casse, accents et espaces ignorés)
+function normalizeName(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}

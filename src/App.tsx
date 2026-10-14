@@ -16,11 +16,28 @@ import {
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import logoImage from './assets/logo.png';
+
+// Fenêtre dédiée à l'écran public (ouverte avec ?vue=public) : toujours verrouillée sur l'onglet public
+const IS_PUBLIC_WINDOW =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('vue') === 'public';
+
+// Onglet courant mémorisé par fenêtre, pour survivre à un rechargement
+const TAB_STORAGE_KEY = 'insertech_current_tab';
+
+function readSavedTab(): string {
+  if (IS_PUBLIC_WINDOW) return 'public';
+  try {
+    return sessionStorage.getItem(TAB_STORAGE_KEY) || 'accueil';
+  } catch (e) {
+    return 'accueil';
+  }
+}
 
 export default function App() {
   const [activeEvent, setActiveEvent] = useState<EventSettings | null>(null);
   const [pastEvents, setPastEvents] = useState<EventSettings[]>([]);
-  const [currentTab, setCurrentTab] = useState<string>('accueil');
+  const [currentTab, setCurrentTab] = useState<string>(readSavedTab);
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
   const [deferredPwaPrompt, setDeferredPwaPrompt] = useState<any>(null);
@@ -111,8 +128,30 @@ export default function App() {
     };
   }, [activeEvent?.id]);
 
+  // Mémoriser l'onglet courant de cette fenêtre
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TAB_STORAGE_KEY, currentTab);
+    } catch (e) {
+      // Ignorer si sessionStorage indisponible
+    }
+  }, [currentTab]);
+
+  // Ouvrir l'écran public dans une fenêtre séparée (à glisser sur le projecteur)
+  const handleOpenPublicWindow = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('vue', 'public');
+    url.hash = '';
+    const publicWindow = window.open(url.toString(), 'insertech_ecran_public', 'popup,width=1280,height=720');
+    if (!publicWindow) {
+      showToast("La fenêtre a été bloquée par le navigateur. Autorisez les fenêtres surgissantes pour cette page.", 'warning');
+    }
+  };
+
   // Sauvegarde de secours et alerte avant fermeture
   useEffect(() => {
+    // La fenêtre d'écran public ne bloque pas sa fermeture (la console garde les données)
+    if (IS_PUBLIC_WINDOW) return;
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (activeEvent) {
         saveAutoSnapshot(activeEvent.id);
@@ -161,7 +200,13 @@ export default function App() {
       setNetStatus(status);
     };
 
-    // Auto-reconnexion réseau au chargement
+    // Auto-reconnexion réseau au chargement (jamais dans la fenêtre d'écran public :
+    // elle suit la console du même ordinateur et réutiliser le code de session entrerait en conflit)
+    if (IS_PUBLIC_WINDOW) {
+      return () => {
+        networkManager.onStatusChange = null;
+      };
+    }
     const savedRole = localStorage.getItem('insertech_net_role');
     const savedCode = localStorage.getItem('insertech_net_session_code');
     const savedEventId = localStorage.getItem('insertech_net_event_id');
@@ -233,7 +278,9 @@ export default function App() {
   // Synchronisation et validation automatique de currentTab selon le type de matrice active
   useEffect(() => {
     if (activeEvent) {
-      if (activeEvent.type === 'reparothon') {
+      if (IS_PUBLIC_WINDOW) {
+        if (currentTab !== 'public') setCurrentTab('public');
+      } else if (activeEvent.type === 'reparothon') {
         if (!['accueil', 'techniciens', 'public'].includes(currentTab)) {
           setCurrentTab('accueil');
         }
@@ -247,7 +294,7 @@ export default function App() {
         }
       }
     }
-  }, [activeEvent?.id, activeEvent?.type]);
+  }, [activeEvent?.id, activeEvent?.type, currentTab]);
 
   // Charger l'état depuis localStorage et Dexie au démarrage
   const loadPastEvents = async () => {
@@ -270,15 +317,8 @@ export default function App() {
       try {
         const event = await db.events.get(savedEventId);
         if (event) {
+          // L'onglet mémorisé est conservé ; l'effet de validation le corrige s'il ne convient pas à la matrice
           setActiveEvent(event);
-          // Initialiser l'onglet par défaut selon le type de matrice
-          if (event.type === 'reparothon') {
-            setCurrentTab('accueil');
-          } else if (event.type === 'kiosque_concours') {
-            setCurrentTab('admin');
-          } else {
-            setCurrentTab('enregistrements');
-          }
         }
       } catch (e) {
         console.error(e);
@@ -1481,6 +1521,8 @@ export default function App() {
           netStatus={netStatus}
           sessionCode={sessionCode}
           onOpenNetModal={() => setShowNetModal(true)}
+          onOpenPublicWindow={handleOpenPublicWindow}
+          isPublicWindow={IS_PUBLIC_WINDOW}
           isLightTheme={isLightTheme}
           onToggleTheme={() => setIsLightTheme(!isLightTheme)}
         >
@@ -1509,7 +1551,7 @@ export default function App() {
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl overflow-hidden border-2 border-primary shadow-lg shadow-primary/20 shrink-0 bg-[#180A2b] transition-transform duration-300 hover:rotate-6 hover:scale-105">
               <img
-                src="./logo.png"
+                src={logoImage}
                 alt="Insertech Événements"
                 className="w-full h-full object-cover"
               />

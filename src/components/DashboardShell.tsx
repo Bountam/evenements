@@ -3,11 +3,12 @@ import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
   LogOut, Download, Database, Wifi,
-  Maximize, Minimize, Settings2
+  Maximize, Minimize, Settings2, MonitorUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
+import logoInsertechImage from '../assets/logo-insertech.png';
 
 interface DashboardShellProps {
   event: EventSettings;
@@ -18,6 +19,8 @@ interface DashboardShellProps {
   netStatus: string;
   sessionCode: string;
   onOpenNetModal: () => void;
+  onOpenPublicWindow: () => void;
+  isPublicWindow: boolean; // Fenêtre dédiée au projecteur : pas de retour vers la régie
   isLightTheme: boolean;
   onToggleTheme: () => void;
   children: React.ReactNode;
@@ -32,6 +35,8 @@ export default function DashboardShell({
   netStatus,
   sessionCode,
   onOpenNetModal,
+  onOpenPublicWindow,
+  isPublicWindow,
   isLightTheme,
   onToggleTheme,
   children
@@ -97,7 +102,7 @@ export default function DashboardShell({
               className="h-10 sm:h-11 px-3 py-1 rounded-2xl bg-white dark:bg-white/10 border-2 border-primary/60 shadow-md shadow-primary/20 shrink-0 flex items-center justify-center"
             >
               <img
-                src="./logo-insertech.png"
+                src={logoInsertechImage}
                 alt="Insertech"
                 className="h-full w-auto max-h-8 object-contain"
               />
@@ -159,7 +164,8 @@ export default function DashboardShell({
 
             {/* Groupe des commandes d'administration (contraste accessible 75% au repos, 100% au survol) */}
             <div className="flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity duration-300 shrink-0">
-              {/* Bouton bascule vers l'écran d'administration / chrono */}
+              {/* Bouton bascule vers l'écran d'administration / chrono (absent de la fenêtre projecteur) */}
+              {!isPublicWindow && (
               <button
                 onClick={() => onTabChange(event.type === 'kiosque_concours' ? 'admin' : tabs[0].id)}
                 title="Basculer vers la console Chronomètre & Inscriptions"
@@ -169,6 +175,7 @@ export default function DashboardShell({
                 <Settings2 size={14} className="text-primary" />
                 <span className="hidden md:inline">Mode Régie</span>
               </button>
+              )}
 
               {/* Basculeur de thème partagé */}
               <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
@@ -199,7 +206,7 @@ export default function DashboardShell({
               className="h-10 px-2.5 py-1 rounded-xl bg-white dark:bg-white/10 border-2 border-primary shadow-lg shadow-primary/20 shrink-0 flex items-center justify-center"
             >
               <img
-                src="./logo-insertech.png"
+                src={logoInsertechImage}
                 alt="Insertech Événements"
                 className="h-full w-auto max-h-7 object-contain"
               />
@@ -275,6 +282,15 @@ export default function DashboardShell({
             </div>
 
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={onOpenPublicWindow}
+                title="Ouvrir l'écran public dans une nouvelle fenêtre, à glisser sur le projecteur ou la télé"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/15 border border-primary/50 text-primary hover:bg-primary hover:text-secondary text-xs font-bold cursor-pointer transition shadow-sm"
+              >
+                <MonitorUp size={13} />
+                <span>Projecteur</span>
+              </button>
+
               <button
                 onClick={onOpenNetModal}
                 title={`Statut réseau : ${netStatus}`}
