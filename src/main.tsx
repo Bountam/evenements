@@ -1,5 +1,6 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
+import {MotionConfig} from 'motion/react';
 import App from './App.tsx';
 import './index.css';
 
@@ -39,6 +40,9 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {/* Respecte « Réduire les animations » du système pour les animations JS (motion) */}
+    <MotionConfig reducedMotion="user">
+      <App />
+    </MotionConfig>
   </StrictMode>,
 );

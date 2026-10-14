@@ -387,7 +387,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                 transition: { staggerChildren: 0.055 }
               }
             }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            className="matrix-grid grid grid-cols-1 md:grid-cols-2 gap-4"
           >
             {MATRICES_LIST.map((matrix) => {
               const Icon = matrix.icon;

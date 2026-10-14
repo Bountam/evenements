@@ -1634,7 +1634,7 @@ export default function App() {
               <span>Historique des Activités ({pastEvents.length})</span>
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="matrix-grid grid grid-cols-1 md:grid-cols-2 gap-4">
               {pastEvents.map((evt) => (
                 <div 
                   key={evt.id}

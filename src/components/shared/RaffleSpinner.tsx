@@ -81,6 +81,7 @@ export default function RaffleSpinner({
 
       const frame = () => {
         confetti({
+          disableForReducedMotion: true,
           particleCount: 3,
           angle: 60,
           spread: 55,
@@ -88,6 +89,7 @@ export default function RaffleSpinner({
           colors: ['#9ecd33', '#480A94', '#ffffff']
         });
         confetti({
+          disableForReducedMotion: true,
           particleCount: 3,
           angle: 120,
           spread: 55,
@@ -109,7 +111,7 @@ export default function RaffleSpinner({
 
   return (
     <div className="relative overflow-hidden flex flex-col items-center justify-center p-6 bg-[#24123d]/60 border border-purple-900/40 rounded-3xl shadow-lg h-full min-h-[340px]">
-      <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-2 font-sans flex items-center gap-1.5 relative z-10">
+      <div className="text-kiosk-caption uppercase font-black tracking-widest text-slate-400 mb-2 font-sans flex items-center gap-1.5 relative z-10">
         <Sparkles size={12} className="text-primary" />
         <span>Tirage Au Sort Éco-Concours</span>
       </div>
@@ -148,7 +150,7 @@ export default function RaffleSpinner({
         <div className="w-full flex-1 flex flex-col justify-center items-center py-4 relative z-10">
           {/* Fenêtre de cylindre 3D (Slot-Machine Reel) */}
           <div
-            className="relative h-32 w-full max-w-lg rounded-2xl bg-[#180A2b]/90 border-2 border-primary/50 shadow-inner flex items-center justify-center overflow-hidden px-4"
+            className="relative h-[clamp(8rem,14vw,14rem)] w-full max-w-5xl rounded-2xl bg-[#180A2b]/90 border-2 border-primary/50 shadow-inner flex items-center justify-center overflow-hidden px-4"
             style={{ perspective: '600px' }}
           >
             {/* Ombres haut/bas donnant l'effet de courbure de cylindre */}
@@ -162,7 +164,7 @@ export default function RaffleSpinner({
                 animate={{ y: 0, opacity: 1, rotateX: 0, scale: 1 }}
                 exit={{ y: -40, opacity: 0, rotateX: 65, scale: 0.9 }}
                 transition={{ duration: 0.14, ease: 'easeOut' }}
-                className="text-3xl sm:text-4xl font-display font-bold text-primary tracking-wide uppercase text-center line-clamp-2"
+                className="text-[clamp(2rem,5vw,5.5rem)] leading-tight font-display font-bold text-primary tracking-wide uppercase text-center line-clamp-2"
               >
                 {displayName}
               </motion.h2>
@@ -170,13 +172,13 @@ export default function RaffleSpinner({
           </div>
 
           {/* Jauge de progression du tirage */}
-          <div className="w-full max-w-sm bg-purple-950 rounded-full h-3 border border-purple-900/60 overflow-hidden mt-6 p-0.5">
+          <div className="w-full max-w-2xl bg-purple-950 rounded-full h-3 border border-purple-900/60 overflow-hidden mt-6 p-0.5">
             <div 
               className="bg-gradient-to-r from-secondary via-purple-500 to-primary h-full rounded-full transition-all duration-100 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="text-[10px] text-slate-400 font-sans mt-2 uppercase tracking-widest font-bold">
+          <span className="text-kiosk-caption text-slate-400 font-sans mt-2 uppercase tracking-widest font-bold">
             Ralentissement du tambour ({Math.round(progress)}%)...
           </span>
         </div>
@@ -210,7 +212,7 @@ export default function RaffleSpinner({
             </motion.div>
           </div>
           
-          <span className="text-[10px] uppercase font-black text-primary tracking-widest font-sans">
+          <span className="text-kiosk-body uppercase font-black text-primary tracking-widest font-sans">
             🎉 Félicitations au gagnant ! 🎉
           </span>
           
@@ -218,9 +220,10 @@ export default function RaffleSpinner({
             initial={{ y: 16, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
-            className="min-h-[84px] flex items-center justify-center px-6 py-3 rounded-2xl bg-primary/15 border-2 border-primary/50 mt-3 podium-shimmer shadow-lg"
+            role="status"
+            className="min-h-[84px] max-w-full flex items-center justify-center px-6 py-3 rounded-2xl bg-primary/15 border-2 border-primary/50 mt-3 podium-shimmer shadow-lg"
           >
-            <h2 className="text-4xl sm:text-5xl font-display font-bold text-white uppercase tracking-wider line-clamp-2">
+            <h2 className="text-[clamp(3rem,8vw,9rem)] leading-none font-display font-bold text-white uppercase tracking-wider line-clamp-2 text-balance">
               {displayName}
             </h2>
           </motion.div>

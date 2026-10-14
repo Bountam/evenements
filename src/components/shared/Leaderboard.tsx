@@ -184,20 +184,20 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
           )}
 
           <span
-            className={`${compact ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'} font-extrabold text-app-text truncate max-w-full px-1`}
+            className={`${compact ? 'text-kiosk-caption' : 'text-kiosk-body'} font-extrabold text-app-text line-clamp-2 max-w-full px-1 leading-tight`}
             title={participant.name}
           >
             {participant.name}
           </span>
 
           <span
-            className={`${rank === 1 ? cfg.badgeClass : ''} font-mono ${compact ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'} font-black text-app-text mt-0.5 tabular-nums ${rank === 1 ? (compact ? 'px-2 py-0.2' : 'px-3 py-0.5') + ' rounded-xl mb-1 shadow-sm' : ''}`}
+            className={`${rank === 1 ? cfg.badgeClass : ''} font-mono ${compact ? 'text-kiosk-caption' : 'text-kiosk-body'} font-black text-app-text mt-0.5 tabular-nums ${rank === 1 ? (compact ? 'px-2 py-0.5' : 'px-3 py-0.5') + ' rounded-xl mb-1 shadow-sm' : ''}`}
           >
             {formatTime(participant.timeMs!)}
           </span>
 
           {rank !== 1 && bestTimeMs !== null && (
-            <span className="text-[9px] font-mono text-app-text-muted mb-1 font-bold">
+            <span className="text-kiosk-caption font-mono text-app-text-muted mb-1 font-bold">
               {formatDelta(participant.timeMs! - bestTimeMs)}
             </span>
           )}
@@ -218,7 +218,7 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
               {cfg.label}
             </span>
             {rank === 1 && !compact && (
-              <span className="text-[10px] uppercase font-black tracking-widest text-primary mt-0.5">
+              <span className="text-kiosk-caption uppercase font-black tracking-widest text-primary mt-0.5">
                 Record
               </span>
             )}
@@ -238,11 +238,11 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
   return (
     <div className={`bg-app-card border border-app-card-border ${compact ? 'p-3 sm:p-4 rounded-2xl' : 'p-5 sm:p-6 rounded-3xl'} shadow-lg flex flex-col h-full min-h-0`}>
       <div className={`flex items-center justify-between ${compact ? 'mb-2 pb-2' : 'mb-4 pb-3'} border-b border-app-card-border shrink-0`}>
-        <h3 className={`${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-2`}>
+        <h3 className={`${compact ? 'text-kiosk-body' : 'text-kiosk-title'} font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-2`}>
           <Trophy className="text-primary animate-bounce shrink-0" size={compact ? 16 : 20} />
           <span>Tableau des Champions</span>
         </h3>
-        <span className="text-[11px] sm:text-xs font-semibold text-app-text-muted font-sans">
+        <span className="text-kiosk-caption font-semibold text-app-text-muted font-sans">
           {rankedParticipants.length} {rankedParticipants.length > 1 ? 'temps enregistrés' : 'temps enregistré'}
         </span>
       </div>
@@ -250,7 +250,7 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
       {rankedParticipants.length === 0 ? (
         <div className="text-center py-12 my-auto">
           <Clock className="text-app-text-muted mx-auto mb-3 opacity-60" size={36} />
-          <p className="text-sm text-app-text-muted font-sans">Aucun temps n'a encore été enregistré pour cette activité.</p>
+          <p className="text-kiosk-body text-app-text-muted font-sans">Aucun temps n'a encore été enregistré pour cette activité.</p>
         </div>
       ) : (
         <div className="flex flex-col flex-1 min-h-0">
@@ -271,10 +271,10 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
             {pursuitParticipants.length === 0 ? (
               <div className="py-6 px-4 rounded-2xl bg-app-input/40 border border-dashed border-app-card-border text-center flex flex-col items-center justify-center my-auto">
                 <Sparkles size={24} className="text-primary mb-2 animate-pulse" />
-                <h5 className="text-xs sm:text-sm font-bold text-app-text font-display uppercase tracking-wide">
+                <h5 className="text-kiosk-body font-bold text-app-text font-display uppercase tracking-wide">
                   Places disponibles dans le classement
                 </h5>
-                <p className="text-[11px] text-app-text-muted mt-1 max-w-xs">
+                <p className="text-kiosk-caption text-app-text-muted mt-1 max-w-md">
                   Venez établir un temps à la table d'assemblage pour inscrire votre nom parmi les meilleurs !
                 </p>
               </div>
@@ -315,13 +315,13 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <h4
-                                className="font-bold text-app-text font-sans text-xs sm:text-sm truncate"
+                                className={`font-bold text-app-text font-sans ${compact ? 'text-kiosk-caption' : 'text-kiosk-body'} truncate`}
                                 title={participant.name}
                               >
                                 {participant.name}
                               </h4>
                               {actualRank === 1 && (
-                                <span className="text-[9px] px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 font-display uppercase font-black shrink-0">
+                                <span className="text-kiosk-caption px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 font-display uppercase font-black shrink-0">
                                   Record
                                 </span>
                               )}
@@ -373,7 +373,7 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
                           ) : (
                             <>
                               {deltaMs > 0 && (
-                                <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
+                                <span className="font-mono text-kiosk-caption font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
                                   {formatDelta(deltaMs)}
                                 </span>
                               )}
@@ -387,7 +387,7 @@ function PodiumStep({ rank, participant, bestTimeMs, compact }: PodiumStepProps)
                               >
                                 <Clock size={12} className={actualRank === 1 ? 'text-primary' : 'text-app-text-muted'} />
                                 <span
-                                  className={`font-mono font-extrabold text-sm sm:text-base tabular-nums ${
+                                  className={`font-mono font-extrabold text-kiosk-body tabular-nums ${
                                     actualRank === 1 ? 'text-primary' : 'text-app-text'
                                   }`}
                                 >
