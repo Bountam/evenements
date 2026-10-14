@@ -2326,6 +2326,8 @@ Un pipeline GitHub Actions (`.github/workflows/ci-cd.yml`) valide automatiquemen
   - 🌐 **PWA Web & Mobile** : `InsertechEvenements-PWA-Android.zip` et `InsertechEvenements-Mobile.html`.
 - **CD / Releases** : Publication automatique des exécutables et de l'APK dès qu'un tag `v*` est poussé.
 
+**Publier une nouvelle version.** La version de `package.json` est la seule source de vérité : `npm version patch` (ou `minor`, `major`) la monte et la recopie dans le lanceur .NET, `app.manifest` et l'APK (`versionCode` = majeur×10000 + mineur×100 + correctif) via `scripts/sync-version.js`. Fusionner, puis pousser le tag `v<version>` ou lancer le workflow avec `release_tag`. Le pipeline refuse un tag qui ne correspond pas à `package.json`, et `npm run lint` refuse des versions désynchronisées. La version s'affiche dans le pied de page de l'application.
+
 > [!TIP]
 > Sur smartphone ou tablette (Android / iOS), l'application peut également être installée directement depuis le navigateur via le bouton **« App Mobile (PWA & APK) »** et le QR Code interactif généré sur l'écran d'accueil !
 

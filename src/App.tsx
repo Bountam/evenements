@@ -1721,7 +1721,7 @@ export default function App() {
 
       <footer className="py-6 border-t border-app-card-border bg-app-bg-footer text-center text-[10px] text-app-text-muted font-sans flex items-center justify-center gap-1.5 mt-12 transition-colors duration-300">
         <Sparkles size={11} className="text-primary animate-pulse" />
-        <span>Insertech Éco-Concours & Réparothons • Outil hors-ligne autonome v1.1.0</span>
+        <span>Insertech Éco-Concours & Réparothons • Outil hors-ligne autonome v{__APP_VERSION__}</span>
       </footer>
 
       {renderNetModal()}

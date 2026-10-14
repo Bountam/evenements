@@ -1,14 +1,15 @@
 {
   "name": "insertech-tableau-evenements",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit && node scripts/check-design-tokens.js",
+    "lint": "tsc --noEmit && node scripts/check-design-tokens.js && node scripts/sync-version.js --check",
+    "version": "node scripts/sync-version.js && git add launcher/InsertechLauncher.csproj app.manifest android/app/build.gradle",
     "build:exe": "npm run build && dotnet publish launcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./dist-win && node scripts/copy-artifact.js win",
     "build:linux": "npm run build && dotnet publish launcher -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./dist-linux && node scripts/copy-artifact.js linux",
     "build:mobile": "npm run build && node scripts/build-mobile-package.js",
