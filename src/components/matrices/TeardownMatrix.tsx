@@ -8,6 +8,7 @@ import RaffleSpinner from '../shared/RaffleSpinner';
 import { showToast } from '../shared/Toast';
 import PrizeEditorModal, { PrizeImage } from '../shared/PrizeEditorModal';
 import { ContestPrizes, getContestPrizes, serializeContestPrizes } from '../../utils/prizes';
+import { RaffleDraw, getRaffleDraws, getEligibleParticipants, readStoredRaffle, storeRaffle } from '../../utils/raffle';
 import confetti from 'canvas-confetti';
 import {
   UserPlus,
@@ -153,16 +154,23 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const prizes = getContestPrizes(event);
   const [isPrizeEditorOpen, setIsPrizeEditorOpen] = useState(false);
 
-  const [raffle, setRaffle] = useState<RaffleState>({
-    status: 'idle',
-    winnerId: null,
-    spinStartTime: null
-  });
+  const [raffle, setRaffle] = useState<RaffleState>(() => readStoredRaffle(event.id));
+
+  // Mémoriser le tirage en cours (l'écran public le retrouve après un rechargement).
+  // Dépend seulement de `raffle` : au changement d'événement, l'état est d'abord rechargé avant d'être réécrit
+  useEffect(() => {
+    storeRaffle(event.id, raffle);
+  }, [raffle]);
+
+  // Historique des tirages et participants encore éligibles
+  const raffleDraws = getRaffleDraws(event);
+  const eligibleForRaffle = getEligibleParticipants(participants, raffleDraws);
 
   // Formulaire d'ajout de participant
   const [newParticipantName, setNewParticipantName] = useState('');
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [newParticipantPostal, setNewParticipantPostal] = useState('');
+  const [newParticipantConsent, setNewParticipantConsent] = useState(false);
   const [raffleDisplayValue, setRaffleDisplayValue] = useState<string>('');
 
   useEffect(() => {
@@ -204,6 +212,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
   useEffect(() => {
     loadParticipants();
+    setRaffle(readStoredRaffle(event.id));
 
     // S'abonner aux synchros de base locale
     const unsubscribeSync = registerSyncListener(() => {
@@ -568,9 +577,24 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   };
 
   // ACTIONS TIRAGE AU SORT (RAFFLE)
-  const startRaffle = async () => {
-    const list = participants.filter((p) => p.name);
-    if (list.length === 0) return;
+  // markLastAbsent : le dernier gagnant n'était pas présent, il est marqué absent avant un nouveau tirage
+  const startRaffle = async (markLastAbsent: boolean = false) => {
+    let currentEvent: EventSettings | undefined;
+    try {
+      currentEvent = await db.events.get(event.id);
+    } catch (e) {
+      console.error('Erreur lecture événement :', e);
+    }
+    const draws: RaffleDraw[] = [...getRaffleDraws(currentEvent || event)];
+    if (markLastAbsent && draws.length > 0) {
+      draws[draws.length - 1] = { ...draws[draws.length - 1], status: 'absent' };
+    }
+
+    const list = getEligibleParticipants(participants, draws);
+    if (list.length === 0) {
+      showToast('Tous les participants ont déjà été tirés au sort.', 'warning');
+      return;
+    }
 
     const randomIndex = Math.floor(Math.random() * list.length);
     const winner = list[randomIndex];
@@ -590,12 +614,21 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       winnerId: winner.id
     });
 
-    // 2. Enregistrer le gagnant dans l'événement pour la sauvegarde JSON et l'affichage admin
+    // 2. Ajouter le gagnant à l'historique de l'événement (sauvegarde JSON et affichage admin)
     try {
-      const currentEvent = await db.events.get(event.id);
       if (currentEvent) {
+        draws.push({
+          participantId: winner.id,
+          name: winner.name,
+          email: winner.email || '',
+          postalCode: winner.postalCode || '',
+          at: Date.now(),
+          status: 'gagnant'
+        });
         currentEvent.extraData = {
           ...currentEvent.extraData,
+          raffleWinners: draws,
+          // Champs du dernier gagnant conservés pour la compatibilité des exports existants
           raffleWinnerId: winner.id,
           raffleWinnerName: winner.name,
           raffleWinnerEmail: winner.email || '',
@@ -616,6 +649,30 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       winnerId: winner.id
     });
     channel.close();
+  };
+
+  // Effacer l'historique (par exemple après un tirage d'essai) : tout le monde redevient éligible
+  const clearRaffleHistory = async () => {
+    if (!confirm('Effacer l\'historique des tirages ? Tous les participants redeviendront éligibles.')) return;
+    try {
+      const currentEvent = (await db.events.get(event.id)) || event;
+      const {
+        raffleWinnerId,
+        raffleWinnerName,
+        raffleWinnerEmail,
+        raffleWinnerPostal,
+        raffleWinnerAt,
+        ...rest
+      } = currentEvent.extraData || {};
+      await networkManager.writeToDatabase('events', 'put', {
+        ...currentEvent,
+        extraData: { ...rest, raffleWinners: [] }
+      });
+      showToast('Historique des tirages effacé.', 'info');
+    } catch (e) {
+      console.error(e);
+      showToast("Erreur lors de l'effacement de l'historique.", 'error');
+    }
   };
 
   const resetRaffle = () => {
@@ -651,6 +708,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       return;
     }
 
+    // Loi 25 : pas de coordonnées sans consentement explicite
+    const hasContactInfo = newParticipantEmail.trim() !== '' || newParticipantPostal.trim() !== '';
+    if (hasContactInfo && !newParticipantConsent) {
+      showToast('Cochez le consentement ou retirez le courriel et le code postal.', 'warning');
+      return;
+    }
+
     // Prévenir les inscriptions en double (une seule chance au tirage par personne)
     const nameKey = normalizeName(newParticipantName);
     const emailKey = newParticipantEmail.trim().toLowerCase();
@@ -675,7 +739,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       email: newParticipantEmail.trim(),
       postalCode: newParticipantPostal.trim().toUpperCase() || undefined,
       timeMs: null,
-      registeredAt: Date.now()
+      registeredAt: Date.now(),
+      ...(hasContactInfo ? { extraData: { consentContact: true, consentAt: Date.now() } } : {})
     };
 
     try {
@@ -684,6 +749,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       setNewParticipantName('');
       setNewParticipantEmail('');
       setNewParticipantPostal('');
+      setNewParticipantConsent(false);
 
       if (autoAssignTrack) {
         const freeTrack = Object.values(tracks).find((t) => t.participantId === null);
@@ -812,7 +878,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           <RaffleSpinner
             state={raffle}
             participants={participants}
-            onStartRaffle={startRaffle}
+            candidates={eligibleForRaffle}
+            onStartRaffle={() => startRaffle()}
             onResetRaffle={resetRaffle}
             readOnly={true}
           />
@@ -1167,12 +1234,24 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               </span>
             </div>
           </div>
+          <div className="flex flex-col sm:flex-row items-stretch gap-2 w-full sm:w-auto">
+          {raffle.status === 'celebrating' && (
+            <button
+              onClick={() => startRaffle(true)}
+              disabled={eligibleForRaffle.length === 0}
+              title="Marquer cette personne absente et tirer un autre nom"
+              className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-app-input border border-app-card-border text-xs font-bold font-display uppercase text-app-text hover:border-primary disabled:opacity-40 transition cursor-pointer"
+            >
+              Absent ? Retirer un autre nom
+            </button>
+          )}
           <button
             onClick={resetRaffle}
             className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-red-950/60 border border-red-900/60 text-xs font-bold font-display uppercase text-red-300 hover:text-white hover:bg-red-900 transition cursor-pointer"
           >
             Fermer le tirage et revenir aux chronos
           </button>
+          </div>
         </div>
       )}
 
@@ -1253,6 +1332,21 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 </div>
               </div>
 
+              <label className="flex items-start gap-1.5 text-[10px] leading-snug text-app-text-muted cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newParticipantConsent}
+                  onChange={(e) => setNewParticipantConsent(e.target.checked)}
+                  className="mt-0.5 accent-[var(--color-primary)] cursor-pointer"
+                />
+                <span>
+                  La personne accepte que son courriel et son code postal servent uniquement à la joindre pour ce concours.
+                  {(newParticipantEmail.trim() || newParticipantPostal.trim()) && !newParticipantConsent && (
+                    <span className="text-amber-500 font-bold"> Requis si un courriel ou un code postal est saisi.</span>
+                  )}
+                </span>
+              </label>
+
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="submit"
@@ -1285,40 +1379,76 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               <span className="text-[10px] uppercase font-bold text-primary font-display flex items-center gap-1.5">
                 <Gift size={13} /> Tirage au Sort
               </span>
-              <span className="text-[10px] font-mono text-app-text-muted">
-                {participants.length} participant{participants.length > 1 ? 's' : ''}
+              <span className="text-[10px] font-mono text-app-text-muted" title="Participants pas encore tirés au sort">
+                {eligibleForRaffle.length} éligible{eligibleForRaffle.length > 1 ? 's' : ''} / {participants.length}
               </span>
             </div>
 
             <button
-              onClick={startRaffle}
-              disabled={participants.length === 0}
+              onClick={() => startRaffle()}
+              disabled={eligibleForRaffle.length === 0}
               className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-primary to-lime-400 text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer shadow-md"
             >
               <Sparkles size={13} />
-              <span>Lancer le tirage ({participants.length})</span>
+              <span>Lancer le tirage ({eligibleForRaffle.length})</span>
             </button>
 
-            {/* Vainqueur précédent si existant */}
-            {event.extraData?.raffleWinnerName ? (
-              <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/30 space-y-1 relative overflow-hidden">
-                <span className="text-[8px] uppercase font-black text-primary tracking-wider block">
-                  🏆 Dernier gagnant du tirage
-                </span>
-                <h4 className="text-xs font-bold text-app-text font-display truncate">
-                  {event.extraData.raffleWinnerName}
-                </h4>
-                <div className="text-[9px] text-app-text-muted space-y-0.5 font-sans">
-                  {event.extraData.raffleWinnerEmail && (
-                    <p className="truncate">Courriel : {event.extraData.raffleWinnerEmail}</p>
-                  )}
-                  {event.extraData.raffleWinnerPostal && (
-                    <p>Code postal : {event.extraData.raffleWinnerPostal}</p>
-                  )}
-                  <p className="text-[8px] text-app-text-muted/70 pt-0.5">
-                    Tiré le {new Date(event.extraData.raffleWinnerAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
+            {/* Dernier tirage et historique */}
+            {raffleDraws.length > 0 ? (
+              <div className="space-y-1.5">
+                {(() => {
+                  const last = raffleDraws[raffleDraws.length - 1];
+                  return (
+                    <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/30 space-y-1 relative overflow-hidden">
+                      <span className="text-[8px] uppercase font-black text-primary tracking-wider block">
+                        {last.status === 'gagnant' ? '🏆 Dernier gagnant du tirage' : 'Dernier tiré (absent)'}
+                      </span>
+                      <h4 className={`text-xs font-bold font-display truncate ${last.status === 'gagnant' ? 'text-app-text' : 'text-app-text-muted line-through'}`}>
+                        {last.name}
+                      </h4>
+                      <div className="text-[9px] text-app-text-muted space-y-0.5 font-sans">
+                        {last.email && <p className="truncate">Courriel : {last.email}</p>}
+                        {last.postalCode && <p>Code postal : {last.postalCode}</p>}
+                        <p className="text-[8px] text-app-text-muted/70 pt-0.5">
+                          Tiré à {new Date(last.at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      {last.status === 'gagnant' && (
+                        <button
+                          type="button"
+                          onClick={() => startRaffle(true)}
+                          disabled={eligibleForRaffle.length === 0}
+                          title="Marquer cette personne absente et tirer un autre nom"
+                          className="w-full mt-1 py-1 px-2 rounded-lg bg-app-input border border-app-card-border text-[9px] font-bold uppercase text-app-text-muted hover:text-app-text hover:border-primary disabled:opacity-40 transition cursor-pointer"
+                        >
+                          Absent ? Retirer un autre nom
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {raffleDraws.length > 1 && (
+                  <ul className="text-[9px] font-sans space-y-0.5 max-h-24 overflow-y-auto pr-1">
+                    {raffleDraws
+                      .slice(0, -1)
+                      .reverse()
+                      .map((d) => (
+                        <li key={`${d.participantId}-${d.at}`} className="flex items-center justify-between gap-2 text-app-text-muted">
+                          <span className={`truncate ${d.status === 'absent' ? 'line-through' : 'text-app-text'}`}>{d.name}</span>
+                          <span className="shrink-0">{d.status === 'absent' ? 'absent' : 'gagnant'}</span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+
+                <button
+                  type="button"
+                  onClick={clearRaffleHistory}
+                  className="w-full text-[9px] text-app-text-muted hover:text-red-400 underline cursor-pointer"
+                >
+                  Effacer l'historique des tirages
+                </button>
               </div>
             ) : (
               <p className="text-[9px] text-app-text-muted text-center font-sans truncate">

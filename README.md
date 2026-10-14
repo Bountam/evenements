@@ -1579,6 +1579,9 @@ Affiché sur un grand écran pour les visiteurs :
 - **Prix configurables** : « Modifier les prix » (bloc Tirage au sort) définit le prix du meilleur chrono et celui du tirage (nom, titre court, valeur, description, image). Ils sont enregistrés dans `event.extraData.contestPrizes`, propres à chaque événement.
 - **Pistes par événement** : une piste assignée dans un autre événement s'affiche comme libre.
 - **Doublons** : une confirmation est demandée si le nom ou le courriel est déjà inscrit.
+- **Tirage** : l'historique est conservé dans `event.extraData.raffleWinners`. Une personne déjà tirée ne peut pas l'être de nouveau ; « Absent ? Retirer un autre nom » la marque absente et relance le tirage. « Effacer l'historique » remet tout le monde éligible (utile après un essai). Le tirage en cours est mémorisé par navigateur, l'écran public le retrouve après un rechargement.
+- **Consentement (Loi 25)** : un courriel ou un code postal ne peut être enregistré que si la case de consentement est cochée (`participant.extraData.consentContact`).
+- **Exports** : classement, meilleur chrono lisible, consentement et résultat du tirage. La colonne `Temps (ms)` est conservée pour la réimportation.
 
 ### 11.3 `handleRegisterParticipant()` — Inscrire un participant
 
