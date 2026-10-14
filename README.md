@@ -1573,6 +1573,13 @@ Affiché sur un grand écran pour les visiteurs :
 - Classement avec médailles et animations
 - Animation de tirage au sort (RaffleSpinner)
 
+### 11.2.1 Utilisation en événement (un portable + projecteur)
+
+- **Fenêtre projecteur** : le bouton « Projecteur » de la console ouvre l'écran public dans une fenêtre séparée (`index.html?vue=public`), à glisser sur le projecteur puis passer en plein écran. Cette fenêtre reste verrouillée sur l'écran public, même après un rechargement, et suit la console du même ordinateur sans connexion Internet.
+- **Prix configurables** : « Modifier les prix » (bloc Tirage au sort) définit le prix du meilleur chrono et celui du tirage (nom, titre court, valeur, description, image). Ils sont enregistrés dans `event.extraData.contestPrizes`, propres à chaque événement.
+- **Pistes par événement** : une piste assignée dans un autre événement s'affiche comme libre.
+- **Doublons** : une confirmation est demandée si le nom ou le courriel est déjà inscrit.
+
 ### 11.3 `handleRegisterParticipant()` — Inscrire un participant
 
 ```typescript

@@ -102,6 +102,7 @@ export interface TrackState {
   isRunning: boolean;
   startTime: number | null;
   elapsedBeforeStart: number;
+  eventId?: string | null; // Événement propriétaire de l'assignation (les pistes sont partagées entre événements)
 }
 
 export type RaffleStatus = 'idle' | 'spinning' | 'celebrating';
@@ -138,7 +139,7 @@ export type SyncMessage =
   | { type: 'RAFFLE_RESET' }
   | { type: 'DB_UPDATE'; timestamp: number }
   | { type: 'PEER_CELEBRATION'; payload: any }
-  | { type: 'TRACK_ASSIGN'; trackId: number; participantId: string | null; participantName: string | null }
+  | { type: 'TRACK_ASSIGN'; trackId: number; participantId: string | null; participantName: string | null; eventId?: string }
   | { type: 'TRACKS_STATE_SYNC'; tracks: Record<number, TrackState> };
 
 // Sauvegarde automatique locale (Snapshots d'urgence et périodiques)

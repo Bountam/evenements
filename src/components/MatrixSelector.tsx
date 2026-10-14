@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImage from '../assets/logo.png';
 import { EventType, EventSettings, PartnerLogo } from '../types';
 import { 
   Wrench, GraduationCap, Users, Heart, Timer, 
@@ -338,7 +339,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
           className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-primary shadow-2xl shadow-primary/25 shrink-0 mx-auto mb-3 bg-app-card"
         >
           <img
-            src="./logo.png"
+            src={logoImage}
             alt="Chapiteau Insertech Événements"
             className="w-full h-full object-cover"
           />

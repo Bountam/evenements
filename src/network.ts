@@ -426,6 +426,7 @@ class P2PNetworkManager {
       if (track) {
         track.participantId = action.participantId;
         track.participantName = action.participantName;
+        track.eventId = action.eventId ?? null;
         track.isRunning = false;
         track.startTime = null;
         track.elapsedBeforeStart = 0;
