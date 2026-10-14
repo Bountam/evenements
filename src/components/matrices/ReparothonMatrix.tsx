@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { EventSettings, RepairTicket, Technician, TicketStatus, DeviceCategory, OperatingSystem, PartnerLogo } from '../../types';
 import { db, notifySync, registerSyncListener } from '../../db';
 import { networkManager } from '../../network';
-import { DoughnutChart, BarChart } from '../shared/Charts';
+import { DoughnutChart, BarChart } from '../shared/LazyCharts';
 import { 
   Plus, Users, Wrench, Clock, CheckCircle, AlertTriangle, Play, Pause, Trash2, Check, LayoutGrid, Award, Info, RefreshCw, BarChart2, Search
 } from 'lucide-react';

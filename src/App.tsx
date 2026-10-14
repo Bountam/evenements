@@ -17,7 +17,6 @@ import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './uti
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import logoImage from './assets/logo.png';
 import { formatTime } from './components/shared/Stopwatch';
 import { getRaffleDraws } from './utils/raffle';
@@ -640,6 +639,8 @@ export default function App() {
             ];
           }
 
+          // Chargée à la demande : xlsx pèse près d'un tiers du JavaScript de l'application
+          const XLSX = await import('xlsx');
           const wb = XLSX.utils.book_new();
           const ws = XLSX.utils.aoa_to_sheet(ws_data);
           XLSX.utils.book_append_sheet(wb, ws, "Export");
@@ -757,6 +758,7 @@ export default function App() {
         try {
           const arrayBuffer = evt.target?.result as ArrayBuffer;
           const data = new Uint8Array(arrayBuffer);
+          const XLSX = await import('xlsx');
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
