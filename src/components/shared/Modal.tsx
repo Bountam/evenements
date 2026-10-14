@@ -98,7 +98,7 @@ export default function Modal({
 
             {/* Pied de page optionnel */}
             {footer && (
-              <div className="pt-3.5 border-t border-app-card-border shrink-0 flex items-center justify-end gap-3">
+              <div className="pt-3.5 border-t border-app-card-border shrink-0 flex flex-wrap items-center justify-end gap-3">
                 {footer}
               </div>
             )}

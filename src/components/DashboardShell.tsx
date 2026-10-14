@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
@@ -46,6 +46,25 @@ export default function DashboardShell({
   const Icon = matrixInfo.icon;
   const isPublicView = currentTab === 'public';
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Hauteur réelle de l'en-tête régie, exposée en variable CSS pour les colonnes collantes
+  const adminHeaderRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const header = adminHeaderRef.current;
+    const root = document.documentElement;
+    if (!header) {
+      root.style.removeProperty('--app-header-h');
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      root.style.setProperty('--app-header-h', `${header.offsetHeight}px`);
+    });
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--app-header-h');
+    };
+  }, [isPublicView]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -189,12 +208,15 @@ export default function DashboardShell({
         /* ==================================================================== */
         /* EN-TÊTE STANDARD RÉGIE (Admin, Réseau, Sauvegarder, Quitter)         */
         /* ==================================================================== */
-        <header className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-6 py-3.5 flex flex-col xl:flex-row items-center justify-between gap-4 shadow-xl backdrop-blur-xl transition-colors duration-300">
+        <header
+          ref={adminHeaderRef}
+          className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 shadow-xl backdrop-blur-xl transition-colors duration-300"
+        >
           {/* Identité visuelle */}
-          <div className="flex items-center gap-3.5 w-full xl:w-auto">
+          <div className="flex items-center gap-3.5 shrink-0">
             <BrandLogo alt="Insertech Événements" />
             <div>
-              <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none">
+              <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
                 Insertech <span className="text-primary font-black">Événements</span>
               </h1>
               <p className="text-micro text-app-text-muted font-semibold mt-1">
@@ -204,7 +226,7 @@ export default function DashboardShell({
           </div>
 
           {/* Détails de l'événement actif (anti-doublon et largeur fluide) */}
-          <div className="flex flex-wrap items-center gap-2.5 bg-app-input border border-app-card-border p-2 rounded-2xl w-full xl:w-auto transition-colors duration-300 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2.5 bg-app-input border border-app-card-border p-2 rounded-2xl flex-1 basis-[24rem] min-w-0 transition-colors duration-300 shadow-sm">
             {event.name.trim().toLowerCase() !== matrixInfo.title.trim().toLowerCase() ? (
               <>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 border border-primary/25 rounded-xl text-primary font-display font-bold text-xs uppercase tracking-wide shrink-0">
@@ -212,7 +234,7 @@ export default function DashboardShell({
                   <span>{matrixInfo.title}</span>
                 </div>
                 <div className="w-px h-5 bg-app-card-border hidden md:block"></div>
-                <div className="text-sm font-black text-app-text max-w-[340px] truncate uppercase font-display" title={event.name}>
+                <div className="text-sm font-black text-app-text min-w-0 max-w-[340px] truncate uppercase font-display" title={event.name}>
                   {event.name}
                 </div>
               </>
@@ -227,7 +249,7 @@ export default function DashboardShell({
           </div>
 
           {/* Onglets de navigation et boutons d'actions */}
-          <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto justify-between xl:justify-end">
+          <div className="flex flex-wrap items-center gap-2.5 ml-auto justify-end">
             <div 
               role="tablist" 
               aria-label="Navigation des vues de l'événement"
