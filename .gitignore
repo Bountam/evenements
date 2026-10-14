@@ -45,3 +45,5 @@ android/build/
 /InsertechEvenements-linux-x64
 /InsertechEvenements-linux-x64.tar.gz
 /InsertechEvenements-Android.apk
+test-results/
+playwright-report/

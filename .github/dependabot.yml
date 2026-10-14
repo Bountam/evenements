@@ -1,0 +1,26 @@
+# Mises à jour groupées et mensuelles, pour limiter le nombre de PR
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: monthly
+    groups:
+      gradle:
+        patterns: ['*']
+        update-types: [minor, patch]

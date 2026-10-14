@@ -1,5 +1,7 @@
 name: CI / CD Pipeline - Insertech Événements
 
+# Les PR sont vérifiées par pr-check.yml. Ici : build de main (+ déploiement de la PWA)
+# et publication des releases. Le build lui-même est dans build.yml, partagé.
 on:
   push:
     branches:
@@ -7,9 +9,6 @@ on:
     tags:
       - 'v*'
       - 'V*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       release_tag:
@@ -18,65 +17,64 @@ on:
         default: ""
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ------------------------------------------------------------
-  # Job 1 : Validation de la qualité et des types (CI)
+  # Job 1 : Vérification du tag (avant de lancer les builds)
   # ------------------------------------------------------------
-  ci-quality-check:
-    name: "CI : Validation des types & Bundle PWA"
+  version:
+    name: "Version : tag ↔ package.json"
     runs-on: ubuntu-latest
-
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
     steps:
-      - name: Récupérer le code source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurer Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Vérifier que le tag de release correspond à package.json
-        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+      - name: Déterminer le tag de release
+        id: tag
         env:
-          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          INPUT_TAG: ${{ inputs.release_tag }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [ "${RELEASE_TAG#[vV]}" != "$VERSION" ]; then
-            echo "Le tag $RELEASE_TAG ne correspond pas à la version $VERSION de package.json."
-            echo "Lancer npm version patch|minor|major (qui synchronise les 4 cibles), fusionner, puis taguer v<version>."
-            exit 1
+          TAG=""
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then TAG="$GITHUB_REF_NAME"; fi
+          if [ -n "$INPUT_TAG" ]; then TAG="$INPUT_TAG"; fi
+          if [ -n "$TAG" ]; then
+            if ! [[ "$TAG" =~ ^[vV][0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Le tag doit ressembler à v1.2.3 (reçu : $TAG)"
+              exit 1
+            fi
+            VERSION=$(node -p "require('./package.json').version")
+            if [ "${TAG#[vV]}" != "$VERSION" ]; then
+              echo "Le tag $TAG ne correspond pas à la version $VERSION de package.json."
+              echo "Lancer npm version patch|minor|major (qui synchronise les 4 cibles), fusionner, puis taguer v<version>."
+              exit 1
+            fi
           fi
-
-      - name: Installer les dépendances
-        run: npm ci
-
-      - name: Vérifier les types TypeScript (Lint)
-        run: npm run lint
-
-      - name: Valider la génération du bundle PWA
-        run: npm run build
-
-      - name: Téléverser le package complet PWA Android / Web (Artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: InsertechEvenements-PWA-Android-Web
-          path: dist/
-          retention-days: 30
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
 
   # ------------------------------------------------------------
-  # Job 2 : Déploiement de la PWA Android sur GitHub Pages
+  # Job 2 : Build web + Windows + Linux + Android (build.yml)
+  # ------------------------------------------------------------
+  build:
+    needs: version
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  # ------------------------------------------------------------
+  # Job 3 : Déploiement de la PWA sur GitHub Pages
   # ------------------------------------------------------------
   deploy-pwa-pages:
-    name: "CD : Déploiement PWA Android (GitHub Pages)"
+    name: "CD : Déploiement PWA (GitHub Pages)"
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: ci-quality-check
+    needs: build
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
       - name: Télécharger le build PWA
         uses: actions/download-artifact@v4
@@ -84,7 +82,7 @@ jobs:
           name: InsertechEvenements-PWA-Android-Web
           path: dist/
 
-      - name: Déployer sur la branche gh-pages (GitHub Pages)
+      - name: Déployer sur la branche gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -93,222 +91,60 @@ jobs:
           commit_message: "chore(pwa): deploy Android PWA to GitHub Pages"
 
   # ------------------------------------------------------------
-  # Job 3 : Compilation du binaire portable Windows (.NET 7)
-  # ------------------------------------------------------------
-  build-windows-exe:
-    name: "Build : Exécutable autonome Windows x64"
-    needs: ci-quality-check
-    runs-on: windows-latest
-
-    steps:
-      - name: Récupérer le code source
-        uses: actions/checkout@v4
-
-      - name: Configurer Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Configurer .NET 7 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '7.0.x'
-
-      - name: Installer les dépendances npm
-        run: npm ci
-
-      - name: Compiler le bundle web et l'exécutable Windows
-        run: npm run build:exe
-
-      - name: Téléverser l'exécutable Windows (Artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: InsertechEvenements-Windows-x64
-          path: InsertechEvenements.exe
-          retention-days: 30
-
-  # ------------------------------------------------------------
-  # Job 4 : Compilation du binaire portable Linux Debian (.NET 7)
-  # ------------------------------------------------------------
-  build-linux-bin:
-    name: "Build : Exécutable portable Linux Debian x64"
-    needs: ci-quality-check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Récupérer le code source
-        uses: actions/checkout@v4
-
-      - name: Configurer Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Configurer .NET 7 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '7.0.x'
-
-      - name: Installer les dépendances npm
-        run: npm ci
-
-      - name: Compiler le bundle web et l'exécutable Linux Debian
-        run: |
-          npm run build:linux
-          chmod +x InsertechEvenements-linux-x64
-          tar -czvf InsertechEvenements-linux-x64.tar.gz InsertechEvenements-linux-x64
-
-      - name: Téléverser l'exécutable Linux Debian (Artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: InsertechEvenements-Linux-Debian-x64
-          path: |
-            InsertechEvenements-linux-x64
-            InsertechEvenements-linux-x64.tar.gz
-          retention-days: 30
-
-  # ------------------------------------------------------------
-  # Job 5 : Compilation de l'exécutable mobile Android APK (.apk)
-  # ------------------------------------------------------------
-  build-android-apk:
-    name: "Build : Exécutable Mobile Android (.apk)"
-    needs: ci-quality-check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Récupérer le code source
-        uses: actions/checkout@v4
-
-      - name: Configurer Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Configurer Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Configurer Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
-
-      - name: Installer les dépendances npm
-        run: npm ci
-
-      - name: Préparer le bundle Web et les assets Android
-        run: npm run build:mobile
-
-      - name: Préparer la clé de signature release (si les secrets existent)
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-            echo "Clé de release trouvée : APK release signé."
-          else
-            echo "Pas de clé de release : APK debug signé avec la clé debug commitée."
-          fi
-
-      - name: Compiler l'APK Android
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          cd android
-          if [ -n "$ANDROID_KEYSTORE_PATH" ]; then
-            gradle assembleRelease --no-daemon
-            cp app/build/outputs/apk/release/app-release.apk ../InsertechEvenements-Android.apk
-          else
-            gradle assembleDebug --no-daemon
-            cp app/build/outputs/apk/debug/app-debug.apk ../InsertechEvenements-Android.apk
-          fi
-
-      - name: Téléverser l'exécutable Android APK (Artifact)
-        uses: actions/upload-artifact@v4
-        with:
-          name: InsertechEvenements-Android-APK
-          path: InsertechEvenements-Android.apk
-          if-no-files-found: error
-          retention-days: 30
-
-  # ------------------------------------------------------------
-  # Job 6 : Déploiement automatique lors d'une release (CD)
+  # Job 4 : Publication de la Release GitHub (tous les fichiers ou rien)
   # ------------------------------------------------------------
   release:
     name: "CD : Publication de la Release GitHub"
-    # Sur un tag poussé, ou sur un lancement manuel qui précise release_tag (le tag est alors créé par la release)
-    if: always() && !contains(needs.*.result, 'cancelled') && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/V') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != ''))
+    if: needs.version.outputs.release_tag != ''
     needs:
-      - build-windows-exe
-      - build-linux-bin
-      - build-android-apk
+      - version
+      - build
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-      - name: Vérifier le nom du tag
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          if ! [[ "$RELEASE_TAG" =~ ^[vV][0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "release_tag doit ressembler à v1.2.3 (reçu : $RELEASE_TAG)"
-            exit 1
-          fi
-
       - name: Télécharger l'exécutable Windows
         uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
           name: InsertechEvenements-Windows-x64
           path: release/
 
-      - name: Télécharger l'exécutable Linux Debian
+      - name: Télécharger l'exécutable Linux
         uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
           name: InsertechEvenements-Linux-Debian-x64
           path: release/
 
-      - name: Télécharger l'exécutable Android APK
+      - name: Télécharger l'APK Android
         uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
           name: InsertechEvenements-Android-APK
           path: release/
 
       - name: Télécharger le bundle PWA
         uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
           name: InsertechEvenements-PWA-Android-Web
-          path: release/pwa/
+          path: pwa/
 
-      - name: Créer l'archive PWA et préparer les fichiers de Release
+      - name: Préparer les fichiers de la release
         run: |
-          mkdir -p release
-          if [ -d "release/pwa" ]; then
-            cp release/pwa/index.html release/index.html 2>/dev/null || true
-            cp release/pwa/InsertechEvenements-Mobile.html release/InsertechEvenements-Mobile.html 2>/dev/null || true
-            cd release/pwa && zip -r ../InsertechEvenements-PWA-Android.zip . && cd ../..
-          fi
-          echo "=== Fichiers disponibles pour la Release ==="
+          cp pwa/index.html release/index.html
+          cp pwa/InsertechEvenements-Mobile.html release/InsertechEvenements-Mobile.html
+          (cd pwa && zip -qr ../release/InsertechEvenements-PWA-Android.zip .)
+          for f in InsertechEvenements.exe InsertechEvenements-linux-x64 InsertechEvenements-linux-x64.tar.gz InsertechEvenements-Android.apk; do
+            test -f "release/$f" || { echo "Fichier manquant : $f"; exit 1; }
+          done
+          (cd release && sha256sum * > SHA256SUMS.txt)
           ls -la release/
 
       - name: Publier la Release GitHub
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          tag_name: ${{ needs.version.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
-          files: |
-            release/*
+          files: release/*
+          fail_on_unmatched_files: true
           generate_release_notes: true
           draft: false
           prerelease: false
