@@ -287,7 +287,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   // Transition automatique pour le tirage au sort (de spinning à celebrating après 10s)
   useEffect(() => {
     if (raffle.status === 'spinning' && raffle.spinStartTime) {
-      const elapsed = Date.now() - raffle.spinStartTime;
+      const elapsed = networkManager.now() - raffle.spinStartTime;
       const timeLeft = 10000 - elapsed;
 
       if (timeLeft <= 0) {
@@ -308,7 +308,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
       showToast('Veuillez attribuer un participant à la piste avant de démarrer.', 'warning');
       return;
     }
-    const startTime = Date.now();
+    const startTime = networkManager.now();
     networkManager.sendChronoAction({
       type: 'TIMER_START',
       trackId,
@@ -320,7 +320,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const handleStopTimer = (trackId: number) => {
     const track = tracks[trackId];
     if (!track || !track.isRunning || track.startTime === null) return;
-    const elapsed = Math.max(1, Date.now() - track.startTime + track.elapsedBeforeStart);
+    const elapsed = Math.max(1, networkManager.now() - track.startTime + track.elapsedBeforeStart);
 
     networkManager.sendChronoAction({
       type: 'TIMER_STOP',
@@ -342,12 +342,12 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     if (!track || !track.participantId) return;
 
     if (track.isRunning && track.startTime !== null) {
-      const currentElapsed = Date.now() - track.startTime + track.elapsedBeforeStart;
+      const currentElapsed = networkManager.now() - track.startTime + track.elapsedBeforeStart;
       const newElapsed = Math.max(0, currentElapsed + deltaMs);
       networkManager.sendChronoAction({
         type: 'TIMER_START',
         trackId,
-        startTime: Date.now(),
+        startTime: networkManager.now(),
         elapsedBeforeStart: newElapsed
       });
     } else {
@@ -420,7 +420,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     // Calculer le temps final (si le chrono tournait encore, on calcule le temps exact à l'instant du clic)
     let finalTime = track.elapsedBeforeStart;
     if (track.isRunning && track.startTime !== null) {
-      finalTime = Date.now() - track.startTime + track.elapsedBeforeStart;
+      finalTime = networkManager.now() - track.startTime + track.elapsedBeforeStart;
     }
     finalTime = Math.round(finalTime);
 
@@ -598,7 +598,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
     const randomIndex = Math.floor(Math.random() * list.length);
     const winner = list[randomIndex];
-    const spinStartTime = Date.now();
+    const spinStartTime = networkManager.now();
 
     // 0. Mettre à jour l'état local de l'onglet émetteur
     setRaffle({
@@ -1820,7 +1820,7 @@ function AdminTrackBlock({
   useEffect(() => {
     if (track.isRunning && track.startTime !== null) {
       const tick = () => {
-        setTime(Date.now() - track.startTime! + track.elapsedBeforeStart);
+        setTime(networkManager.now() - track.startTime! + track.elapsedBeforeStart);
       };
       tick();
       intervalRef.current = window.setInterval(tick, 10);
@@ -2113,7 +2113,7 @@ function PublicTrackBlock({
   useEffect(() => {
     if (track.isRunning && track.startTime !== null) {
       const tick = () => {
-        setTime(Date.now() - track.startTime! + track.elapsedBeforeStart);
+        setTime(networkManager.now() - track.startTime! + track.elapsedBeforeStart);
       };
       tick();
       intervalRef.current = window.setInterval(tick, 10);

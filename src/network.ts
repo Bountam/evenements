@@ -10,6 +10,8 @@ export type NetworkMessage =
   | { type: 'DB_SYNC'; table: string; data: any[] }
   | { type: 'CHRONO_ACTION'; message: SyncMessage }
   | { type: 'REQUEST_INITIAL_SYNC' }
+  | { type: 'CLOCK_PING'; t0: number }
+  | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
   | { type: 'INITIAL_SYNC'; payload: { event: any; tickets: any[]; technicians: any[]; participants: any[]; attendees: any[] } };
 
 // Chargement dynamique du script MQTT Paho pour l'auto-découverte sans clé d'API
@@ -53,6 +55,13 @@ class P2PNetworkManager {
     5: { trackId: 5, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 }
   };
 
+  // Décalage d'horloge avec le PC Principal (ms) : heure commune = Date.now() + clockOffset.
+  // Les chronos et le tirage sont horodatés dans cette heure commune pour que tous les appareils
+  // affichent et enregistrent le même temps, même si leurs horloges ne sont pas à l'heure.
+  clockOffset: number = 0;
+  private clockSyncInterval: any = null;
+  private clockSamples: { rtt: number; offset: number }[] = [];
+
   // File d'attente locale pour la résilience hors-ligne (Offline Queue)
   offlineQueue: NetworkMessage[] = [];
 
@@ -73,15 +82,77 @@ class P2PNetworkManager {
         // Ignorer si corrompu
       }
 
+      // Les autres fenêtres du même ordinateur (écran public) reprennent le décalage de la console
+      if (localStorage.getItem('insertech_net_role') === 'client') {
+        const savedOffset = Number(localStorage.getItem('insertech_clock_offset'));
+        if (Number.isFinite(savedOffset)) this.clockOffset = savedOffset;
+      }
+
       if ('BroadcastChannel' in window) {
         this.chronoChannel = new BroadcastChannel('insertech_chrono_sync_channel');
         this.chronoChannel.onmessage = (event) => {
           if (event.data && event.data.type === 'LOCAL_CHRONO_ACTION') {
             this.applyChronoAction(event.data.action, false);
+          } else if (event.data && event.data.type === 'LOCAL_CLOCK_OFFSET' && typeof event.data.offset === 'number') {
+            this.clockOffset = event.data.offset;
           }
         };
       }
     }
+  }
+
+  // Heure commune (horloge du PC Principal) à utiliser pour tout calcul de chrono ou de tirage
+  now(): number {
+    return Date.now() + this.clockOffset;
+  }
+
+  private setClockOffset(offset: number) {
+    this.clockOffset = offset;
+    try {
+      localStorage.setItem('insertech_clock_offset', String(offset));
+    } catch (e) {
+      // Ignorer quota localStorage
+    }
+    if (this.chronoChannel) {
+      try {
+        this.chronoChannel.postMessage({ type: 'LOCAL_CLOCK_OFFSET', offset });
+      } catch (e) {
+        // Ignorer
+      }
+    }
+  }
+
+  // Mesurer le décalage avec le PC Principal : rafale de 5 allers-retours, l'échantillon le plus
+  // rapide (plus petit aller-retour) est le plus précis. Répété chaque minute pour suivre la dérive.
+  private startClockSync() {
+    this.stopClockSync();
+    const burst = () => {
+      this.clockSamples = [];
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          const conn = this.connections[0];
+          if (conn && conn.open) conn.send({ type: 'CLOCK_PING', t0: Date.now() });
+        }, i * 250);
+      }
+    };
+    burst();
+    this.clockSyncInterval = setInterval(burst, 60000);
+  }
+
+  private stopClockSync() {
+    if (this.clockSyncInterval) {
+      clearInterval(this.clockSyncInterval);
+      this.clockSyncInterval = null;
+    }
+  }
+
+  private handleClockPong(t0: number, hostTime: number) {
+    const t1 = Date.now();
+    const rtt = t1 - t0;
+    if (rtt < 0 || rtt > 10000) return;
+    this.clockSamples.push({ rtt, offset: hostTime + rtt / 2 - t1 });
+    const best = this.clockSamples.reduce((a, b) => (b.rtt < a.rtt ? b : a));
+    this.setClockOffset(Math.round(best.offset));
   }
 
   updateStatus(status: string) {
@@ -94,6 +165,8 @@ class P2PNetworkManager {
   async startHost(eventId: string, existingCode?: string): Promise<string> {
     this.role = 'host';
     this.isConnecting = true;
+    this.stopClockSync();
+    this.setClockOffset(0); // Le PC Principal est l'horloge de référence
     this.updateStatus('Connexion au serveur de signalement...');
 
     if (existingCode) {
@@ -189,6 +262,9 @@ class P2PNetworkManager {
 
           // Demander la base de données de référence du Master
           conn.send({ type: 'REQUEST_INITIAL_SYNC' });
+
+          // Se caler sur l'horloge du Master
+          this.startClockSync();
           resolve();
         });
 
@@ -204,6 +280,7 @@ class P2PNetworkManager {
 
         conn.on('close', () => {
           this.connections = [];
+          this.stopClockSync(); // Garder le dernier décalage mesuré pendant la déconnexion
           this.updateStatus('Déconnecté du PC Principal (mode hors-ligne)');
         });
       });
@@ -226,6 +303,8 @@ class P2PNetworkManager {
     }
     this.role = 'standalone';
     this.sessionId = '';
+    this.stopClockSync();
+    this.setClockOffset(0);
     
     // Nettoyer les paramètres de reconnexion
     localStorage.removeItem('insertech_net_role');
@@ -243,6 +322,10 @@ class P2PNetworkManager {
     if (this.role === 'host') {
       // --- PARTIE HÔTE / MASTER (Source de vérité) ---
       switch (msg.type) {
+        case 'CLOCK_PING':
+          conn.send({ type: 'CLOCK_PONG', t0: msg.t0, hostTime: Date.now() });
+          break;
+
         case 'REQUEST_INITIAL_SYNC':
           // Envoyer toutes les tables de cet eventId au nouveau client connecté
           const tickets = await db.tickets.where('eventId').equals(eventId).toArray();
@@ -313,6 +396,10 @@ class P2PNetworkManager {
     } else if (this.role === 'client') {
       // --- PARTIE CLIENT ---
       switch (msg.type) {
+        case 'CLOCK_PONG':
+          this.handleClockPong(msg.t0, msg.hostTime);
+          break;
+
         case 'INITIAL_SYNC':
           // Remplacer l'IndexedDB locale par celle du Master
           const importedEvent = msg.payload.event;
