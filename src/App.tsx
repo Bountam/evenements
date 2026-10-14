@@ -10,6 +10,8 @@ import GenericMatrix from './components/matrices/GenericMatrix';
 import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
 import Modal from './components/shared/Modal';
+import SessionQrPanel from './components/shared/SessionQrPanel';
+import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
@@ -213,7 +215,20 @@ export default function App() {
     const savedCode = localStorage.getItem('insertech_net_session_code');
     const savedEventId = localStorage.getItem('insertech_net_event_id');
 
-    if (savedRole && savedCode) {
+    // Lien d'invitation (code QR) : ?rejoindre=CODE connecte directement cet appareil à la session,
+    // sauf s'il en est déjà l'hôte (le PC principal qui scannerait son propre code)
+    const joinCode = readJoinCodeFromUrl();
+    clearJoinCodeFromUrl();
+    const isOwnHostCode = savedRole === 'host' && savedCode === joinCode;
+
+    if (joinCode && !isOwnHostCode) {
+      networkManager.joinSession(joinCode, 'temp')
+        .then(() => {
+          setSessionCode(joinCode);
+          showToast(`Connecté à la session ${joinCode}`, 'success');
+        })
+        .catch(() => showToast(`Session ${joinCode} introuvable. Vérifiez que le PC principal est en ligne.`, 'error'));
+    } else if (savedRole && savedCode) {
       if (savedRole === 'host' && savedEventId) {
         networkManager.startHost(savedEventId, savedCode)
           .then((code) => setSessionCode(code))
@@ -1288,8 +1303,10 @@ export default function App() {
                     <Copy size={14} />
                   </button>
                 </div>
-                <span className="text-[10px] text-app-text-muted block mt-1">Saisissez ce code sur les tablettes d'accueil pour les synchroniser.</span>
+                <span className="text-[10px] text-app-text-muted block mt-1">Saisissez ce code sur les tablettes d'accueil, ou faites-leur scanner le code QR ci-dessous.</span>
               </div>
+
+              <SessionQrPanel sessionCode={sessionCode} />
 
               <button
                 onClick={handleLeaveSession}
