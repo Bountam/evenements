@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import logoImage from './assets/logo.png';
+import { formatTime } from './components/shared/Stopwatch';
+import { getRaffleDraws } from './utils/raffle';
 
 // Fenêtre dédiée à l'écran public (ouverte avec ?vue=public) : toujours verrouillée sur l'onglet public
 const IS_PUBLIC_WINDOW =
@@ -443,6 +445,31 @@ export default function App() {
       const participants = await db.participants.where('eventId').equals(eventId).toArray();
       const attendees = await db.attendees.where('eventId').equals(eventId).toArray();
 
+      // Kiosque-concours : lignes triées par classement, temps lisible et résultat du tirage.
+      // La colonne « Temps (ms) » est conservée pour la réimportation.
+      const contestHeader = ['Rang', 'Nom participant', 'Courriel', 'Code postal', 'Meilleur chrono', 'Temps (ms)', 'Consentement', 'Tirage au sort'];
+      const raffleDraws = getRaffleDraws((await db.events.get(eventId)) || activeEvent);
+      const contestRows: Array<Array<string | number>> = [...participants]
+        .sort((a, b) => {
+          const aTime = a.timeMs && a.timeMs > 0 ? a.timeMs : Infinity;
+          const bTime = b.timeMs && b.timeMs > 0 ? b.timeMs : Infinity;
+          return aTime !== bTime ? aTime - bTime : a.registeredAt - b.registeredAt;
+        })
+        .map((p, idx) => {
+          const hasTime = typeof p.timeMs === 'number' && p.timeMs > 0;
+          const draw = [...raffleDraws].reverse().find(d => d.participantId === p.id);
+          return [
+            hasTime ? idx + 1 : '',
+            p.name,
+            p.email || '',
+            p.postalCode || '',
+            hasTime ? formatTime(p.timeMs!) : '',
+            hasTime ? p.timeMs! : '',
+            p.extraData?.consentContact ? 'Oui' : '',
+            draw ? (draw.status === 'gagnant' ? 'Gagnant' : 'Absent') : ''
+          ];
+        });
+
       // Map technicien ID → numéro de table (pour l'export des tickets)
       const techTableMap = new Map(technicians.map(t => [t.id, t.tableNumber ?? '']));
 
@@ -480,13 +507,8 @@ export default function App() {
             escapeCsvCell(t.weightKg || '')
           ].join(';')).join('\n');
         } else if (activeEvent.type === 'kiosque_concours') {
-          content = "Nom participant;Courriel;Code postal;Temps (ms)\n";
-          content += participants.map(p => [
-            escapeCsvCell(p.name),
-            escapeCsvCell(p.email),
-            escapeCsvCell(p.postalCode || ''),
-            escapeCsvCell(p.timeMs || '')
-          ].join(';')).join('\n');
+          content = contestHeader.join(';') + "\n";
+          content += contestRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         } else {
           content = "Nom;Courriel;Présent;Notes;Note de satisfaction;Commentaire\n";
           content += attendees.map(a => [
@@ -512,9 +534,9 @@ export default function App() {
           content += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n";
           content += tickets.map(t => `| ${t.visitorName} | ${t.visitorEmail || ''} | ${t.objectName} | ${t.objectCategory} | ${t.operatingSystem} | ${t.initialDiagnosis || ''} | ${t.assignedTechName || ''} | ${t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''} | ${t.status} | ${t.resultRemarks || ''} | ${t.weightKg || ''} |`).join('\n');
         } else if (activeEvent.type === 'kiosque_concours') {
-          content += "| Nom participant | Courriel | Code postal | Temps (ms) |\n";
-          content += "| :--- | :--- | :--- | :--- |\n";
-          content += participants.map(p => `| ${p.name} | ${p.email} | ${p.postalCode} | ${p.timeMs || ''} |`).join('\n');
+          content += `| ${contestHeader.join(' | ')} |\n`;
+          content += `|${contestHeader.map(() => ' :--- ').join('|')}|\n`;
+          content += contestRows.map(row => `| ${row.join(' | ')} |`).join('\n');
         } else {
           content += "| Nom | Courriel | Présent | Notes | Note de satisfaction | Commentaire |\n";
           content += "| :--- | :--- | :--- | :--- | :--- | :--- |\n";
@@ -541,13 +563,8 @@ export default function App() {
           ].join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else if (activeEvent.type === 'kiosque_concours') {
-          content += "\\begin{tabular}{l l l l}\n";
-          content += participants.map(p => [
-            escapeLatex(p.name),
-            escapeLatex(p.email),
-            escapeLatex(p.postalCode || ''),
-            escapeLatex(p.timeMs || '')
-          ].join(' & ') + ' \\\\').join('\n');
+          content += "\\begin{tabular}{l l l l l l l l}\n";
+          content += contestRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else {
           content += "\\begin{tabular}{l l l l l l}\n";
@@ -591,13 +608,8 @@ export default function App() {
             ];
           } else if (activeEvent.type === 'kiosque_concours') {
             ws_data = [
-              ["Nom participant", "Courriel", "Code postal", "Temps (ms)"],
-              ...participants.map(p => [
-                protectFormula(p.name),
-                protectFormula(p.email),
-                protectFormula(p.postalCode || ''),
-                p.timeMs || ''
-              ])
+              contestHeader,
+              ...contestRows.map(row => row.map(cell => protectFormula(cell)))
             ];
           } else {
             ws_data = [

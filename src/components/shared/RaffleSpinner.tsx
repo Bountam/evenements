@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 interface RaffleSpinnerProps {
   state: RaffleState;
   participants: Participant[];
+  candidates?: Participant[]; // Noms qui défilent (éligibles) ; le gagnant est cherché parmi tous les participants
   onStartRaffle: () => void;
   onResetRaffle: () => void;
   readOnly?: boolean;
@@ -15,6 +16,7 @@ interface RaffleSpinnerProps {
 export default function RaffleSpinner({
   state,
   participants,
+  candidates,
   onStartRaffle,
   onResetRaffle,
   readOnly = false
@@ -23,7 +25,10 @@ export default function RaffleSpinner({
   const [tickKey, setTickKey] = useState<number>(0);
   const [progress, setProgress] = useState(0);
 
-  const eligibleParticipants = participants.filter(p => p.name);
+  // Repli sur tous les participants si le seul éligible restant vient d'être tiré
+  const namedCandidates = (candidates || participants).filter(p => p.name);
+  const eligibleParticipants = namedCandidates.length > 0 ? namedCandidates : participants.filter(p => p.name);
+  const findWinner = () => participants.find(p => p.id === state.winnerId);
 
   // Gérer l'animation du défilement
   useEffect(() => {
@@ -38,7 +43,7 @@ export default function RaffleSpinner({
         if (remaining <= 0) {
           setProgress(100);
           // Trouver le vainqueur
-          const winner = eligibleParticipants.find(p => p.id === state.winnerId);
+          const winner = findWinner();
           setDisplayName(winner ? winner.name : 'Tirage terminé');
           setTickKey(prev => prev + 1);
         } else {
@@ -66,7 +71,7 @@ export default function RaffleSpinner({
       };
     } else if (state.status === 'celebrating') {
       setProgress(100);
-      const winner = eligibleParticipants.find(p => p.id === state.winnerId);
+      const winner = findWinner();
       setDisplayName(winner ? winner.name : 'Tirage terminé');
       
       // Lancer les confettis une fois (uniquement si le composant est actif)
