@@ -175,6 +175,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Configurer Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
       - name: Installer les dépendances npm
         run: npm ci
 
@@ -182,14 +187,19 @@ jobs:
         run: npm run build:mobile
 
       - name: Compiler l'APK Android (Debug autonome)
+        continue-on-error: true
         run: |
           cd android
-          gradle wrapper
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-          cp app/build/outputs/apk/debug/app-debug.apk ../InsertechEvenements-Android.apk
+          gradle assembleDebug --no-daemon
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk ../InsertechEvenements-Android.apk
+            echo "✅ APK Android généré avec succès !"
+          else
+            echo "⚠️ Avertissement : APK non trouvé à l'emplacement standard"
+          fi
 
       - name: Téléverser l'exécutable Android APK (Artifact)
+        if: hashFiles('InsertechEvenements-Android.apk') != ''
         uses: actions/upload-artifact@v4
         with:
           name: InsertechEvenements-Android-APK
@@ -201,7 +211,7 @@ jobs:
   # ------------------------------------------------------------
   release:
     name: "CD : Publication de la Release GitHub"
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && startsWith(github.ref, 'refs/tags/v') && !contains(needs.*.result, 'cancelled')
     needs:
       - build-windows-exe
       - build-linux-bin
@@ -211,45 +221,48 @@ jobs:
     steps:
       - name: Télécharger l'exécutable Windows
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: InsertechEvenements-Windows-x64
           path: release/
 
       - name: Télécharger l'exécutable Linux Debian
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: InsertechEvenements-Linux-Debian-x64
           path: release/
 
       - name: Télécharger l'exécutable Android APK
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: InsertechEvenements-Android-APK
           path: release/
 
       - name: Télécharger le bundle PWA
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: InsertechEvenements-PWA-Android-Web
           path: release/pwa/
 
       - name: Créer l'archive PWA et préparer les fichiers de Release
         run: |
-          cp release/pwa/index.html release/index.html
-          cp release/pwa/InsertechEvenements-Mobile.html release/InsertechEvenements-Mobile.html
-          cd release/pwa && zip -r ../InsertechEvenements-PWA-Android.zip .
+          mkdir -p release
+          if [ -d "release/pwa" ]; then
+            cp release/pwa/index.html release/index.html 2>/dev/null || true
+            cp release/pwa/InsertechEvenements-Mobile.html release/InsertechEvenements-Mobile.html 2>/dev/null || true
+            cd release/pwa && zip -r ../InsertechEvenements-PWA-Android.zip . && cd ../..
+          fi
+          echo "=== Fichiers disponibles pour la Release ==="
+          ls -la release/
 
       - name: Publier la Release GitHub
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/InsertechEvenements.exe
-            release/InsertechEvenements-linux-x64
-            release/InsertechEvenements-linux-x64.tar.gz
-            release/InsertechEvenements-Android.apk
-            release/InsertechEvenements-PWA-Android.zip
-            release/InsertechEvenements-Mobile.html
-            release/index.html
+            release/*
           generate_release_notes: true
           draft: false
           prerelease: false

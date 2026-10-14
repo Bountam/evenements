@@ -9,10 +9,10 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "build:exe": "npm run build && dotnet publish launcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o .",
-    "build:linux": "npm run build && dotnet publish launcher -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o .",
+    "build:exe": "npm run build && dotnet publish launcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./dist-win && node scripts/copy-artifact.js win",
+    "build:linux": "npm run build && dotnet publish launcher -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./dist-linux && node scripts/copy-artifact.js linux",
     "build:mobile": "npm run build && node scripts/prepare-android.js && node scripts/build-mobile-package.js",
-    "build:all": "npm run build && dotnet publish launcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o . && dotnet publish launcher -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o . && node scripts/prepare-android.js"
+    "build:all": "npm run build:exe && npm run build:linux && npm run build:mobile"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
