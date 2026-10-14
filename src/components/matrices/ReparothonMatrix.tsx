@@ -15,6 +15,31 @@ interface ReparothonMatrixProps {
   activeTab: 'accueil' | 'techniciens' | 'public';
 }
 
+interface StatKpiCardProps {
+  label: string;
+  value: React.ReactNode;
+  labelColorClass?: string;
+  valueColorClass?: string;
+}
+
+function StatKpiCard({
+  label,
+  value,
+  labelColorClass = 'text-app-text-muted',
+  valueColorClass = 'text-app-text'
+}: StatKpiCardProps) {
+  return (
+    <div className="bg-app-card border border-app-card-border p-3.5 sm:p-5 rounded-2xl text-center shadow-lg transition-colors">
+      <span className={`text-[10px] uppercase font-black tracking-widest ${labelColorClass} font-sans block mb-1`}>
+        {label}
+      </span>
+      <div className={`text-2xl sm:text-3xl md:text-4xl font-display font-bold tabular-nums ${valueColorClass}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixProps) {
   // 1. States
   const [tickets, setTickets] = useState<RepairTicket[]>([]);
@@ -613,65 +638,60 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
           </div>
         )}
 
-        {/* Grille de stats adaptative */}
+        {/* Grille de stats adaptative factorisée */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-            <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-sans block mb-1">
-              Appareils apportés
-            </span>
-            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-white">{totalRegistered}</div>
-          </div>
-
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-            <span className="text-[10px] uppercase font-black tracking-widest text-primary font-sans block mb-1">
-              Taux de succès
-            </span>
-            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-primary">
-              {totalRegistered > 0 ? Math.round((successCount / totalRegistered) * 100) : 0}%
-            </div>
-          </div>
-
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-            <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-sans block mb-1">
-              En cours de réparation
-            </span>
-            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-yellow-500">{inProgressCount}</div>
-          </div>
-
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-            <span className="text-[10px] uppercase font-black tracking-widest text-primary font-sans block mb-1">
-              Poids Sauvé
-            </span>
-            <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-primary">{totalWeightSaved.toFixed(1)} kg</div>
-          </div>
+          <StatKpiCard
+            label="Appareils apportés"
+            value={totalRegistered}
+            labelColorClass="text-app-text-muted"
+            valueColorClass="text-app-text"
+          />
+          <StatKpiCard
+            label="Taux de succès"
+            value={`${totalRegistered > 0 ? Math.round((successCount / totalRegistered) * 100) : 0}%`}
+            labelColorClass="text-primary font-bold"
+            valueColorClass="text-primary"
+          />
+          <StatKpiCard
+            label="En cours de réparation"
+            value={inProgressCount}
+            labelColorClass="text-app-text-muted"
+            valueColorClass="text-amber-500"
+          />
+          <StatKpiCard
+            label="Poids Sauvé"
+            value={`${totalWeightSaved.toFixed(1)} kg`}
+            labelColorClass="text-primary font-bold"
+            valueColorClass="text-primary"
+          />
         </div>
 
         {/* Graphique et file d'attente */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-8">
           {/* File d'attente / Tableau des réparations */}
-          <div className="lg:col-span-8 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-            <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider mb-4 pb-2 border-b border-purple-950/60">
+          <div className="lg:col-span-8 bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg">
+            <h3 className="text-lg font-bold font-display text-app-text uppercase tracking-wider mb-4 pb-2 border-b border-app-card-border">
               Suivi des Réparations en cours
             </h3>
             
             {tickets.filter(t => ['assigne', 'en_cours', 'en_attente'].includes(t.status)).length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-12 font-sans">Aucun appareil en cours de réparation actuellement.</p>
+              <p className="text-sm text-app-text-muted text-center py-12 font-sans">Aucun appareil en cours de réparation actuellement.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {tickets
                   .filter(t => ['assigne', 'en_cours', 'en_attente'].includes(t.status))
                   .slice(0, 8)
                   .map(t => (
-                    <div key={t.id} className="p-4 rounded-xl bg-[#180A2b]/60 border border-purple-950 flex items-center justify-between">
+                    <div key={t.id} className="p-4 rounded-xl bg-app-input border border-app-card-border flex items-center justify-between">
                       <div>
-                        <h4 className="font-bold text-white text-sm">{t.visitorName}</h4>
-                        <p className="text-xs text-slate-400 mt-0.5">{t.objectName} ({t.objectCategory})</p>
+                        <h4 className="font-bold text-app-text text-sm">{t.visitorName}</h4>
+                        <p className="text-xs text-app-text-muted mt-0.5">{t.objectName} ({t.objectCategory})</p>
                       </div>
                       
                       <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${
                         t.status === 'en_attente' 
                           ? 'bg-slate-500/20 text-slate-400 border border-slate-500/30 animate-pulse' 
-                          : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                          : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30'
                       }`}>
                         {t.status === 'en_attente' ? 'Attente' : `Banc : ${t.assignedTechName}`}
                       </span>
@@ -681,16 +701,23 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
             )}
           </div>
 
-          {/* Graphique de répartition */}
-          <div className="lg:col-span-4 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-            <DoughnutChart data={doughnutData} title="Statut des diagnostics" />
+          {/* Graphique de répartition avec ratio préservé */}
+          <div className="lg:col-span-4 bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg flex flex-col justify-center">
+            <div className="max-h-72 aspect-square mx-auto w-full flex items-center justify-center">
+              <DoughnutChart data={doughnutData} title="Statut des diagnostics" />
+            </div>
           </div>
         </div>
 
-        {/* Carrousel des Partenaires au bas */}
+        {/* Carrousel des Partenaires au bas avec contrôle accessible */}
         {partnerLogos.length > 0 && (
-          <div className="bg-[#24123d]/40 border border-purple-900/30 p-4 rounded-2xl flex items-center justify-between gap-4 mt-8 animate-fade-in">
-            <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 font-sans shrink-0">Nos précieux partenaires</span>
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Partenaires de l'événement"
+            className="bg-app-card border border-app-card-border p-4 rounded-2xl flex items-center justify-between gap-4 mt-8 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          >
+            <span className="text-[9px] uppercase font-black tracking-widest text-app-text-muted font-sans shrink-0">Nos précieux partenaires</span>
             
             <div className="flex-1 overflow-hidden relative h-12 max-w-md mx-auto flex items-center justify-center">
               {partnerLogos.map((logo: PartnerLogo, idx: number) => (
@@ -707,7 +734,7 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
               ))}
             </div>
             
-            <span className="text-[9px] font-sans text-slate-500 shrink-0 font-bold">
+            <span className="text-[9px] font-sans text-app-text-muted shrink-0 font-bold">
               {activeLogoIndex + 1} / {partnerLogos.length}
             </span>
           </div>

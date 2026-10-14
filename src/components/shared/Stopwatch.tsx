@@ -29,6 +29,24 @@ export function formatTime(ms: number): string {
   return `${mStr}:${sStr}.${msStr}`;
 }
 
+interface LcdSegmentProps {
+  digits: string;
+  label: string;
+  digitColorClass: string;
+  sizeClass?: string;
+}
+
+function LcdSegment({ digits, label, digitColorClass, sizeClass = 'text-4xl sm:text-5xl' }: LcdSegmentProps) {
+  return (
+    <div className="stopwatch-segment-box px-2.5 py-1 rounded-xl bg-app-input border border-app-input-border">
+      <span className={`${sizeClass} font-mono font-black tabular-nums ${digitColorClass}`}>{digits}</span>
+      <span className="block text-[8px] uppercase tracking-widest text-app-text-muted font-sans -mt-1 font-bold">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export default function Stopwatch({
   state,
   onStart,
@@ -69,7 +87,7 @@ export default function Stopwatch({
   const { mStr, sStr, msStr } = splitTimeParts(time);
   const digitColorClass = state.isRunning
     ? 'text-primary stopwatch-digits-running'
-    : 'text-white stopwatch-digits-idle';
+    : 'text-app-text stopwatch-digits-idle';
 
   // Calcul de la jauge de rythme par rapport au record (1re place)
   const hasBestRecord = typeof bestTimeMs === 'number' && bestTimeMs > 0;
@@ -88,8 +106,8 @@ export default function Stopwatch({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-5 bg-[#24123d]/60 border border-purple-900/40 rounded-3xl shadow-lg">
-      <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-2 font-sans flex items-center gap-1.5">
+    <div className="flex flex-col items-center justify-center p-5 bg-app-card border border-app-card-border rounded-3xl shadow-lg">
+      <div className="text-[10px] uppercase font-black tracking-widest text-app-text-muted mb-2 font-sans flex items-center gap-1.5">
         <span
           className={`w-2 h-2 rounded-full ${
             state.isRunning ? 'bg-primary animate-ping' : time > 0 ? 'bg-amber-400' : 'bg-slate-600'
@@ -97,19 +115,20 @@ export default function Stopwatch({
         />
         <span>Télémétrie Chrono</span>
       </div>
+
+      {/* Région accessible non intrusive pour lecteurs d'écran */}
+      <div className="sr-only" aria-live="polite">
+        {!state.isRunning && time > 0 ? `Chronomètre arrêté à ${formatTime(time)}` : ''}
+      </div>
       
       {/* Affichage digital télémétrique segmenté */}
       <div
-        className={`stopwatch-lcd font-mono font-bold tracking-wider tabular-nums bg-purple-950/80 px-4 py-3.5 rounded-2xl border transition-all duration-300 mb-4 w-full text-center shadow-inner flex items-baseline justify-center gap-1 sm:gap-1.5 ${
-          state.isRunning ? 'border-primary/60 shadow-primary/10' : 'border-primary/20'
+        aria-hidden="true"
+        className={`stopwatch-lcd font-mono font-bold tracking-wider tabular-nums bg-app-input px-4 py-3.5 rounded-2xl border transition-all duration-300 mb-4 w-full text-center shadow-inner flex items-baseline justify-center gap-1 sm:gap-1.5 ${
+          state.isRunning ? 'border-primary/60 shadow-primary/10' : 'border-app-card-border'
         }`}
       >
-        <div className="stopwatch-segment-box px-2.5 py-1 rounded-xl bg-[#180A2b]/70 border border-purple-900/50">
-          <span className={`text-4xl sm:text-5xl ${digitColorClass}`}>{mStr}</span>
-          <span className="block text-[8px] uppercase tracking-widest text-slate-500 font-sans -mt-1">
-            MIN
-          </span>
-        </div>
+        <LcdSegment digits={mStr} label="MIN" digitColorClass={digitColorClass} />
 
         <span
           className={`text-3xl sm:text-4xl font-black ${digitColorClass} ${
@@ -119,39 +138,29 @@ export default function Stopwatch({
           :
         </span>
 
-        <div className="stopwatch-segment-box px-2.5 py-1 rounded-xl bg-[#180A2b]/70 border border-purple-900/50">
-          <span className={`text-4xl sm:text-5xl ${digitColorClass}`}>{sStr}</span>
-          <span className="block text-[8px] uppercase tracking-widest text-slate-500 font-sans -mt-1">
-            SEC
-          </span>
-        </div>
+        <LcdSegment digits={sStr} label="SEC" digitColorClass={digitColorClass} />
 
         <span className={`text-2xl sm:text-3xl font-black ${digitColorClass}`}>.</span>
 
-        <div className="stopwatch-segment-box px-2 py-1 rounded-xl bg-[#180A2b]/70 border border-purple-900/50">
-          <span className={`text-2xl sm:text-3xl ${digitColorClass}`}>{msStr}</span>
-          <span className="block text-[8px] uppercase tracking-widest text-slate-500 font-sans -mt-1">
-            CS
-          </span>
-        </div>
+        <LcdSegment digits={msStr} label="CS" digitColorClass={digitColorClass} sizeClass="text-2xl sm:text-3xl" />
       </div>
 
-      {/* Jauge de rythme en direct face au record (1re place) */}
+      {/* Jauge de rythme en direct face au record (1re place) accélérée par GPU */}
       {showPaceGauge && (
         <div className="w-full mb-4 space-y-1">
           <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider">
-            <span className="flex items-center gap-1 text-slate-300">
+            <span className="flex items-center gap-1 text-app-text-muted">
               <Zap size={10} className="text-primary" />
               <span>{paceStatusText}</span>
             </span>
-            <span className="font-mono text-slate-400">
+            <span className="font-mono text-app-text-muted font-bold">
                Cible : {formatTime(bestTimeMs!)}
             </span>
           </div>
-          <div className="w-full h-2 rounded-full bg-purple-950/90 border border-purple-900/60 overflow-hidden p-0.5">
+          <div className="w-full h-2 rounded-full bg-app-input border border-app-input-border overflow-hidden p-0.5">
             <div
-              className={`h-full rounded-full transition-all duration-75 ${paceBarColor}`}
-              style={{ width: `${pacePercent}%` }}
+              className={`h-full rounded-full transition-transform duration-75 origin-left ${paceBarColor}`}
+              style={{ transform: `scaleX(${pacePercent / 100})` }}
             />
           </div>
         </div>
@@ -163,6 +172,7 @@ export default function Stopwatch({
           {state.isRunning ? (
             <button
               onClick={onStop}
+              aria-label="Arrêter le chronomètre"
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white font-bold font-display uppercase tracking-wider text-xs hover:bg-red-500 transition cursor-pointer shadow-md shadow-red-600/20"
             >
               <Square size={14} fill="white" />
@@ -171,6 +181,7 @@ export default function Stopwatch({
           ) : (
             <button
               onClick={onStart}
+              aria-label={time > 0 ? "Reprendre le chronomètre" : "Démarrer le chronomètre"}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-105 transition cursor-pointer shadow-md shadow-primary/15"
             >
               <Play size={14} fill="currentColor" />
@@ -181,7 +192,8 @@ export default function Stopwatch({
           <button
             onClick={onReset}
             disabled={state.isRunning || time === 0}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-950 text-purple-300 font-bold font-display uppercase tracking-wider text-xs border border-purple-900/60 hover:text-white hover:border-purple-600 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
+            aria-label="Réinitialiser le chronomètre"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-app-input text-app-text-muted font-bold font-display uppercase tracking-wider text-xs border border-app-card-border hover:text-app-text hover:border-primary disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
           >
             <RotateCcw size={14} />
             <span>Réinit.</span>
@@ -191,4 +203,5 @@ export default function Stopwatch({
     </div>
   );
 }
+
 

@@ -191,8 +191,8 @@ export default function MobileInstallModal({
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-600/30 text-[11px] text-amber-950 dark:text-yellow-300 flex items-start gap-2">
-                <Info size={14} className="shrink-0 mt-0.5" />
+              <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-400/40 text-[11px] text-amber-300 flex items-start gap-2">
+                <Info size={14} className="shrink-0 mt-0.5 text-amber-400" />
                 <span>
                   <strong>Exécutable natif APK :</strong> Le package Android (.apk) est également généré automatiquement dans les Releases et Artifacts GitHub de la PR.
                 </span>

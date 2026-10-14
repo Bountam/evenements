@@ -148,6 +148,25 @@
     border-color: #93c5fd !important;
   }
 
+  /* Badges de prix, trophées et rangs du ticker en mode clair */
+  [class*="bg-amber-500/20"],
+  [class*="bg-amber-500/25"],
+  [class*="bg-amber-600/30"] {
+    background-color: #fef3c7 !important;
+    color: #92400e !important;
+    border-color: #fcd34d !important;
+  }
+  [class*="bg-purple-500/25"] {
+    background-color: #f3e8ff !important;
+    color: #6b21a8 !important;
+    border-color: #d8b4fe !important;
+  }
+  [class*="bg-slate-300/20"] {
+    background-color: #f1f5f9 !important;
+    color: #334155 !important;
+    border-color: #cbd5e1 !important;
+  }
+
   /* Conteneurs légèrement teintés (bg-primary/10, bg-primary/15, bg-primary/20) en mode clair */
   [class*="bg-primary/10"],
   [class*="bg-primary/15"],
@@ -355,6 +374,16 @@
     overflow-x: hidden;
   }
 
+  /* Indicateur de focus visible accessible WCAG 2.4.7 */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Halo Aurora Mesh dynamique accéléré par GPU */
   body::before {
     content: "";
@@ -449,15 +478,19 @@ main, .grid, form, section, .glass-card {
   pointer-events: none;
 }
 
-/* Micro-interactions globales sur les boutons */
-button, .cursor-pointer {
-  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+/* Micro-interactions ciblées sur les boutons actifs */
+button:not(:disabled), .cursor-pointer:not(:disabled) {
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
-button:hover, .cursor-pointer:hover {
+button:not(:disabled):hover, .cursor-pointer:not(:disabled):hover {
   transform: translateY(-1.5px) scale(1.02);
 }
-button:active, .cursor-pointer:active {
+button:not(:disabled):active, .cursor-pointer:not(:disabled):active {
   transform: translateY(1px) scale(0.97);
+}
+button:disabled {
+  cursor: not-allowed;
+  transform: none !important;
 }
 
 /* Effets Hover Premium sur les grilles de sélection de matrices d'activité */
@@ -562,6 +595,24 @@ button:active, .cursor-pointer:active {
 .safe-column {
   min-height: 0;
   max-width: 100%;
+}
+
+/* --- ACCESSIBILITÉ WCAG 2.1 (2.3.3 & 2.2.2) : RÉDUCTION DE MOUVEMENT --- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  body::before {
+    animation: none !important;
+  }
+  .animate-ticker {
+    animation: none !important;
+  }
 }
 
 

@@ -63,6 +63,58 @@ function playRecordFanfare() {
   }
 }
 
+interface PrizeShowcaseCardProps {
+  badgeText: string;
+  badgeClass: string;
+  tag?: string;
+  title: string;
+  imageSrc: string;
+  imageAlt: string;
+  description: string;
+  gradientClass: string;
+  borderClass: string;
+}
+
+function PrizeShowcaseCard({
+  badgeText,
+  badgeClass,
+  tag,
+  title,
+  imageSrc,
+  imageAlt,
+  description,
+  gradientClass,
+  borderClass
+}: PrizeShowcaseCardProps) {
+  return (
+    <div className={`bg-gradient-to-br ${gradientClass} via-app-card to-app-card border-2 ${borderClass} p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group`}>
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+          <img
+            src={imageSrc}
+            alt={imageAlt}
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className={`px-1.5 py-0.2 rounded ${badgeClass} text-[8px] font-black uppercase font-display tracking-wider block w-fit`}>
+              {badgeText}
+            </span>
+            {tag && <span className="text-[8px] font-bold font-mono text-primary">{tag}</span>}
+          </div>
+          <h4 className="text-xs font-black text-app-text font-display uppercase tracking-tight leading-tight truncate mt-0.5">
+            {title}
+          </h4>
+        </div>
+      </div>
+      <p className="text-[10px] text-app-text-muted leading-tight font-sans">
+        {description}
+      </p>
+    </div>
+  );
+}
+
 export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps) {
   // 1. États principaux
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -737,10 +789,10 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                   {/* Badge Record du moment */}
                   {bestParticipant && (
-                    <div className="mt-2.5 w-full py-1.5 px-3 rounded-2xl bg-amber-500/15 dark:bg-primary/15 border border-amber-600/40 dark:border-primary/40 text-amber-950 dark:text-primary flex items-center justify-center gap-2 shadow-sm">
-                      <Trophy size={15} className="text-amber-700 dark:text-yellow-400 shrink-0" />
+                    <div className="mt-2.5 w-full py-1.5 px-3 rounded-2xl bg-primary/10 border border-primary/30 text-app-text flex items-center justify-center gap-2 shadow-sm">
+                      <Trophy size={15} className="text-yellow-400 shrink-0" />
                       <span className="text-xs font-black uppercase tracking-wide truncate">
-                        Record : <span className="font-mono text-sm underline text-amber-950 dark:text-primary">{formatTime(bestParticipant.timeMs!)}</span> ({bestParticipant.name})
+                        Record : <span className="font-mono text-sm underline text-primary">{formatTime(bestParticipant.timeMs!)}</span> ({bestParticipant.name})
                       </span>
                     </div>
                   )}
@@ -751,7 +803,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                       <Users size={14} className="text-primary" />
                       <span>Inscriptions du jour</span>
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-secondary text-white dark:bg-primary dark:text-secondary font-mono font-black text-xs shadow-sm">
+                    <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 font-mono font-black text-xs shadow-sm">
                       {participants.length}
                     </span>
                   </div>
@@ -760,8 +812,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 {/* Vitrine officielle des 2 Prix en jeu avec photos agrandies */}
                 <div className="grid grid-cols-1 gap-2.5 flex-1 min-h-0">
                   {/* Prix #1 : Meilleur Temps - Disque SSD portable 128 Go */}
-                  <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-600/50 p-3 sm:p-3.5 rounded-3xl shadow-md dark:shadow-amber-500/10 flex items-center gap-3.5 relative overflow-hidden group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md dark:shadow-amber-500/20 overflow-hidden">
+                  <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-500/40 p-3 sm:p-3.5 rounded-3xl shadow-md flex items-center gap-3.5 relative overflow-hidden group">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md overflow-hidden">
                       <img
                         src="./prize-ssd.png"
                         alt="Disque SSD Portable 128 Go"
@@ -770,7 +822,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded-md bg-amber-400/30 text-amber-950 border border-amber-600 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
+                        <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/50 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
                           1er Prix
                         </span>
                         <span className="text-[10px] font-bold text-app-text-muted uppercase">Meilleur chrono</span>
@@ -785,8 +837,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   </div>
 
                   {/* Prix de Participation : Tirage TOSHIBA Dynabook Portégé X40-G i5 (10e gen) 500$ */}
-                  <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-3 sm:p-3.5 rounded-3xl shadow-md dark:shadow-purple-500/15 flex items-center gap-3.5 relative overflow-hidden group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md dark:shadow-purple-500/25 overflow-hidden">
+                  <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-3 sm:p-3.5 rounded-3xl shadow-md flex items-center gap-3.5 relative overflow-hidden group">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white p-2 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-md overflow-hidden">
                       <img
                         src="./prize-laptop.png"
                         alt="TOSHIBA Dynabook Portégé X40-G"
@@ -795,7 +847,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-950 dark:text-purple-300 border border-purple-500/50 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
+                        <span className="px-2.5 py-0.5 rounded-md bg-purple-500/25 text-purple-200 border border-purple-400/50 text-[9px] font-black uppercase font-display tracking-wider shadow-sm">
                           Tirage au sort
                         </span>
                         <span className="px-1.5 py-0.2 rounded bg-primary/20 text-primary border border-primary/40 text-[9px] font-black font-mono">
@@ -836,10 +888,10 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   </div>
 
                   {bestParticipant ? (
-                    <div className="flex items-center gap-1.5 shrink-0 bg-amber-500/15 border border-amber-600/40 px-2.5 py-1 rounded-xl text-amber-950 dark:text-primary shadow-sm">
-                      <Trophy size={13} className="text-amber-700 dark:text-yellow-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 shrink-0 bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-xl text-app-text shadow-sm">
+                      <Trophy size={13} className="text-yellow-400 shrink-0" />
                       <span className="text-xs uppercase font-black tracking-wide">
-                        Temps à battre : <span className="font-mono text-sm underline text-amber-950 dark:text-primary">{formatTime(bestParticipant.timeMs!)}</span>
+                        Temps à battre : <span className="font-mono text-sm underline text-primary">{formatTime(bestParticipant.timeMs!)}</span>
                         <span className="text-[11px] font-bold text-app-text-muted hidden md:inline ml-1">({bestParticipant.name})</span>
                       </span>
                     </div>
@@ -868,24 +920,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                     </div>
                   )}
 
-                  {/* N = 2 : 2 grandes cartes côte à côte */}
-                  {activeTracks.length === 2 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 h-full items-stretch">
-                      {activeTracks.map((track) => (
-                        <PublicTrackBlock
-                          key={track.trackId}
-                          track={track}
-                          isSingle={false}
-                          bestTimeMs={bestParticipant?.timeMs ?? null}
-                          secondTimeMs={secondParticipant?.timeMs ?? null}
-                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* N = 3 : 2 cartes en haut + 3e carte en bas partageant l'espace avec la carte "Prochain Départ" */}
-                  {activeTracks.length === 3 && (
+                  {/* N = 2, 3 ou 4 : Grille 2 colonnes réactive et équilibrée */}
+                  {activeTracks.length >= 2 && activeTracks.length <= 4 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 h-full items-stretch">
                       {activeTracks.map((track) => (
                         <PublicTrackBlock
@@ -898,37 +934,23 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                         />
                       ))}
 
-                      {/* 4e case : invitation proactive pour combler le vide et attirer les participants */}
-                      <div className="relative overflow-hidden p-4 rounded-3xl bg-gradient-to-br from-primary/15 via-app-card to-app-card border-2 border-dashed border-primary/50 flex flex-col items-center justify-center text-center shadow-md">
-                        <div className="w-11 h-11 rounded-2xl bg-primary/20 text-primary border border-primary/40 flex items-center justify-center mb-1.5 shadow-sm">
-                          <Zap size={22} className="animate-bounce text-primary" />
+                      {/* N = 3 : 4e case invitation proactive pour combler le vide */}
+                      {activeTracks.length === 3 && (
+                        <div className="relative overflow-hidden p-4 rounded-3xl bg-gradient-to-br from-primary/15 via-app-card to-app-card border-2 border-dashed border-primary/50 flex flex-col items-center justify-center text-center shadow-md">
+                          <div className="w-11 h-11 rounded-2xl bg-primary/20 text-primary border border-primary/40 flex items-center justify-center mb-1.5 shadow-sm">
+                            <Zap size={22} className="animate-bounce text-primary" />
+                          </div>
+                          <span className="text-[10px] uppercase font-black tracking-widest text-primary font-display">
+                            Prochain Départ
+                          </span>
+                          <h4 className="font-display font-black text-sm sm:text-base text-app-text uppercase mt-0.5">
+                            Pistes 4 & 5 disponibles !
+                          </h4>
+                          <p className="text-xs text-app-text-muted mt-0.5 max-w-[200px]">
+                            Présentez-vous à l'animateur pour participer à la prochaine vague !
+                          </p>
                         </div>
-                        <span className="text-[10px] uppercase font-black tracking-widest text-primary font-display">
-                          Prochain Départ
-                        </span>
-                        <h4 className="font-display font-black text-sm sm:text-base text-app-text uppercase mt-0.5">
-                          Pistes 4 & 5 disponibles !
-                        </h4>
-                        <p className="text-xs text-app-text-muted mt-0.5 max-w-[200px]">
-                          Présentez-vous à l'animateur pour participer à la prochaine vague !
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* N = 4 : Grille 2x2 symétrique */}
-                  {activeTracks.length === 4 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 h-full items-stretch">
-                      {activeTracks.map((track) => (
-                        <PublicTrackBlock
-                          key={track.trackId}
-                          track={track}
-                          isSingle={false}
-                          bestTimeMs={bestParticipant?.timeMs ?? null}
-                          secondTimeMs={secondParticipant?.timeMs ?? null}
-                          thirdTimeMs={thirdParticipant?.timeMs ?? null}
-                        />
-                      ))}
+                      )}
                     </div>
                   )}
 
@@ -1007,56 +1029,27 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
                 {/* Vitrine officielle permanente des 2 Prix (côte à côte en 2 colonnes sans superposition) */}
                 <div className="grid grid-cols-2 gap-2.5 shrink-0">
-                  {/* 1er Prix : Disque SSD portable 128 Go */}
-                  <div className="bg-gradient-to-br from-amber-500/10 via-app-card to-app-card border-2 border-amber-600/50 p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-                        <img
-                          src="./prize-ssd.png"
-                          alt="Disque SSD Portable 128 Go"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="px-1.5 py-0.2 rounded bg-amber-400/35 text-amber-950 border border-amber-600 text-[8px] font-black uppercase font-display tracking-wider block w-fit">
-                          1er Prix
-                        </span>
-                        <h4 className="text-xs font-black text-app-text font-display uppercase tracking-tight leading-tight truncate mt-0.5">
-                          SSD 128 Go
-                        </h4>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-app-text-muted leading-tight font-sans">
-                      Boîtier USB-C avec diagnostic PC.
-                    </p>
-                  </div>
-
-                  {/* Prix de Participation : Laptop Toshiba Portégé X40-G */}
-                  <div className="bg-gradient-to-br from-purple-500/10 via-app-card to-app-card border-2 border-primary/50 p-2.5 rounded-2xl shadow-sm flex flex-col justify-between relative overflow-hidden group">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white p-1 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-                        <img
-                          src="./prize-laptop.png"
-                          alt="TOSHIBA Dynabook Portégé X40-G"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-950 dark:text-purple-300 border border-purple-500/50 text-[8px] font-black uppercase font-display tracking-wider block">
-                            Tirage
-                          </span>
-                          <span className="text-[8px] font-bold font-mono text-primary">500$</span>
-                        </div>
-                        <h4 className="text-xs font-black text-app-text font-display uppercase tracking-tight leading-tight truncate mt-0.5">
-                          Portégé X40-G
-                        </h4>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-app-text-muted leading-tight font-sans">
-                      Laptop i5 tiré parmi tous !
-                    </p>
-                  </div>
+                  <PrizeShowcaseCard
+                    badgeText="1er Prix"
+                    badgeClass="bg-amber-500/20 text-amber-300 border border-amber-400/50"
+                    title="SSD 128 Go"
+                    imageSrc="./prize-ssd.png"
+                    imageAlt="Disque SSD Portable 128 Go"
+                    description="Boîtier USB-C avec diagnostic PC."
+                    gradientClass="from-amber-500/10"
+                    borderClass="border-amber-500/40"
+                  />
+                  <PrizeShowcaseCard
+                    badgeText="Tirage"
+                    badgeClass="bg-purple-500/25 text-purple-200 border border-purple-400/50"
+                    tag="500$"
+                    title="Portégé X40-G"
+                    imageSrc="./prize-laptop.png"
+                    imageAlt="TOSHIBA Dynabook Portégé X40-G"
+                    description="Laptop i5 tiré parmi tous !"
+                    gradientClass="from-purple-500/10"
+                    borderClass="border-primary/50"
+                  />
                 </div>
               </div>
             </div>
@@ -1145,9 +1138,9 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                 </div>
               </div>
 
-              {/* Courriel et Code Postal sur la même ligne (3 cols / 2 cols) */}
-              <div className="grid grid-cols-5 gap-2">
-                <div className="col-span-3 space-y-0.5">
+              {/* Courriel et Code Postal sur la même ligne (responsive mobile) */}
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                <div className="sm:col-span-3 space-y-0.5">
                   <label className="text-[9px] font-bold uppercase text-app-text-muted block">
                     Courriel
                   </label>
@@ -1163,7 +1156,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   </div>
                 </div>
 
-                <div className="col-span-2 space-y-0.5">
+                <div className="sm:col-span-2 space-y-0.5">
                   <label className="text-[9px] font-bold uppercase text-app-text-muted block">
                     Code postal
                   </label>
@@ -1183,21 +1176,23 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="submit"
-                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-app-input border border-app-card-border text-app-text hover:text-white hover:border-primary text-[10px] font-bold font-display uppercase tracking-wider transition cursor-pointer"
+                  className="min-h-[44px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-app-input border border-app-card-border text-app-text hover:text-white hover:border-primary text-xs font-bold font-display uppercase tracking-wider transition cursor-pointer"
                   title="Inscrire [Entrée]"
+                  aria-label="Inscrire le participant"
                 >
-                  <UserPlus size={12} />
+                  <UserPlus size={14} />
                   <span>Inscrire</span>
-                  <span className="text-[8px] text-app-text-muted font-mono hidden sm:inline">[↵]</span>
+                  <span className="text-[9px] text-app-text-muted font-mono hidden sm:inline">[↵]</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={(e) => addParticipant(e as any, true)}
-                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-[10px] hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
+                  className="min-h-[44px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
                   title="Inscrire et assigner directement à la première piste libre"
+                  aria-label="Inscrire et assigner à la première piste libre"
                 >
-                  <Play size={12} fill="currentColor" />
+                  <Play size={14} fill="currentColor" />
                   <span>+ Piste libre</span>
                 </button>
               </div>
@@ -1436,12 +1431,12 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                               <span
                                 className={`font-mono font-black text-[9px] px-1.5 py-0.2 rounded ${
                                   rankIndex === 1
-                                    ? 'bg-amber-400 text-amber-950'
+                                    ? 'bg-amber-400 text-slate-950'
                                     : rankIndex === 2
-                                      ? 'bg-slate-300 text-slate-900'
+                                      ? 'bg-slate-200 text-slate-950'
                                       : rankIndex === 3
                                         ? 'bg-amber-700 text-amber-100'
-                                        : 'bg-primary/20 text-primary'
+                                        : 'bg-primary/20 text-primary font-bold'
                                 }`}
                               >
                                 #{rankIndex}
@@ -2118,11 +2113,11 @@ function PublicParticipantsTicker({ participants, eventName }: PublicParticipant
                     <span
                       className={`font-mono font-black px-2 py-0.5 rounded-md text-[10px] ${
                         rankIndex === 1
-                          ? 'bg-amber-400/35 text-amber-950 border border-amber-600 shadow-sm'
+                          ? 'bg-amber-500/25 text-amber-300 border border-amber-400/60 shadow-sm'
                           : rankIndex === 2
-                          ? 'bg-slate-200 dark:bg-slate-300/20 text-slate-950 dark:text-slate-100 border border-slate-400 shadow-sm'
+                          ? 'bg-slate-300/20 text-slate-200 border border-slate-300/50 shadow-sm'
                           : rankIndex === 3
-                          ? 'bg-amber-600/30 text-amber-950 border border-amber-700 shadow-sm'
+                          ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
                           : 'bg-primary/20 text-primary border border-primary/40'
                       }`}
                     >

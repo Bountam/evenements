@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
-  LogOut, Download, Database, Calendar, MapPin, Building, Wifi, Sun, Moon,
+  LogOut, Download, Database, Wifi,
   Maximize, Minimize, Settings2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ThemeToggle from './shared/ThemeToggle';
+import EventMetaBadges from './shared/EventMetaBadges';
 
 interface DashboardShellProps {
   event: EventSettings;
@@ -113,22 +115,7 @@ export default function DashboardShell({
                   {event.name}
                 </h1>
               </div>
-              <div className="flex items-center gap-3 text-xs text-app-text-muted font-medium mt-0.5 flex-wrap">
-                <span className="flex items-center gap-1 shrink-0">
-                  <Calendar size={12} className="text-primary shrink-0" />
-                  {new Date(event.date + 'T00:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-                <span className="flex items-center gap-1 truncate max-w-[200px] sm:max-w-[320px]" title={event.location}>
-                  <MapPin size={12} className="text-primary shrink-0" />
-                  {event.location}
-                </span>
-                {event.partner && (
-                  <span className="hidden sm:flex items-center gap-1 truncate max-w-[180px]" title={event.partner}>
-                    <Building size={12} className="text-primary shrink-0" />
-                    {event.partner}
-                  </span>
-                )}
-              </div>
+              <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
             </div>
           </div>
 
@@ -170,31 +157,27 @@ export default function DashboardShell({
             {/* Séparateur vertical discret */}
             <div className="h-6 w-px bg-app-card-border shrink-0" />
 
-            {/* Groupe des commandes d'administration (discret à 30% d'opacité, 100% au survol) */}
-            <div className="flex items-center gap-1.5 opacity-30 hover:opacity-100 transition-opacity duration-300 shrink-0">
+            {/* Groupe des commandes d'administration (contraste accessible 75% au repos, 100% au survol) */}
+            <div className="flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity duration-300 shrink-0">
               {/* Bouton bascule vers l'écran d'administration / chrono */}
               <button
                 onClick={() => onTabChange(event.type === 'kiosque_concours' ? 'admin' : tabs[0].id)}
                 title="Basculer vers la console Chronomètre & Inscriptions"
+                aria-label="Basculer vers la console d'administration"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-app-card border border-app-card-border hover:border-primary/60 text-xs font-bold text-app-text hover:text-primary transition cursor-pointer shadow-sm"
               >
                 <Settings2 size={14} className="text-primary" />
                 <span className="hidden md:inline">Mode Régie</span>
               </button>
 
-              {/* Basculeur de thème */}
-              <button
-                onClick={onToggleTheme}
-                title={isLightTheme ? "Passer au thème sombre" : "Passer au thème clair"}
-                className="flex items-center justify-center p-2 rounded-xl bg-app-card border border-app-card-border text-app-text hover:text-primary transition cursor-pointer shadow-sm"
-              >
-                {isLightTheme ? <Moon size={14} /> : <Sun size={14} />}
-              </button>
+              {/* Basculeur de thème partagé */}
+              <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
 
               {/* Plein écran télé / moniteur */}
               <button
                 onClick={toggleFullscreen}
                 title={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran télé (Kiosque)"}
+                aria-label={isFullscreen ? "Quitter le plein écran" : "Passer en plein écran télé"}
                 className="flex items-center justify-center p-2 rounded-xl bg-primary text-secondary hover:brightness-110 font-bold transition cursor-pointer shadow-md shadow-primary/20"
               >
                 {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
@@ -251,32 +234,26 @@ export default function DashboardShell({
               </div>
             )}
             <div className="w-px h-5 bg-app-card-border hidden md:block"></div>
-            <div className="flex items-center gap-3 text-xs text-app-text-muted font-medium">
-              <span className="flex items-center gap-1">
-                <Calendar size={12} className="text-primary shrink-0" />
-                {new Date(event.date + 'T00:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-              <span className="flex items-center gap-1 max-w-[180px] truncate" title={event.location}>
-                <MapPin size={12} className="text-primary shrink-0" />
-                {event.location}
-              </span>
-              {event.partner && (
-                <span className="flex items-center gap-1 max-w-[160px] truncate text-app-text" title={event.partner}>
-                  <Building size={12} className="text-primary shrink-0" />
-                  {event.partner}
-                </span>
-              )}
-            </div>
+            <EventMetaBadges date={event.date} location={event.location} partner={event.partner} />
           </div>
 
           {/* Onglets de navigation et boutons d'actions */}
           <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto justify-between xl:justify-end">
-            <div className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative">
+            <div 
+              role="tablist" 
+              aria-label="Navigation des vues de l'événement"
+              className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative"
+            >
               {tabs.map((tab) => {
                 const isActive = currentTab === tab.id;
                 return (
                   <button
                     key={tab.id}
+                    role="tab"
+                    id={`tab-${tab.id}`}
+                    aria-selected={isActive}
+                    aria-controls={`panel-${tab.id}`}
+                    tabIndex={isActive ? 0 : -1}
                     onClick={() => onTabChange(tab.id)}
                     className={`relative px-3.5 py-1.5 rounded-lg text-xs font-bold font-display uppercase transition cursor-pointer z-10 ${
                       isActive
@@ -311,13 +288,7 @@ export default function DashboardShell({
                 <span>{sessionCode ? sessionCode : 'Réseau LAN'}</span>
               </button>
 
-              <button
-                onClick={onToggleTheme}
-                title={isLightTheme ? "Passer au thème sombre" : "Passer au thème clair"}
-                className="flex items-center justify-center p-2 rounded-xl bg-app-card border border-app-card-border text-app-text hover:text-primary transition cursor-pointer"
-              >
-                {isLightTheme ? <Moon size={14} /> : <Sun size={14} />}
-              </button>
+              <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
 
               <button
                 onClick={onExportData}

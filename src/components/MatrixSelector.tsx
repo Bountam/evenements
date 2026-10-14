@@ -132,22 +132,19 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
     if (!files || files.length === 0) return;
 
     const newLogos: PartnerLogo[] = [...partnerLogos];
+    let hadError = false;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       let base64Data = '';
 
       if (file.size > 800 * 1024) {
-        const confirmResize = confirm(
-          `L'image "${file.name}" est trop volumineuse (${(file.size / 1024).toFixed(0)} Ko, max 800 Ko).\n\nVoulez-vous la redimensionner et la compresser automatiquement aux dimensions recommandées ?`
-        );
-        if (!confirmResize) continue;
-
+        // Redimensionnement et compression automatique sans dialogue synchrone bloquant
         try {
           base64Data = await compressImage(file, 400, 200, 0.75);
         } catch (err) {
-          console.error(err);
-          alert(`Erreur lors de la compression de l'image "${file.name}".`);
+          console.error("Erreur compression logo:", err);
+          hadError = true;
           continue;
         }
       } else {
@@ -159,8 +156,8 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
             reader.readAsDataURL(file);
           });
         } catch (err) {
-          console.error(err);
-          alert(`Erreur lors de la lecture du fichier "${file.name}".`);
+          console.error("Erreur lecture logo:", err);
+          hadError = true;
           continue;
         }
       }
@@ -173,6 +170,12 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
           data: base64Data
         });
       }
+    }
+
+    if (hadError) {
+      setErrors(prev => ({ ...prev, logo: "Certaines images volumineuses n'ont pas pu être traitées." }));
+    } else {
+      setErrors(prev => ({ ...prev, logo: '' }));
     }
 
     setPartnerLogos(newLogos);
@@ -332,7 +335,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
           animate={{ scale: 1, opacity: 1, rotate: 4 }}
           whileHover={{ rotate: -4, scale: 1.08 }}
           transition={{ type: 'spring', stiffness: 260, damping: 16 }}
-          className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-primary shadow-2xl shadow-primary/25 shrink-0 mx-auto mb-3 bg-[#180A2b]"
+          className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-primary shadow-2xl shadow-primary/25 shrink-0 mx-auto mb-3 bg-app-card"
         >
           <img
             src="./logo.png"
@@ -340,10 +343,10 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
             className="w-full h-full object-cover"
           />
         </motion.div>
-        <h1 className="text-4xl font-display font-bold text-white uppercase tracking-wider">
+        <h1 className="text-4xl font-display font-bold text-app-text uppercase tracking-wider">
           Nouvel Événement Insertech
         </h1>
-        <p className="text-slate-400 mt-2 font-sans max-w-xl mx-auto">
+        <p className="text-app-text-muted mt-2 font-sans max-w-xl mx-auto">
           Initialisez une nouvelle activité hors-ligne. Sélectionnez la matrice correspondante pour adapter les formulaires et les statistiques.
         </p>
       </div>
@@ -352,7 +355,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
         {/* Choix de la matrice */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-display text-white uppercase tracking-wide flex items-center gap-2">
+            <h2 className="text-xl font-display text-app-text uppercase tracking-wide flex items-center gap-2">
               <span>1. Choisir le type de matrice d'activité</span>
               <AnimatePresence mode="wait">
                 {selectedType && activeMatrix && (
@@ -372,6 +375,8 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
           </div>
           
           <motion.div
+            role="radiogroup"
+            aria-label="Choisir le type de matrice d'activité"
             initial="hidden"
             animate="visible"
             variants={{
@@ -390,6 +395,8 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                 <motion.button
                   key={matrix.type}
                   type="button"
+                  role="radio"
+                  aria-checked={isSelected}
                   variants={{
                     hidden: { opacity: 0, y: 18, scale: 0.96 },
                     visible: {
@@ -406,10 +413,10 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                       setName(`${matrix.title} - ${new Date().toLocaleDateString('fr-CA', { month: 'short', year: 'numeric' })}`);
                     }
                   }}
-                  className={`relative flex items-start gap-4 p-5 rounded-2xl text-left transition-all duration-300 cursor-pointer overflow-hidden ${
+                  className={`relative flex items-start gap-4 p-5 rounded-2xl text-left transition-all duration-300 cursor-pointer overflow-hidden h-full ${
                     isSelected 
-                      ? 'bg-secondary/40 border-2 border-primary shadow-lg shadow-primary/15' 
-                      : 'bg-[#24123d]/60 border border-purple-900/40 hover:border-purple-600/40 hover:bg-[#2c174a]/60'
+                      ? 'bg-primary/10 border-2 border-primary shadow-lg shadow-primary/15' 
+                      : 'bg-app-card border border-app-card-border hover:border-primary/40 hover:bg-app-card/80'
                   }`}
                 >
                   {isSelected && (
@@ -423,14 +430,14 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                     animate={isSelected ? { scale: [1, 1.15, 1], rotate: [0, -6, 0] } : { scale: 1, rotate: 0 }}
                     transition={{ duration: 0.4 }}
                     className={`p-3 rounded-xl shrink-0 transition-colors ${
-                      isSelected ? 'bg-primary text-secondary shadow-md shadow-primary/30' : 'bg-purple-950 text-primary'
+                      isSelected ? 'bg-primary text-secondary shadow-md shadow-primary/30' : 'bg-app-input text-primary'
                     }`}
                   >
                     <Icon size={22} />
                   </motion.div>
-                  <div className="relative z-10">
-                    <h3 className="font-bold text-white font-display text-base leading-tight mb-1">{matrix.title}</h3>
-                    <p className="text-xs text-slate-400 leading-normal line-clamp-2 font-sans">{matrix.description}</p>
+                  <div className="relative z-10 flex-1">
+                    <h3 className="font-bold text-app-text font-display text-base leading-tight mb-1">{matrix.title}</h3>
+                    <p className="text-xs text-app-text-muted leading-normal line-clamp-2 font-sans">{matrix.description}</p>
                   </div>
                 </motion.button>
               );
@@ -439,9 +446,9 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
         </div>
 
         {/* Détails logistiques / Importation */}
-        <div className="bg-[#24123d]/40 border border-purple-950 p-6 rounded-2xl space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-purple-950/60 pb-4">
-            <h2 className="text-xl font-display text-white uppercase tracking-wide">
+        <div className="bg-app-card border border-app-card-border p-6 rounded-2xl space-y-6 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-app-card-border pb-4">
+            <h2 className="text-xl font-display text-app-text uppercase tracking-wide">
               2. Importer ou créer un nouvel événement
             </h2>
 
@@ -449,27 +456,27 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
               <div className="flex gap-2">
                 <label 
                   htmlFor="eventImportSelector"
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#180A2b]/60 border border-purple-900/60 text-slate-300 hover:text-white hover:bg-purple-950/30 text-xs font-bold cursor-pointer transition shrink-0"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text hover:border-primary/50 text-xs font-bold cursor-pointer transition shrink-0 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2"
                 >
                   <Upload size={14} className="text-primary" />
                   <span>Importer un événement</span>
+                  <input
+                    id="eventImportSelector"
+                    type="file"
+                    accept=".json,.csv,.md,.tex,.latex,.xlsx,.xls"
+                    onChange={onImportEvent}
+                    className="sr-only"
+                  />
                 </label>
-                <input
-                  id="eventImportSelector"
-                  type="file"
-                  accept=".json,.csv,.md,.tex,.latex,.xlsx,.xls"
-                  onChange={onImportEvent}
-                  className="hidden"
-                />
               </div>
               <div className="flex flex-wrap gap-1.5 justify-end">
-                <span className="text-[9px] text-slate-500 self-center mr-1">Gabarits :</span>
+                <span className="text-[9px] text-app-text-muted self-center mr-1">Gabarits :</span>
                 {(['json', 'csv', 'md', 'tex', 'xlsx'] as const).map(fmt => (
                   <button
                     key={fmt}
                     type="button"
                     onClick={() => downloadImportExample(fmt)}
-                    className="px-2 py-0.5 rounded bg-[#180A2b]/60 border border-purple-950 text-[9px] text-slate-400 hover:text-primary transition uppercase font-mono font-bold cursor-pointer"
+                    className="px-2 py-0.5 rounded bg-app-input border border-app-card-border text-[9px] text-app-text-muted hover:text-primary transition uppercase font-mono font-bold cursor-pointer"
                   >
                     {fmt}
                   </button>
@@ -480,7 +487,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label htmlFor="eventName" className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+              <label htmlFor="eventName" className="text-xs font-bold uppercase tracking-wider text-app-text block">
                 Nom de l'événement <span className="text-primary">*</span>
               </label>
               <input
@@ -492,13 +499,13 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                   setErrors(prev => ({ ...prev, name: '' }));
                 }}
                 placeholder="Ex. Réparothon UQAM Printemps"
-                className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition"
+                className="w-full bg-app-input border border-app-input-border rounded-xl px-4 py-3 text-app-text text-sm focus:outline-none focus:border-primary transition placeholder:text-app-text-muted/60"
               />
               {errors.name && <span className="text-red-400 text-xs font-semibold block">{errors.name}</span>}
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="eventDate" className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+              <label htmlFor="eventDate" className="text-xs font-bold uppercase tracking-wider text-app-text block">
                 Date de l'activité <span className="text-primary">*</span>
               </label>
               <div className="relative">
@@ -507,17 +514,17 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition"
+                  className="w-full bg-app-input border border-app-input-border rounded-xl px-4 py-3 text-app-text text-sm focus:outline-none focus:border-primary transition"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="eventLocation" className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+              <label htmlFor="eventLocation" className="text-xs font-bold uppercase tracking-wider text-app-text block">
                 Ville / Municipalité <span className="text-primary">*</span>
               </label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-3.5 text-slate-500" size={16} />
+                <MapPin className="absolute left-3 top-3.5 text-app-text-muted" size={16} />
                 <input
                   id="eventLocation"
                   type="text"
@@ -527,77 +534,80 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                     setErrors(prev => ({ ...prev, location: '' }));
                   }}
                   placeholder="Ex. Montréal, QC"
-                  className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-10 pr-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition"
+                  className="w-full bg-app-input border border-app-input-border rounded-xl pl-10 pr-4 py-3 text-app-text text-sm focus:outline-none focus:border-primary transition placeholder:text-app-text-muted/60"
                 />
               </div>
               {errors.location && <span className="text-red-400 text-xs font-semibold block">{errors.location}</span>}
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="eventPlace" className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+              <label htmlFor="eventPlace" className="text-xs font-bold uppercase tracking-wider text-app-text block">
                 Lieu spécifique
               </label>
               <div className="relative">
-                <Building className="absolute left-3 top-3.5 text-slate-500" size={16} />
+                <Building className="absolute left-3 top-3.5 text-app-text-muted" size={16} />
                 <input
                   id="eventPlace"
                   type="text"
                   value={place}
                   onChange={(e) => setPlace(e.target.value)}
                   placeholder="Ex. Bibliothèque centrale, local A-100"
-                  className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-10 pr-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition"
+                  className="w-full bg-app-input border border-app-input-border rounded-xl pl-10 pr-4 py-3 text-app-text text-sm focus:outline-none focus:border-primary transition placeholder:text-app-text-muted/60"
                 />
               </div>
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <label htmlFor="eventPartner" className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+              <label htmlFor="eventPartner" className="text-xs font-bold uppercase tracking-wider text-app-text block">
                 Partenaire coorganisateur / Client
               </label>
               <div className="relative">
-                <Building className="absolute left-3 top-3.5 text-slate-500" size={16} />
+                <Building className="absolute left-3 top-3.5 text-app-text-muted" size={16} />
                 <input
                   id="eventPartner"
                   type="text"
                   value={partner}
                   onChange={(e) => setPartner(e.target.value)}
                   placeholder="Ex. Cégep du Vieux Montréal, Ville de Longueuil"
-                  className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl pl-10 pr-4 py-3 text-white text-sm focus:outline-none focus:border-primary transition"
+                  className="w-full bg-app-input border border-app-input-border rounded-xl pl-10 pr-4 py-3 text-app-text text-sm focus:outline-none focus:border-primary transition placeholder:text-app-text-muted/60"
                 />
               </div>
             </div>
 
-            <div className="space-y-3 md:col-span-2 border-t border-purple-950/60 pt-4 mt-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+            <div className="space-y-3 md:col-span-2 border-t border-app-card-border pt-4 mt-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-app-text block">
                 Logos des Partenaires Coorganisateurs
               </span>
               
               <div className="flex flex-col sm:flex-row gap-4 items-start">
                 <label 
                   htmlFor="partnerLogosSelector"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#180A2b]/60 border border-purple-900/60 text-slate-300 hover:text-white hover:bg-[#180A2b] text-xs font-bold cursor-pointer transition shrink-0"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-app-input border border-app-card-border text-app-text hover:border-primary/50 text-xs font-bold cursor-pointer transition shrink-0 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2"
                 >
                   <Plus size={14} className="text-primary" />
                   <span>Ajouter des logos (multiple)</span>
+                  <input
+                    id="partnerLogosSelector"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleAddLogo}
+                    className="sr-only"
+                  />
                 </label>
-                <input
-                  id="partnerLogosSelector"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleAddLogo}
-                  className="hidden"
-                />
+
+                {errors.logo && <span className="text-red-400 text-xs font-semibold block">{errors.logo}</span>}
 
                 {partnerLogos.length > 0 && (
                   <div className="flex-grow grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
                     {partnerLogos.map((logo) => (
-                      <div key={logo.id} className="relative group rounded-xl overflow-hidden border border-purple-950 bg-[#180A2b]/60 aspect-video flex items-center justify-center p-1.5">
+                      <div key={logo.id} className="relative group rounded-xl overflow-hidden border border-app-card-border bg-app-input aspect-video flex items-center justify-center p-1.5">
                         <img src={logo.data} alt={logo.name} className="max-h-full max-w-full object-contain" />
                         <button 
                           type="button"
+                          aria-label={`Supprimer le logo ${logo.name}`}
                           onClick={() => handleRemoveLogo(logo.id)}
-                          className="absolute inset-0 bg-red-950/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition cursor-pointer"
+                          className="absolute inset-0 bg-red-950/80 text-white opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 flex items-center justify-center transition cursor-pointer"
                         >
                           <Trash2 size={16} />
                         </button>

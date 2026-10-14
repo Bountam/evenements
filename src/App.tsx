@@ -9,9 +9,11 @@ import TeardownMatrix from './components/matrices/TeardownMatrix';
 import GenericMatrix from './components/matrices/GenericMatrix';
 import { showToast, ToastContainer } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
+import Modal from './components/shared/Modal';
+import ThemeToggle from './components/shared/ThemeToggle';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
-  History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, Sun, Moon, AlertTriangle, Download, Smartphone
+  History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -75,10 +77,14 @@ export default function App() {
     if (isLightTheme) {
       document.documentElement.classList.add('light');
       document.body.classList.add('light');
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
       localStorage.setItem('insertech_theme_light', 'true');
     } else {
       document.documentElement.classList.remove('light');
       document.body.classList.remove('light');
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
       localStorage.setItem('insertech_theme_light', 'false');
     }
   }, [isLightTheme]);
@@ -1190,158 +1196,150 @@ export default function App() {
   };
 
   const renderNetModal = () => {
-    if (!showNetModal) return null;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#180A2b]/80 backdrop-blur-xs p-4">
-        <div className="bg-[#24123d] border border-purple-900/60 p-6 rounded-3xl max-w-md w-full space-y-6 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between pb-3 border-b border-purple-950">
-            <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider flex items-center gap-2">
-              <Wifi className="text-primary" size={20} />
-              <span>Réseau Local sans installation</span>
-            </h3>
-            <button 
-              onClick={() => setShowNetModal(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-purple-950 cursor-pointer"
-            >
-              <X size={18} />
-            </button>
+      <Modal
+        isOpen={showNetModal}
+        onClose={() => setShowNetModal(false)}
+        title="Réseau Local sans installation"
+        icon={Wifi}
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4 font-sans text-xs text-app-text-muted">
+          <p className="leading-relaxed">
+            Connectez plusieurs tablettes d'accueil, PC de chronométrage et écrans de projection en direct en utilisant le hotspot Wi-Fi de votre téléphone portable.
+          </p>
+
+          <div className="bg-app-input border border-app-card-border p-3.5 rounded-xl space-y-1">
+            <div className="text-[10px] uppercase font-bold text-app-text-muted">Statut réseau actuel</div>
+            <div className="font-mono font-bold text-app-text text-sm flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${sessionCode ? 'bg-primary animate-pulse' : 'bg-red-500'}`}></span>
+              {netStatus}
+            </div>
           </div>
 
-          <div className="space-y-4 font-sans text-xs text-slate-300">
-            <p className="leading-relaxed">
-              Connectez plusieurs tablettes d'accueil, PC de chronométrage et écrans de projection en direct en utilisant le hotspot Wi-Fi de votre téléphone portable.
-            </p>
-
-            <div className="bg-[#180A2b]/50 border border-purple-950 p-3.5 rounded-xl space-y-1">
-              <div className="text-[10px] uppercase font-bold text-slate-400">Statut réseau actuel</div>
-              <div className="font-mono font-bold text-white text-sm flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${sessionCode ? 'bg-primary animate-pulse' : 'bg-red-500'}`}></span>
-                {netStatus}
-              </div>
-            </div>
-
-            {sessionCode ? (
-              // Session active
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-center space-y-2">
-                  <span className="text-[10px] uppercase font-black text-primary tracking-widest block">Code de session active</span>
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-3xl font-display font-bold text-white tracking-widest">{sessionCode}</span>
-                    <button 
-                      onClick={() => {
-                        navigator.clipboard.writeText(sessionCode);
-                        alert('Code copié dans le presse-papier !');
-                      }}
-                      title="Copier le code"
-                      className="p-1.5 rounded-lg bg-primary/25 text-primary hover:text-white cursor-pointer"
-                    >
-                      <Copy size={14} />
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-slate-400 block mt-1">Saisissez ce code sur les tablettes d'accueil pour les synchroniser.</span>
+          {sessionCode ? (
+            // Session active
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-center space-y-2">
+                <span className="text-[10px] uppercase font-black text-primary tracking-widest block">Code de session active</span>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl font-display font-bold text-app-text tracking-widest">{sessionCode}</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(sessionCode);
+                      showToast('Code de session copié dans le presse-papier !', 'success');
+                    }}
+                    title="Copier le code"
+                    aria-label="Copier le code de session"
+                    className="p-1.5 rounded-lg bg-primary/25 text-primary hover:text-white cursor-pointer transition"
+                  >
+                    <Copy size={14} />
+                  </button>
                 </div>
-
-                <button
-                  onClick={handleLeaveSession}
-                  className="w-full py-2.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-300 hover:bg-red-900/30 hover:text-white font-bold font-display uppercase tracking-wider text-xs cursor-pointer transition"
-                >
-                  Déconnecter / Repasser en local
-                </button>
+                <span className="text-[10px] text-app-text-muted block mt-1">Saisissez ce code sur les tablettes d'accueil pour les synchroniser.</span>
               </div>
-            ) : (
-              // Pas de session active
-              <div className="space-y-6 pt-2">
-                {/* Créer session (Hôte) */}
-                {activeEvent && (
+
+              <button
+                onClick={handleLeaveSession}
+                className="w-full py-2.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-300 hover:bg-red-900/30 hover:text-white font-bold font-display uppercase tracking-wider text-xs cursor-pointer transition"
+              >
+                Déconnecter / Repasser en local
+              </button>
+            </div>
+          ) : (
+            // Pas de session active
+            <div className="space-y-6 pt-2">
+              {/* Créer session (Hôte) */}
+              {activeEvent && (
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase font-bold text-app-text-muted">Créer une session</div>
+                  <button
+                    onClick={handleStartHost}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
+                  >
+                    <Share2 size={14} />
+                    <span>Créer la session hôte</span>
+                  </button>
+                  <span className="text-[10px] text-app-text-muted block">Désignera cet appareil comme le PC principal (Master) et fournira le code de partage.</span>
+                </div>
+              )}
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-app-card-border"></div>
+                <span className="flex-shrink mx-4 text-app-text-muted font-bold uppercase tracking-widest text-[9px]">OU</span>
+                <div className="flex-grow border-t border-app-card-border"></div>
+              </div>
+
+              {/* Découverte automatique des sessions */}
+              <div className="space-y-3">
+                <div className="text-[10px] uppercase font-bold text-app-text-muted">Découverte automatique</div>
+                
+                {discoveredSessions.length === 0 ? (
+                  <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-app-input border border-app-card-border text-app-text-muted">
+                    <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0"></div>
+                    <span className="text-[10.5px] font-sans">Recherche de consoles actives sur le réseau...</span>
+                  </div>
+                ) : (
                   <div className="space-y-2">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Créer une session</div>
-                    <button
-                      onClick={handleStartHost}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
-                    >
-                      <Share2 size={14} />
-                      <span>Créer la session hôte</span>
-                    </button>
-                    <span className="text-[10px] text-slate-400 block">Désignera cet appareil comme le PC principal (Master) et fournira le code de partage.</span>
+                    {discoveredSessions.map((session) => (
+                      <button
+                        key={session.code}
+                        onClick={async () => {
+                          try {
+                            await networkManager.joinSession(session.code, 'temp');
+                            setSessionCode(session.code);
+                            setShowNetModal(false);
+                            showToast(`Connecté à la session ${session.code}`, 'success');
+                          } catch (e) {
+                            showToast("Échec de la connexion à cette session.", 'error');
+                          }
+                        }}
+                        className="w-full flex items-center justify-between p-3.5 rounded-xl bg-primary/5 border border-primary/20 hover:bg-primary/10 hover:border-primary text-left transition cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-[9px] uppercase font-bold text-primary block leading-none">{session.type.replace('_', ' ')}</span>
+                          <span className="font-bold text-app-text text-xs truncate block mt-1">{session.name}</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20 shrink-0">
+                          {session.code}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
-
-                <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-purple-950"></div>
-                  <span className="flex-shrink mx-4 text-slate-500 font-bold uppercase tracking-widest text-[9px]">OU</span>
-                  <div className="flex-grow border-t border-purple-950"></div>
-                </div>
-
-                {/* Découverte automatique des sessions */}
-                <div className="space-y-3">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Découverte automatique</div>
-                  
-                  {discoveredSessions.length === 0 ? (
-                    <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-[#180A2b]/30 border border-purple-950 text-slate-400">
-                      <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0"></div>
-                      <span className="text-[10.5px] font-sans">Recherche de consoles actives sur le réseau...</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {discoveredSessions.map((session) => (
-                        <button
-                          key={session.code}
-                          onClick={async () => {
-                            try {
-                              await networkManager.joinSession(session.code, 'temp');
-                              setSessionCode(session.code);
-                              setShowNetModal(false);
-                            } catch (e) {
-                              alert("Échec de la connexion à cette session.");
-                            }
-                          }}
-                          className="w-full flex items-center justify-between p-3.5 rounded-xl bg-primary/5 border border-primary/20 hover:bg-primary/10 hover:border-primary text-left transition cursor-pointer"
-                        >
-                          <div className="min-w-0">
-                            <span className="text-[9px] uppercase font-bold text-primary block leading-none">{session.type.replace('_', ' ')}</span>
-                            <span className="font-bold text-white text-xs truncate block mt-1">{session.name}</span>
-                          </div>
-                          <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20 shrink-0">
-                            {session.code}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-purple-950"></div>
-                  <span className="flex-shrink mx-4 text-slate-500 font-bold uppercase tracking-widest text-[9px]">OU</span>
-                  <div className="flex-grow border-t border-purple-950"></div>
-                </div>
-
-                {/* Rejoindre session (Client) */}
-                <div className="space-y-3">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Rejoindre par code manuellement</div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={inputCode}
-                      onChange={(e) => setInputCode(e.target.value)}
-                      placeholder="Ex. INS-4821"
-                      className="flex-grow bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-primary transition uppercase"
-                    />
-                    <button
-                      onClick={handleJoinSession}
-                      disabled={!inputCode.trim()}
-                      className="px-4 py-2 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
-                    >
-                      Rejoindre
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-slate-400 block">Saisissez le code si la détection automatique ne fonctionne pas.</span>
-                </div>
               </div>
-            )}
-          </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-app-card-border"></div>
+                <span className="flex-shrink mx-4 text-app-text-muted font-bold uppercase tracking-widest text-[9px]">OU</span>
+                <div className="flex-grow border-t border-app-card-border"></div>
+              </div>
+
+              {/* Rejoindre session (Client) */}
+              <div className="space-y-3">
+                <div className="text-[10px] uppercase font-bold text-app-text-muted">Rejoindre par code manuellement</div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={inputCode}
+                    onChange={(e) => setInputCode(e.target.value)}
+                    placeholder="Ex. INS-4821"
+                    className="flex-grow bg-app-input border border-app-input-border rounded-xl px-3 py-2 text-app-text text-xs font-mono focus:outline-none focus:border-primary transition uppercase placeholder:text-app-text-muted/60"
+                  />
+                  <button
+                    onClick={handleJoinSession}
+                    disabled={!inputCode.trim()}
+                    className="px-4 py-2 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
+                  >
+                    Rejoindre
+                  </button>
+                </div>
+                <span className="text-[10px] text-app-text-muted block">Saisissez le code si la détection automatique ne fonctionne pas.</span>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      </Modal>
     );
   };
 
@@ -1381,37 +1379,37 @@ export default function App() {
         notifySync();
         handleSelectPastEvent(newEvent);
         setImportValidation(null);
-        alert(`Événement "${eventData.name}" importé avec succès !`);
+        showToast(`Événement "${eventData.name}" importé avec succès !`, 'success');
       } catch (err) {
         console.error(err);
-        alert("Erreur lors de l'enregistrement de l'événement.");
+        showToast("Erreur lors de l'enregistrement de l'événement.", 'error');
       }
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#180A2b]/80 backdrop-blur-xs">
-        <div className="bg-[#24123d] border border-purple-900/60 p-6 rounded-3xl max-w-2xl w-full mx-4 space-y-6 max-h-[85vh] flex flex-col justify-between">
-          <div className="space-y-2">
-            <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider flex items-center gap-2">
-              <AlertCircle className="text-primary" size={20} />
-              <span>Résolveur d'Importation : {fileName}</span>
-            </h3>
-            <p className="text-xs text-slate-400 font-sans">
-              Analyse de l'événement : <strong className="text-white">{eventData.name}</strong> ({eventData.type.replace('_', ' ')}). 
-              Date : <strong className="text-white">{eventData.date}</strong>. Lieu : <strong className="text-white">{eventData.location}</strong>.
-            </p>
-          </div>
+      <Modal
+        isOpen={Boolean(importValidation)}
+        onClose={() => setImportValidation(null)}
+        title={`Résolveur d'Importation : ${fileName}`}
+        icon={AlertCircle}
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-6">
+          <p className="text-xs text-app-text-muted font-sans">
+            Analyse de l'événement : <strong className="text-app-text">{eventData.name}</strong> ({eventData.type.replace('_', ' ')}). 
+            Date : <strong className="text-app-text">{eventData.date}</strong>. Lieu : <strong className="text-app-text">{eventData.location}</strong>.
+          </p>
 
-          <div className="flex-1 overflow-y-auto pr-1 py-2 space-y-4">
+          <div className="max-h-[50vh] overflow-y-auto pr-1 py-2 space-y-4">
             {conflicts.length === 0 ? (
               <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl text-center space-y-2">
                 <Sparkles className="text-primary mx-auto" size={24} />
-                <p className="text-xs font-bold text-white uppercase tracking-wider">Aucune anomalie détectée !</p>
-                <p className="text-[11px] text-slate-300 font-sans">Les données sont prêtes à être importées sans modification.</p>
+                <p className="text-xs font-bold text-app-text uppercase tracking-wider">Aucune anomalie détectée !</p>
+                <p className="text-[11px] text-app-text-muted font-sans">Les données sont prêtes à être importées sans modification.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">Rapport de Validation ({conflicts.length})</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-app-text">Rapport de Validation ({conflicts.length})</h4>
                 <div className="space-y-2">
                   {conflicts.map((conflict, idx) => (
                     <div key={idx} className={`p-3 rounded-xl border flex items-start gap-3 text-[11px] ${
@@ -1421,11 +1419,11 @@ export default function App() {
                     }`}>
                       <AlertTriangle size={16} className={`shrink-0 mt-0.5 ${conflict.severity === 'error' ? 'text-red-400' : 'text-yellow-400'}`} />
                       <div className="space-y-1">
-                        <p className="font-sans font-medium">
-                          <span className="font-bold font-mono bg-purple-950 px-1.5 py-0.5 rounded text-white mr-1.5">Ligne {conflict.row}</span>
+                        <p className="font-sans font-medium text-app-text">
+                          <span className="font-bold font-mono bg-app-input px-1.5 py-0.5 rounded text-app-text mr-1.5 border border-app-card-border">Ligne {conflict.row}</span>
                           {conflict.message}
                         </p>
-                        <p className="text-[10px] text-slate-400 italic">Correction appliquée : {conflict.actionTaken}</p>
+                        <p className="text-[10px] text-app-text-muted italic">Correction appliquée : {conflict.actionTaken}</p>
                       </div>
                     </div>
                   ))}
@@ -1434,10 +1432,10 @@ export default function App() {
             )}
           </div>
 
-          <div className="border-t border-purple-950 pt-4 flex items-center justify-between gap-4">
+          <div className="border-t border-app-card-border pt-4 flex items-center justify-between gap-4">
             <button
               onClick={() => setImportValidation(null)}
-              className="px-4 py-2 rounded-xl bg-[#180A2b] border border-purple-900/40 text-slate-400 hover:text-white font-bold font-display uppercase tracking-wider text-xs transition cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text-muted hover:text-app-text font-bold font-display uppercase tracking-wider text-xs transition cursor-pointer"
             >
               Annuler
             </button>
@@ -1456,7 +1454,7 @@ export default function App() {
             )}
           </div>
         </div>
-      </div>
+      </Modal>
     );
   };
 
@@ -1526,13 +1524,7 @@ export default function App() {
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Bouton Thème */}
-            <button
-              onClick={() => setIsLightTheme(!isLightTheme)}
-              title={isLightTheme ? "Passer au thème sombre" : "Passer au thème clair"}
-              className="flex items-center justify-center p-2.5 rounded-xl bg-app-card border border-app-card-border text-app-text hover:scale-[1.02] active:scale-95 transition cursor-pointer"
-            >
-              {isLightTheme ? <Moon size={14} /> : <Sun size={14} />}
-            </button>
+            <ThemeToggle isLightTheme={isLightTheme} onToggle={() => setIsLightTheme(!isLightTheme)} />
 
             {/* Bouton Installation PWA / Mobile */}
             <button
@@ -1550,7 +1542,7 @@ export default function App() {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold cursor-pointer transition ${
                 sessionCode
                   ? 'bg-primary/20 text-primary border-primary/50'
-                  : 'bg-app-card border-app-card-border text-app-text hover:scale-[1.02] active:scale-95'
+                  : 'bg-app-card border-app-card-border text-app-text hover:border-primary/50'
               }`}
             >
               <Wifi size={14} className={sessionCode ? 'animate-pulse' : ''} />
@@ -1558,21 +1550,21 @@ export default function App() {
             </button>
 
             {/* Importation JSON */}
-            <div className="relative cursor-pointer">
+            <div className="relative">
               <label 
                 htmlFor="jsonImport"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-app-card border border-app-card-border text-app-text hover:scale-[1.02] active:scale-95 text-xs font-bold cursor-pointer transition"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-app-card border border-app-card-border text-app-text hover:border-primary/50 text-xs font-bold cursor-pointer transition focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 shadow-sm"
               >
-                <Upload size={14} />
+                <Upload size={14} className="text-primary" />
                 <span>Restaurer une sauvegarde JSON</span>
+                <input
+                  id="jsonImport"
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportData}
+                  className="sr-only"
+                />
               </label>
-              <input
-                id="jsonImport"
-                type="file"
-                accept=".json"
-                onChange={handleImportData}
-                className="hidden"
-              />
             </div>
           </div>
         </div>
@@ -1582,8 +1574,8 @@ export default function App() {
 
         {/* Historique des événements passés */}
         {pastEvents.length > 0 && (
-          <div className="space-y-4 pt-6 border-t border-purple-950/60">
-            <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider flex items-center gap-2">
+          <div className="space-y-4 pt-6 border-t border-app-card-border">
+            <h3 className="text-lg font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-2">
               <History size={18} className="text-primary" />
               <span>Historique des Activités ({pastEvents.length})</span>
             </h3>
@@ -1592,17 +1584,17 @@ export default function App() {
               {pastEvents.map((evt) => (
                 <div 
                   key={evt.id}
-                  className="bg-[#24123d]/40 border border-purple-950 p-4 rounded-2xl flex flex-col justify-between gap-4 hover:border-purple-800 transition"
+                  className="bg-app-card border border-app-card-border p-4 rounded-2xl flex flex-col justify-between gap-4 hover:border-primary/40 transition shadow-sm"
                 >
                   <div className="space-y-1">
                     <div className="flex items-start justify-between">
-                      <h4 className="font-bold text-white font-display text-sm uppercase truncate max-w-[80%]">{evt.name}</h4>
+                      <h4 className="font-bold text-app-text font-display text-sm uppercase truncate max-w-[80%]">{evt.name}</h4>
                       <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded uppercase font-bold shrink-0">
                         {evt.type.replace('_', ' ')}
                       </span>
                     </div>
                     
-                    <div className="flex items-center gap-3 text-[10px] text-slate-400 font-sans mt-2">
+                    <div className="flex items-center gap-3 text-[10px] text-app-text-muted font-sans mt-2">
                       <span className="flex items-center gap-1">
                         <Calendar size={10} className="text-primary" />
                         {new Date(evt.date + 'T00:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}
@@ -1614,7 +1606,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between border-t border-purple-950/60 pt-3">
+                  <div className="flex items-center justify-between border-t border-app-card-border pt-3">
                     <button
                       onClick={() => handleSelectPastEvent(evt)}
                       className="flex items-center gap-1 text-primary hover:text-white text-xs font-bold font-display uppercase tracking-wider cursor-pointer"
@@ -1633,7 +1625,7 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => setShowDeleteConfirmId(null)}
-                          className="px-2 py-1 rounded bg-purple-950 text-slate-400 text-[9px] font-bold uppercase cursor-pointer"
+                          className="px-2 py-1 rounded bg-app-input text-app-text-muted text-[9px] font-bold uppercase cursor-pointer border border-app-card-border"
                         >
                           Non
                         </button>
@@ -1641,8 +1633,9 @@ export default function App() {
                     ) : (
                       <button
                         onClick={() => setShowDeleteConfirmId(evt.id)}
-                        className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 cursor-pointer"
+                        className="p-1 rounded-lg text-app-text-muted hover:text-red-400 hover:bg-red-500/10 cursor-pointer transition"
                         title="Supprimer définitivement l'événement"
+                        aria-label={`Supprimer définitivement l'événement ${evt.name}`}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1655,7 +1648,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="py-6 border-t border-purple-950/40 bg-[#140825] text-center text-[10px] text-slate-500 font-sans flex items-center justify-center gap-1.5 mt-12">
+      <footer className="py-6 border-t border-app-card-border bg-app-bg-footer text-center text-[10px] text-app-text-muted font-sans flex items-center justify-center gap-1.5 mt-12 transition-colors duration-300">
         <Sparkles size={11} className="text-primary animate-pulse" />
         <span>Insertech Éco-Concours & Réparothons • Outil hors-ligne autonome v1.0.0</span>
       </footer>
