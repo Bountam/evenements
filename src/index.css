@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+/* La variante dark: suit le thème choisi dans l'app (classe .dark), pas le réglage du système */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Polices embarquées (fonctionnent hors ligne dans les exécutables), sous-ensemble latin, axes variables */
+@font-face {
+  font-family: "Oswald";
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+  src: url("./assets/fonts/oswald-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/roboto-latin-wght-normal.woff2") format("woff2-variations");
+}
+
 :root {
   --app-bg: #180A2b;
   --app-bg-footer: #140825;
@@ -13,9 +33,15 @@
 
   /* Couleurs d'état lisibles dans les deux thèmes */
   --app-success: #34d399;
+  --app-warning: #fbbf24;
   --app-danger: #f87171;
   --app-info: #60a5fa;
   --app-accent: #c084fc;
+
+  /* Rangs du podium (or, argent, bronze) */
+  --app-rank-1: #fbbf24;
+  --app-rank-2: #cbd5e1;
+  --app-rank-3: #d97706;
 }
 
 .light, html.light, body.light {
@@ -29,19 +55,16 @@
   --app-input-border: #cbd5e1;
   --app-header: rgba(255, 255, 255, 0.8);
   --app-success: #15803d;
+  --app-warning: #92400e;
   --app-danger: #b91c1c;
   --app-info: #1d4ed8;
   --app-accent: #7e22ce;
 
-  /* --- AMÉLIORATION DU CONTRASTE ET LISIBILITÉ EN MODE CLAIR --- */
-  
-  /* Dégradé radial clair soyeux chic */
-  background: radial-gradient(circle at 50% 0%, #f3e8ff 0%, #f8fafc 100%) no-repeat !important;
-  background-attachment: fixed !important;
-  color: var(--app-text) !important;
-}
+  --app-rank-1: #b45309;
+  --app-rank-2: #475569;
+  --app-rank-3: #9a3412;
 
-.light body {
+  /* Dégradé radial clair */
   background: radial-gradient(circle at 50% 0%, #f3e8ff 0%, #f8fafc 100%) no-repeat !important;
   background-attachment: fixed !important;
   color: var(--app-text) !important;
@@ -159,7 +182,6 @@
   }
 
   /* Badges de prix, trophées et rangs du ticker en mode clair */
-  [class*="bg-amber-500/20"],
   [class*="bg-amber-500/25"],
   [class*="bg-amber-600/30"] {
     background-color: #fef3c7 !important;
@@ -343,13 +365,22 @@
   --color-danger: var(--app-danger);
   --color-info: var(--app-info);
   --color-accent: var(--app-accent);
+  --color-warning: var(--app-warning);
+  --color-rank-1: var(--app-rank-1);
+  --color-rank-2: var(--app-rank-2);
+  --color-rank-3: var(--app-rank-3);
+
+  /* Plancher typographique de la console : rien sous 11 px */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1rem;
 
   /* Échelle typographique de l'écran projeté (lisible à plusieurs mètres) */
   --text-kiosk-caption: clamp(0.875rem, 0.95vw, 1.25rem);
   --text-kiosk-body: clamp(1rem, 1.25vw, 1.6rem);
   --text-kiosk-title: clamp(1.15rem, 1.6vw, 2.1rem);
 
-  /* Fallbacks de compatibilité */
+  /* Alias hérités, encore utilisés par les modules Réparothon et génériques.
+     Le kiosque n'en dépend plus : utiliser les tokens app-* et sémantiques ci-dessus. */
   --color-accent-dark: var(--app-bg);
   --color-purple-950: var(--app-card-border);
   --color-purple-900: var(--app-card-border);
