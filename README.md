@@ -2290,13 +2290,13 @@ npm run build
 ```
 Cela génère le fichier `dist/index.html`. C'est ce fichier unique qui contient toute l'application.
 
-#### Option B : Exécutable portable Windows x64 (.NET 7 avec icône et zéro permission)
+#### Option B : Exécutable portable Windows x64 (.NET 8 avec icône et zéro permission)
 ```bash
 npm run build:exe
 ```
 Cela génère l'exécutable portable `InsertechEvenements.exe` à la racine, prêt à l'emploi avec icône intégrée, sans installation et sans alerte de sécurité.
 
-#### Option C : Exécutable portable Linux Debian x64 (.NET 7 ELF autonome)
+#### Option C : Exécutable portable Linux Debian x64 (.NET 8 ELF autonome)
 ```bash
 npm run build:linux
 ```
@@ -2317,14 +2317,14 @@ npm run build:all
 ```
 
 #### Option E : Intégration Continue & Déploiement Continu (CI / CD)
-Un pipeline GitHub Actions (`.github/workflows/ci-cd.yml`) valide automatiquement chaque **Pull Request (PR)** et compile l'ensemble des exécutables à chaque push et sur chaque PR :
-- **CI** : Vérification des types TypeScript (`npm run lint`) et compilation du bundle.
+Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web une seule fois, le vérifie, puis en tire l'exe, le binaire Linux et l'APK ; `pr-check.yml` le lance sur chaque **Pull Request** (artefacts gardés 7 jours, run annulé si un nouveau push arrive) ; `ci-cd.yml` le lance sur `main` et sur les tags, puis déploie la PWA et publie la release :
+- **CI** : `npm run lint` (types, design system, versions synchronisées), `npm run build`, puis `npm run test:ui` (Playwright) qui ouvre le bundle en `file://` (exe, APK) et en `http` (PWA) sur 3 tailles d'écran et vérifie en-tête, onglets, images, polices et absence de débordement.
 - **Artifacts de PR & Releases** : Téléchargement automatique pour chaque PR :
   - 📱 **Android Mobile** : `InsertechEvenements-Android.apk` (exécutable installable sur smartphones et tablettes Android).
   - 🪟 **Windows x64** : `InsertechEvenements.exe` (exécutable portable sans installation).
   - 🐧 **Linux Debian x64** : `InsertechEvenements-linux-x64` (exécutable portable ELF).
   - 🌐 **PWA Web & Mobile** : `InsertechEvenements-PWA-Android.zip` et `InsertechEvenements-Mobile.html`.
-- **CD / Releases** : Publication automatique des exécutables et de l'APK dès qu'un tag `v*` est poussé.
+- **CD / Releases** : Publication automatique des exécutables et de l'APK dès qu'un tag `v*` est poussé, avec `SHA256SUMS.txt`. La release échoue s'il manque un fichier au lieu de partir incomplète.
 
 **Publier une nouvelle version.** La version de `package.json` est la seule source de vérité : `npm version patch` (ou `minor`, `major`) la monte et la recopie dans le lanceur .NET, `app.manifest` et l'APK (`versionCode` = majeur×10000 + mineur×100 + correctif) via `scripts/sync-version.js`. Fusionner, puis pousser le tag `v<version>` ou lancer le workflow avec `release_tag`. Le pipeline refuse un tag qui ne correspond pas à `package.json`, et `npm run lint` refuse des versions désynchronisées. La version s'affiche dans le pied de page de l'application.
 

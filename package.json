@@ -13,6 +13,7 @@
     "build:exe": "npm run build && dotnet publish launcher -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./dist-win && node scripts/copy-artifact.js win",
     "build:linux": "npm run build && dotnet publish launcher -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./dist-linux && node scripts/copy-artifact.js linux",
     "build:mobile": "npm run build && node scripts/build-mobile-package.js",
+    "test:ui": "playwright test",
     "build:all": "npm run build:exe && npm run build:linux && npm run build:mobile"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.14.0",
     "@types/react": "^19.0.10",

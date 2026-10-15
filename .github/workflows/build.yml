@@ -1,0 +1,172 @@
+name: Build multiplateforme (réutilisable)
+
+# Construit le bundle web une seule fois, puis l'exe Windows, le binaire Linux et l'APK
+# à partir de ce même dist/ : les 4 cibles affichent exactement la même interface.
+on:
+  workflow_call:
+    inputs:
+      retention-days:
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: "Web : lint, bundle et test de rendu"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint (types, design system, versions synchronisées)
+        run: npm run lint
+
+      - name: Bundle autonome (dist/)
+        run: npm run build:mobile
+
+      - name: Installer Chromium pour le test de rendu
+        run: npx playwright install --with-deps chromium
+
+      - name: Test de rendu (file:// et http, 3 tailles d'écran)
+        run: npm run test:ui
+
+      - name: Rapport du test de rendu (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-test-rendu
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Téléverser le bundle web
+        uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-PWA-Android-Web
+          path: dist/
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  desktop:
+    name: "Build : ${{ matrix.label }}"
+    needs: web
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            label: Exécutable Windows x64
+            artifact: InsertechEvenements-Windows-x64
+            files: InsertechEvenements.exe
+          - os: ubuntu-latest
+            rid: linux-x64
+            label: Exécutable Linux x64
+            artifact: InsertechEvenements-Linux-Debian-x64
+            files: |
+              InsertechEvenements-linux-x64
+              InsertechEvenements-linux-x64.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-PWA-Android-Web
+          path: dist/
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ matrix.rid }}-${{ hashFiles('launcher/*.csproj') }}
+
+      - name: Publier le lanceur autonome
+        shell: bash
+        run: dotnet publish launcher -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o out
+
+      - name: Préparer les fichiers
+        shell: bash
+        run: |
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            cp out/InsertechEvenements.exe .
+          else
+            cp out/InsertechEvenements-linux-x64 .
+            chmod +x InsertechEvenements-linux-x64
+            tar -czf InsertechEvenements-linux-x64.tar.gz InsertechEvenements-linux-x64
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  android:
+    name: "Build : APK Android"
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-PWA-Android-Web
+          path: dist/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Gradle vient du wrapper commité ; setup-gradle ne fait que le cache
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Préparer la clé de signature release (si les secrets existent)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Clé de release trouvée : APK release signé."
+          else
+            echo "Pas de clé de release : APK debug signé avec la clé debug commitée."
+          fi
+
+      - name: Compiler l'APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_PATH" ]; then
+            ./gradlew assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk ../InsertechEvenements-Android.apk
+          else
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk ../InsertechEvenements-Android.apk
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-Android-APK
+          path: InsertechEvenements-Android.apk
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

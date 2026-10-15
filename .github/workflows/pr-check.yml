@@ -1,0 +1,21 @@
+name: Vérification de PR
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# Un nouveau push sur la PR annule la vérification précédente
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      retention-days: 7
+    secrets: inherit
