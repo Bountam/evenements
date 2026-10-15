@@ -375,8 +375,13 @@ export default function App() {
       // 1. Ajouter à Dexie
       await db.events.add(newEvent);
       
-      // 2. Pré-remplir avec des données de démonstration pour montrer un état vivant
-      await seedDemoData(newEvent.id, newEvent.type);
+      // 2. Pré-remplir avec des données de démonstration pour montrer un état vivant.
+      // Facultatif : un échec ici ne doit pas empêcher d'ouvrir l'activité qui vient d'être enregistrée.
+      try {
+        await seedDemoData(newEvent.id, newEvent.type);
+      } catch (seedError) {
+        console.warn('Données de démonstration non ajoutées :', seedError);
+      }
 
       // 3. Définir comme actif
       localStorage.setItem('insertech_active_event_id', newEvent.id);
@@ -395,6 +400,8 @@ export default function App() {
       notifySync();
     } catch (e) {
       console.error(e);
+      const detail = e instanceof Error ? e.message : String(e);
+      showToast(`Impossible de créer l'activité : ${detail}`, 'error');
     }
   };
 

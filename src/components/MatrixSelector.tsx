@@ -6,6 +6,7 @@ import {
   Terminal, Presentation, MessageSquare, Calendar, MapPin, Building, Plus, ArrowRight, Upload, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { showToast } from './shared/Toast';
 
 interface MatrixSelectorProps {
   onCreateEvent: (settings: Omit<EventSettings, 'id' | 'createdAt'>) => void;
@@ -196,6 +197,13 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
+      // Le message d'erreur du type est en haut de la page, loin du bouton : l'annoncer et y amener
+      showToast(Object.values(newErrors)[0], 'error');
+      const target = newErrors.type
+        ? document.querySelector<HTMLElement>('[role="radiogroup"]')
+        : document.getElementById(newErrors.name ? 'eventName' : 'eventLocation');
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!newErrors.type) target?.focus({ preventScroll: true });
       return;
     }
 
