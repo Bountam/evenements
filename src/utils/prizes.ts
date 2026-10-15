@@ -1,6 +1,6 @@
 import { EventSettings } from '../types';
-import prizeSsdImage from '../assets/prize-ssd.png';
-import prizeLaptopImage from '../assets/prize-laptop.png';
+import prizeSsdImage from '../assets/prize-ssd.webp';
+import prizeLaptopImage from '../assets/prize-laptop.webp';
 
 // Prix du Kiosque-concours, stockés dans event.extraData.contestPrizes
 export interface ContestPrize {

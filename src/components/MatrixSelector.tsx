@@ -5,7 +5,6 @@ import {
   Wrench, GraduationCap, Users, Heart, Timer, 
   Terminal, Presentation, MessageSquare, Calendar, MapPin, Building, Plus, ArrowRight, Upload, Trash2
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MatrixSelectorProps {
@@ -213,7 +212,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
     });
   };
 
-  const downloadImportExample = (format: 'json' | 'csv' | 'md' | 'tex' | 'xlsx') => {
+  const downloadImportExample = async (format: 'json' | 'csv' | 'md' | 'tex' | 'xlsx') => {
     let content = '';
     let fileName = '';
     let mimeType = 'text/plain';
@@ -286,6 +285,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
           ["Luka Leduc", "luka@exemple.com", "Dell Latitude 5490", "laptop", "windows", "Le clavier ne fonctionne pas", "Gabriel Roy", "Table 3", "repare", "Clavier remplacé avec succès", 1.6],
           ["Sophie Côté", "", "Samsung S20", "cellulaire", "aucun", "Écran fissuré", "", "", "en_attente", "", 0.2]
         ];
+        const XLSX = await import('xlsx');
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(ws_data);
         XLSX.utils.book_append_sheet(wb, ws, "Diagnostics");

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { EventSettings, GenericAttendee, EventType } from '../../types';
 import { db, notifySync, registerSyncListener } from '../../db';
 import { networkManager } from '../../network';
-import { DoughnutChart, BarChart } from '../shared/Charts';
+import { DoughnutChart, BarChart } from '../shared/LazyCharts';
 import { 
   UserPlus, Check, Trash2, Star, MessageSquare, Users, Award, Play, Pause, RotateCcw, HelpCircle, FileText, CheckSquare, Square
 } from 'lucide-react';
