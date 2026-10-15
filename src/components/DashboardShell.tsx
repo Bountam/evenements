@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
-  LogOut, Download, Database, Wifi,
+  House, Download, Database, Wifi,
   Maximize, Minimize, Settings2, MonitorUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -360,12 +360,13 @@ export default function DashboardShell({
                 <span>Sauvegarder</span>
               </Button>
 
-              {/* Séparateur pour isoler le bouton Quitter de Sauvegarder */}
+              {/* Séparateur pour isoler le retour au menu de Sauvegarder */}
               <div className="w-px h-5 bg-app-card-border mx-1 hidden sm:block" />
 
-              <Button variant="danger" size="sm" onClick={onLeaveEvent} title="Quitter cet événement et retourner au menu principal">
-                <LogOut size={13} aria-hidden="true" />
-                <span>Quitter</span>
+              {/* Les données restent enregistrées : l'activité se rouvre depuis l'historique du menu principal */}
+              <Button size="sm" onClick={onLeaveEvent} title="Retourner au menu principal (l'activité reste enregistrée)">
+                <House size={13} aria-hidden="true" />
+                <span>Menu principal</span>
               </Button>
             </div>
           </div>
