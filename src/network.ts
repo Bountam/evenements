@@ -4,11 +4,14 @@ import { SyncMessage, TrackState } from './types';
 
 // Types de messages réseau P2P
 export type NetworkMessage =
-  | { type: 'DB_WRITE'; table: string; action: 'put' | 'delete'; data: any }
+  | { type: 'DB_WRITE'; table: string; action: 'put' | 'delete'; data: any; opId?: string }
   | { type: 'DB_DELTA'; table: string; action: 'put' | 'delete'; data: any }
-  | { type: 'DB_BATCH_WRITE'; table: string; items: any[] }
+  | { type: 'DB_BATCH_WRITE'; table: string; items: any[]; opId?: string }
   | { type: 'DB_SYNC'; table: string; data: any[] }
-  | { type: 'CHRONO_ACTION'; message: SyncMessage }
+  | { type: 'CHRONO_ACTION'; message: SyncMessage; opId?: string }
+  | { type: 'ACK'; opId: string }
+  | { type: 'PING' }
+  | { type: 'PONG' }
   | { type: 'REQUEST_INITIAL_SYNC' }
   | { type: 'CLOCK_PING'; t0: number }
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
@@ -28,6 +31,12 @@ function loadPahoMqtt(): Promise<any> {
     document.head.appendChild(script);
   });
 }
+
+const OUTBOX_KEY = 'insertech_net_outbox';
+const HEARTBEAT_MS = 4000;
+const HOST_SILENCE_MS = 12000;
+const CLIENT_SILENCE_MS = 20000;
+const CONNECT_TIMEOUT_MS = 10000;
 
 class P2PNetworkManager {
   peer: Peer | null = null;
@@ -64,8 +73,28 @@ class P2PNetworkManager {
   private clockSyncInterval: any = null;
   private clockSamples: { rtt: number; offset: number }[] = [];
 
-  // File d'attente locale pour la résilience hors-ligne (Offline Queue)
-  offlineQueue: NetworkMessage[] = [];
+  // Envois d'une tablette pas encore confirmés par le PC principal (écritures et chronos).
+  // Conservés dans localStorage : ils survivent à une coupure Wi-Fi, à la mise en veille ou à un
+  // rechargement, et sont renvoyés à la reconnexion jusqu'à confirmation (ACK).
+  private outbox: (NetworkMessage & { opId: string })[] = [];
+
+  // Reconnexion automatique d'une tablette au PC principal
+  private joinCode: string | null = null;
+  private joinEventId = 'temp';
+  private reconnectTimer: any = null;
+  private reconnectAttempts = 0;
+  private connectTimeout: any = null;
+
+  // Battement de cœur : une liaison WebRTC peut mourir sans événement « close » (veille, Wi-Fi)
+  private heartbeatInterval: any = null;
+  private lastHostMessageAt = 0;
+  private hostAnswersPing = false;
+  private lastClientPingAt = new Map<string, number>();
+
+  // Messages traités un à un par liaison : une écriture reçue avant une demande de synchro
+  // complète est enregistrée avant que la synchro soit lue dans la base
+  private incomingChains = new Map<string, Promise<void>>();
+  private hostReconnectTimer: any = null;
 
   // Canal de synchronisation inter-onglets / multi-fenêtres (HDMI Écran Public local)
   chronoChannel: BroadcastChannel | null = null;
@@ -83,6 +112,22 @@ class P2PNetworkManager {
       } catch (e) {
         // Ignorer si corrompu
       }
+
+      try {
+        const savedOutbox = localStorage.getItem(OUTBOX_KEY);
+        if (savedOutbox) this.outbox = JSON.parse(savedOutbox);
+      } catch (e) {
+        this.outbox = [];
+      }
+
+      // Une tablette reprend la liaison dès qu'elle se réveille ou retrouve le réseau
+      const wake = () => {
+        if (this.role === 'client' && this.joinCode && !this.isLinkedToHost()) this.reconnectNow();
+      };
+      window.addEventListener('online', wake);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') wake();
+      });
 
       // Les autres fenêtres du même ordinateur (écran public) reprennent le décalage de la console
       if (localStorage.getItem('insertech_net_role') === 'client') {
@@ -164,7 +209,9 @@ class P2PNetworkManager {
   }
 
   // DÉMARRER LA SESSION HÔTE (PC Principal)
-  async startHost(eventId: string, existingCode?: string): Promise<string> {
+  // keepTrying : reprise automatique après un rechargement, où le serveur de signalement peut encore
+  // réserver le code de la session précédente quelques secondes
+  async startHost(eventId: string, existingCode?: string, keepTrying = false): Promise<string> {
     this.role = 'host';
     this.hostEventId = eventId;
     this.isConnecting = true;
@@ -185,129 +232,344 @@ class P2PNetworkManager {
     localStorage.setItem('insertech_net_session_code', this.sessionId);
     localStorage.setItem('insertech_net_event_id', eventId);
 
+    this.startHostWatchdog();
+
     return new Promise((resolve, reject) => {
-      this.peer = new Peer(this.sessionId, {
+      if (this.peer) this.peer.destroy();
+      const peer = new Peer(this.sessionId, {
         host: '0.peerjs.com',
         port: 443,
         secure: true,
         debug: 1
       });
+      this.peer = peer;
+      let opened = false;
 
-      this.peer.on('open', (id) => {
+      peer.on('open', (id) => {
+        opened = true;
         this.isConnecting = false;
-        this.updateStatus('En ligne (Hôte)');
+        this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte)');
         // Démarrer la publication d'annonces MQTT pour l'auto-découverte
-        this.startMqttDiscoveryAnnounce(eventId);
+        this.startMqttDiscoveryAnnounce(this.hostEventId ?? eventId);
         resolve(id);
       });
 
-      this.peer.on('error', (err) => {
+      // Liaison au serveur de signalement perdue (Wi-Fi, veille) : les tablettes déjà connectées
+      // continuent de fonctionner, mais aucune ne pourrait (re)joindre la session sans cette reprise
+      peer.on('disconnected', () => {
+        if (this.peer !== peer || this.role !== 'host') return;
+        this.updateStatus('Reconnexion au serveur de signalement...');
+        this.scheduleHostSignalingReconnect(peer);
+      });
+
+      peer.on('error', (err) => {
+        if (this.peer !== peer) return;
         this.isConnecting = false;
+        if (!opened && keepTrying && err.type === 'unavailable-id') {
+          setTimeout(() => {
+            if (this.peer !== peer || this.role !== 'host') return;
+            this.startHost(this.hostEventId ?? eventId, this.sessionId, true).then(resolve, reject);
+          }, 3000);
+          return;
+        }
         this.updateStatus(`Erreur : ${err.type}`);
-        reject(err);
+        if (!opened) reject(err);
       });
 
       // Écouter les connexions des tablettes clientes
-      this.peer.on('connection', (conn) => {
+      peer.on('connection', (conn) => {
         this.connections.push(conn);
         this.updateStatus(`Connecté (${this.connections.length} appareils)`);
 
         conn.on('data', (data) => {
-          this.handleIncomingData(conn, data as NetworkMessage, this.hostEventId ?? eventId);
+          this.enqueueIncoming(conn, data as NetworkMessage, () => this.hostEventId ?? eventId);
         });
 
         conn.on('close', () => {
           this.connections = this.connections.filter(c => c.connectionId !== conn.connectionId);
-          this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte, aucun client)');
+          this.lastClientPingAt.delete(conn.connectionId);
+          this.incomingChains.delete(conn.connectionId);
+          if (this.role === 'host') {
+            this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte, aucun client)');
+          }
         });
       });
     });
   }
 
+  private scheduleHostSignalingReconnect(peer: Peer) {
+    if (this.hostReconnectTimer) return;
+    this.hostReconnectTimer = setTimeout(() => {
+      this.hostReconnectTimer = null;
+      if (this.peer !== peer || this.role !== 'host' || !peer.disconnected) return;
+      if (peer.destroyed) {
+        this.startHost(this.hostEventId ?? '', this.sessionId, true).catch(() => {});
+        return;
+      }
+      try {
+        peer.reconnect();
+      } catch (e) {
+        // Réessayer au prochain passage
+      }
+      // Si la reprise échoue, l'événement « disconnected » n'est pas toujours réémis
+      setTimeout(() => {
+        if (this.peer === peer && this.role === 'host' && peer.disconnected) this.scheduleHostSignalingReconnect(peer);
+      }, 5000);
+    }, 2000);
+  }
+
+  // L'hôte ferme les liaisons des tablettes muettes depuis trop longtemps (veille, hors de portée) :
+  // elles se reconnecteront d'elles-mêmes et le nombre d'appareils affiché reste juste
+  private startHostWatchdog() {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      const now = Date.now();
+      for (const conn of this.connections) {
+        const last = this.lastClientPingAt.get(conn.connectionId);
+        if (last !== undefined && now - last > CLIENT_SILENCE_MS) {
+          this.lastClientPingAt.delete(conn.connectionId);
+          try {
+            conn.close();
+          } catch (e) {
+            // Déjà fermée
+          }
+        }
+      }
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  // Traiter les messages d'une liaison dans leur ordre d'arrivée, un à la fois
+  private enqueueIncoming(conn: DataConnection, msg: NetworkMessage, eventId: () => string) {
+    const key = conn.connectionId;
+    const previous = this.incomingChains.get(key) ?? Promise.resolve();
+    const next = previous
+      .then(() => this.handleIncomingData(conn, msg, eventId()))
+      .catch((e) => console.error('Erreur de traitement du message réseau :', e));
+    this.incomingChains.set(key, next);
+  }
+
   // REJOINDRE UNE SESSION EXISTANTE (Tablettes Clients)
-  async joinSession(code: string, eventId: string): Promise<void> {
+  // keepTrying : reprise automatique après un rechargement, réessaie tant que le PC principal est absent
+  async joinSession(code: string, eventId: string, keepTrying = false): Promise<void> {
+    if (this.joinCode && this.joinCode !== code) {
+      // Nouvelle session : les envois en attente visaient l'ancien PC principal
+      this.outbox = [];
+      this.persistOutbox();
+    }
     this.role = 'client';
-    this.isConnecting = true;
-    this.updateStatus('Recherche de la session...');
+    this.joinCode = code;
+    this.joinEventId = eventId;
+    this.reconnectAttempts = 0;
+    this.clearReconnectTimer();
 
     // Sauvegarder les paramètres réseau pour la reconnexion automatique (rechargement)
     localStorage.setItem('insertech_net_role', 'client');
     localStorage.setItem('insertech_net_session_code', code);
     localStorage.setItem('insertech_net_event_id', eventId);
 
+    try {
+      await this.connectToHost();
+    } catch (e) {
+      if (keepTrying) {
+        this.scheduleReconnect();
+        return;
+      }
+      throw e;
+    }
+  }
+
+  private isLinkedToHost(): boolean {
+    return this.connections.length > 0 && this.connections[0].open;
+  }
+
+  // Une tentative de liaison au PC principal ; résolue quand la liaison de données est ouverte
+  private connectToHost(): Promise<void> {
+    const code = this.joinCode;
+    if (!code) return Promise.reject(new Error('Aucune session'));
+    this.isConnecting = true;
+    this.updateStatus(this.reconnectAttempts > 0 ? 'Reconnexion au PC Principal...' : 'Recherche de la session...');
+
+    if (this.peer) this.peer.destroy();
+    this.connections = [];
+
     return new Promise((resolve, reject) => {
-      this.peer = new Peer({
+      const peer = new Peer({
         host: '0.peerjs.com',
         port: 443,
         secure: true,
         debug: 1
       });
+      this.peer = peer;
+      let settled = false;
+      const fail = (err: any) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(this.connectTimeout);
+        this.isConnecting = false;
+        if (this.peer === peer) {
+          peer.destroy();
+          this.peer = null;
+        }
+        reject(err);
+      };
 
-      this.peer.on('open', () => {
-        const conn = this.peer!.connect(code);
+      clearTimeout(this.connectTimeout);
+      this.connectTimeout = setTimeout(() => fail(new Error('Délai de connexion dépassé')), CONNECT_TIMEOUT_MS);
+
+      peer.on('open', () => {
+        const conn = peer.connect(code, { reliable: true });
 
         conn.on('open', () => {
+          if (this.peer !== peer || this.role !== 'client') return;
+          settled = true;
+          clearTimeout(this.connectTimeout);
           this.isConnecting = false;
+          this.reconnectAttempts = 0;
           this.connections = [conn];
+          this.lastHostMessageAt = Date.now();
+          this.hostAnswersPing = false;
           this.updateStatus('Connecté au PC Principal');
-          
-          // Rejouer la file d'attente hors-ligne si des écritures ont eu lieu pendant la déconnexion
-          if (this.offlineQueue.length > 0) {
-            this.offlineQueue.forEach(pendingMsg => {
-              try {
-                conn.send(pendingMsg);
-              } catch (e) {
-                console.error('Erreur vidage file hors-ligne:', e);
-              }
-            });
-            this.offlineQueue = [];
-          }
 
-          // Demander la base de données de référence du Master
+          // Renvoyer d'abord tout ce que le PC principal n'a pas confirmé (coupure, veille, rechargement),
+          // puis demander sa base : il traite les messages dans l'ordre, la synchro les inclura
+          for (const pendingMsg of this.outbox) {
+            try {
+              conn.send(pendingMsg);
+            } catch (e) {
+              console.error('Erreur de renvoi en attente :', e);
+            }
+          }
           conn.send({ type: 'REQUEST_INITIAL_SYNC' });
 
           // Se caler sur l'horloge du Master
           this.startClockSync();
+          this.startClientHeartbeat(conn);
           resolve();
         });
 
         conn.on('data', (data) => {
-          this.handleIncomingData(conn, data as NetworkMessage, eventId);
+          if (this.connections[0] === conn) this.lastHostMessageAt = Date.now();
+          this.enqueueIncoming(conn, data as NetworkMessage, () => this.joinEventId);
         });
 
         conn.on('error', (err) => {
-          this.isConnecting = false;
-          this.updateStatus('Erreur de liaison client');
-          reject(err);
+          if (!settled) {
+            this.updateStatus('Erreur de liaison client');
+            fail(err);
+          } else {
+            this.handleLostHost(conn);
+          }
         });
 
         conn.on('close', () => {
-          this.connections = [];
-          this.stopClockSync(); // Garder le dernier décalage mesuré pendant la déconnexion
-          this.updateStatus('Déconnecté du PC Principal (mode hors-ligne)');
+          if (!settled) fail(new Error('Liaison fermée'));
+          else this.handleLostHost(conn);
         });
       });
 
-      this.peer.on('error', (err) => {
-        this.isConnecting = false;
-        this.updateStatus(`Erreur d'initialisation`);
-        reject(err);
+      peer.on('error', (err) => {
+        if (!settled) {
+          this.updateStatus(`Erreur d'initialisation`);
+          fail(err);
+        }
       });
     });
   }
 
+  // La liaison au PC principal est perdue : les écritures restent en attente et la tablette se reconnecte
+  private handleLostHost(conn: DataConnection) {
+    if (this.connections[0] !== conn) return;
+    this.connections = [];
+    this.incomingChains.delete(conn.connectionId);
+    this.stopClockSync(); // Garder le dernier décalage mesuré pendant la déconnexion
+    this.stopHeartbeat();
+    try {
+      conn.close();
+    } catch (e) {
+      // Déjà fermée
+    }
+    if (this.role !== 'client') return;
+    this.updateStatus('Déconnecté du PC Principal (reconnexion...)');
+    this.scheduleReconnect();
+  }
+
+  private startClientHeartbeat(conn: DataConnection) {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.connections[0] !== conn) return;
+      // Un PC principal d'une version antérieure ne répond pas : ne pas couper sa liaison pour autant
+      if (this.hostAnswersPing && Date.now() - this.lastHostMessageAt > HOST_SILENCE_MS) {
+        this.handleLostHost(conn);
+        return;
+      }
+      if (conn.open) {
+        try {
+          conn.send({ type: 'PING' });
+        } catch (e) {
+          this.handleLostHost(conn);
+        }
+      }
+    }, HEARTBEAT_MS);
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.role !== 'client' || !this.joinCode || this.reconnectTimer) return;
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 10000);
+    this.reconnectAttempts++;
+    this.updateStatus('Déconnecté du PC Principal (reconnexion...)');
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connectToHost().catch(() => this.scheduleReconnect());
+    }, delay);
+  }
+
+  private reconnectNow() {
+    if (this.isConnecting) return;
+    this.clearReconnectTimer();
+    this.reconnectAttempts = 0;
+    this.connectToHost().catch(() => this.scheduleReconnect());
+  }
+
   // QUITTER LA SESSION RÉSEAU (Retour au mode standalone)
   leaveSession() {
+    this.role = 'standalone';
+    this.joinCode = null;
+    this.clearReconnectTimer();
+    clearTimeout(this.connectTimeout);
+    if (this.hostReconnectTimer) {
+      clearTimeout(this.hostReconnectTimer);
+      this.hostReconnectTimer = null;
+    }
+    this.stopHeartbeat();
     this.connections.forEach(conn => conn.close());
     this.connections = [];
+    this.incomingChains.clear();
+    this.lastClientPingAt.clear();
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
     }
-    this.role = 'standalone';
+    this.isConnecting = false;
     this.sessionId = '';
     this.stopClockSync();
     this.setClockOffset(0);
+    // Les données restent sur cet appareil ; elles ne sont plus destinées à une session
+    this.outbox = [];
+    this.persistOutbox();
     
     // Nettoyer les paramètres de reconnexion
     localStorage.removeItem('insertech_net_role');
@@ -318,6 +580,53 @@ class P2PNetworkManager {
     this.stopMqttDiscovery();
 
     this.updateStatus('Local uniquement');
+  }
+
+  private persistOutbox() {
+    try {
+      if (this.outbox.length > 0) localStorage.setItem(OUTBOX_KEY, JSON.stringify(this.outbox));
+      else localStorage.removeItem(OUTBOX_KEY);
+    } catch (e) {
+      // Ignorer quota localStorage
+    }
+  }
+
+  // Tablette : garder le message jusqu'à confirmation du PC principal, l'envoyer tout de suite si possible
+  private sendToHost(msg: NetworkMessage) {
+    const queued = { ...msg, opId: `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}` } as NetworkMessage & { opId: string };
+    this.outbox.push(queued);
+    this.persistOutbox();
+    const conn = this.connections[0];
+    if (conn && conn.open) {
+      try {
+        conn.send(queued);
+      } catch (e) {
+        // Renvoyé à la reconnexion
+      }
+    }
+  }
+
+  // Après la synchro complète reçue du PC principal, réappliquer localement ce qu'il n'a pas encore
+  // confirmé : sinon une inscription faite pendant la synchro disparaîtrait de la tablette
+  private async reapplyPendingWrites() {
+    for (const msg of this.outbox) {
+      try {
+        if (msg.type === 'DB_WRITE') {
+          if (msg.action === 'put') await db.table(msg.table).put(msg.data);
+          else await db.table(msg.table).delete(msg.data);
+        } else if (msg.type === 'DB_BATCH_WRITE') {
+          await db.table(msg.table).bulkPut(msg.items);
+        }
+      } catch (e) {
+        console.error('Erreur de réapplication locale :', e);
+      }
+    }
+  }
+
+  private reapplyPendingChronoActions() {
+    for (const msg of this.outbox) {
+      if (msg.type === 'CHRONO_ACTION') this.applyChronoAction(msg.message);
+    }
   }
 
   // Envoyer à un client toutes les tables de l'activité partagée, puis l'état des chronomètres
@@ -361,7 +670,12 @@ class P2PNetworkManager {
   private async handleIncomingData(conn: DataConnection, msg: NetworkMessage, eventId: string) {
     if (this.role === 'host') {
       // --- PARTIE HÔTE / MASTER (Source de vérité) ---
+      this.lastClientPingAt.set(conn.connectionId, Date.now());
       switch (msg.type) {
+        case 'PING':
+          conn.send({ type: 'PONG' });
+          break;
+
         case 'CLOCK_PING':
           conn.send({ type: 'CLOCK_PONG', t0: msg.t0, hostTime: Date.now() });
           break;
@@ -392,6 +706,7 @@ class P2PNetworkManager {
           } catch (e) {
             console.error('Erreur lors de la réplication DB_WRITE sur le Master:', e);
           }
+          this.acknowledge(conn, msg.opId);
           break;
 
         case 'DB_BATCH_WRITE':
@@ -410,17 +725,30 @@ class P2PNetworkManager {
           } catch (e) {
             console.error('Erreur lors de la réplication DB_BATCH_WRITE sur le Master:', e);
           }
+          this.acknowledge(conn, msg.opId);
           break;
 
         case 'CHRONO_ACTION':
           // Le Master route les actions de chronomètre et de raffle à tout le monde
           this.applyChronoAction(msg.message);
-          this.broadcastExcept(conn, msg);
+          this.broadcastExcept(conn, { type: 'CHRONO_ACTION', message: msg.message });
+          this.acknowledge(conn, msg.opId);
           break;
       }
     } else if (this.role === 'client') {
       // --- PARTIE CLIENT ---
       switch (msg.type) {
+        case 'PONG':
+          this.hostAnswersPing = true;
+          break;
+
+        case 'ACK':
+          if (this.outbox.some((m) => m.opId === msg.opId)) {
+            this.outbox = this.outbox.filter((m) => m.opId !== msg.opId);
+            this.persistOutbox();
+          }
+          break;
+
         case 'CLOCK_PONG':
           this.handleClockPong(msg.t0, msg.hostTime);
           break;
@@ -446,6 +774,7 @@ class P2PNetworkManager {
             if (msg.payload.participants.length > 0) await db.participants.bulkPut(msg.payload.participants);
             if (msg.payload.attendees.length > 0) await db.attendees.bulkPut(msg.payload.attendees);
           });
+          await this.reapplyPendingWrites();
 
           if (importedEvent) {
             localStorage.setItem('insertech_active_event_id', importedEvent.id);
@@ -495,19 +824,30 @@ class P2PNetworkManager {
         case 'CHRONO_ACTION':
           // Appliquer l'action de chronométrage reçue du Master
           this.applyChronoAction(msg.message);
+          // L'état complet des pistes ne contient pas encore les actions de cette tablette en attente
+          if (msg.message.type === 'TRACKS_STATE_SYNC') this.reapplyPendingChronoActions();
           break;
       }
     }
   }
 
+  private acknowledge(conn: DataConnection, opId: string | undefined) {
+    if (opId && conn.open) conn.send({ type: 'ACK', opId });
+  }
+
   // ÉMETTRE UNE ACTION DE CHRONO / RAFFLE
   sendChronoAction(action: SyncMessage) {
     this.applyChronoAction(action, true);
-    if (this.role !== 'standalone') {
-      this.broadcast({
-        type: 'CHRONO_ACTION',
-        message: action
-      });
+    if (this.role === 'host') {
+      this.broadcast({ type: 'CHRONO_ACTION', message: action });
+    } else if (this.role === 'client') {
+      // Les pistes sont rejouées après une coupure ; un tirage ou une célébration périmés ne le sont pas
+      if (action.type === 'PEER_CELEBRATION' || action.type === 'RAFFLE_START' || action.type === 'RAFFLE_RESET') {
+        const conn = this.connections[0];
+        if (conn && conn.open) conn.send({ type: 'CHRONO_ACTION', message: action });
+      } else {
+        this.sendToHost({ type: 'CHRONO_ACTION', message: action });
+      }
     }
   }
 
@@ -596,23 +936,7 @@ class P2PNetworkManager {
 
     // 2. Propager sur le réseau P2P selon le rôle
     if (this.role === 'client') {
-      const conn = this.connections[0];
-      if (conn && conn.open) {
-        conn.send({
-          type: 'DB_WRITE',
-          table,
-          action,
-          data
-        });
-      } else {
-        // En file d'attente hors-ligne si déconnecté temporairement
-        this.offlineQueue.push({
-          type: 'DB_WRITE',
-          table,
-          action,
-          data
-        });
-      }
+      this.sendToHost({ type: 'DB_WRITE', table, action, data });
     } else if (this.role === 'host') {
       // Si Master, diffuser le delta atomique aux clients (O(1) au lieu de O(N))
       this.broadcast({
@@ -633,20 +957,7 @@ class P2PNetworkManager {
     notifySync();
 
     if (this.role === 'client') {
-      const conn = this.connections[0];
-      if (conn && conn.open) {
-        conn.send({
-          type: 'DB_BATCH_WRITE',
-          table,
-          items
-        });
-      } else {
-        this.offlineQueue.push({
-          type: 'DB_BATCH_WRITE',
-          table,
-          items
-        });
-      }
+      this.sendToHost({ type: 'DB_BATCH_WRITE', table, items });
     } else if (this.role === 'host') {
       this.broadcast({
         type: 'DB_BATCH_WRITE',
