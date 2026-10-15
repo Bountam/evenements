@@ -110,16 +110,16 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
     if (type === 'reparothon') {
       // Insertion de techniciens
       const techs: Technician[] = [
-        { id: 't1', eventId, name: 'Alexandre Tremblay', specialties: ['laptop', 'pc_tour'], status: 'libre', currentTicketId: null, createdAt: now },
-        { id: 't2', eventId, name: 'Chloé Dubé', specialties: ['cellulaire', 'tablette'], status: 'occupe', currentTicketId: 'ticket-2', createdAt: now },
-        { id: 't3', eventId, name: 'Gabriel Roy', specialties: ['laptop', 'linux'], status: 'libre', currentTicketId: null, createdAt: now }
+        { id: `${eventId}-t1`, eventId, name: 'Alexandre Tremblay', specialties: ['laptop', 'pc_tour'], status: 'libre', currentTicketId: null, createdAt: now },
+        { id: `${eventId}-t2`, eventId, name: 'Chloé Dubé', specialties: ['cellulaire', 'tablette'], status: 'occupe', currentTicketId: `${eventId}-ticket-2`, createdAt: now },
+        { id: `${eventId}-t3`, eventId, name: 'Gabriel Roy', specialties: ['laptop', 'linux'], status: 'libre', currentTicketId: null, createdAt: now }
       ];
       await db.technicians.bulkPut(techs);
 
       // Insertion de tickets de réparation
       const tickets: RepairTicket[] = [
         {
-          id: 'ticket-1',
+          id: `${eventId}-ticket-1`,
           eventId,
           visitorName: 'Sophie Girard',
           visitorEmail: 'sophie.g@email.com',
@@ -128,7 +128,7 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
           operatingSystem: 'windows',
           initialDiagnosis: 'Batterie se décharge trop rapidement et Windows est très lent.',
           status: 'repare',
-          assignedTechId: 't1',
+          assignedTechId: `${eventId}-t1`,
           assignedTechName: 'Alexandre Tremblay',
           resultRemarks: 'Nettoyage des ventilateurs, désinstallation des bloatwares et calibration de la batterie. Fonctionne à merveille !',
           weightKg: 1.6,
@@ -136,7 +136,7 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
           updatedAt: now - 3600000
         },
         {
-          id: 'ticket-2',
+          id: `${eventId}-ticket-2`,
           eventId,
           visitorName: 'Marc-André Fortin',
           objectName: 'iPhone XR',
@@ -144,7 +144,7 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
           operatingSystem: 'autre',
           initialDiagnosis: 'Écran fissuré et tactile capricieux.',
           status: 'en_cours',
-          assignedTechId: 't2',
+          assignedTechId: `${eventId}-t2`,
           assignedTechName: 'Chloé Dubé',
           resultRemarks: '',
           weightKg: 0.2,
@@ -152,7 +152,7 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
           updatedAt: now
         },
         {
-          id: 'ticket-3',
+          id: `${eventId}-ticket-3`,
           eventId,
           visitorName: 'Léa Bouchard',
           objectName: 'PC Asus K53U',
@@ -172,19 +172,19 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
     } else if (type === 'kiosque_concours') {
       // Insertion de participants au concours d'assemblage
       const participants: Participant[] = [
-        { id: 'p1', eventId, name: 'Sébastien Lavoie', email: 'seb@lavoie.net', postalCode: 'H2W 1Y4', timeMs: 142350, registeredAt: now - 3600000 * 3 },
-        { id: 'p2', eventId, name: 'Nadia Pelletier', email: 'nadia.p@gmail.com', postalCode: 'J3Y 2Z8', timeMs: 168900, registeredAt: now - 3600000 * 2.5 },
-        { id: 'p3', eventId, name: 'Étienne Gagnon', email: 'etienne@gagnon.co', postalCode: 'G1K 7P4', timeMs: 118400, registeredAt: now - 3600000 * 2 },
-        { id: 'p4', eventId, name: 'Camille Roy', email: 'camille.roy@videotron.ca', postalCode: 'H3C 1P8', timeMs: null, registeredAt: now - 1800000 }
+        { id: `${eventId}-p1`, eventId, name: 'Sébastien Lavoie', email: 'seb@lavoie.net', postalCode: 'H2W 1Y4', timeMs: 142350, registeredAt: now - 3600000 * 3 },
+        { id: `${eventId}-p2`, eventId, name: 'Nadia Pelletier', email: 'nadia.p@gmail.com', postalCode: 'J3Y 2Z8', timeMs: 168900, registeredAt: now - 3600000 * 2.5 },
+        { id: `${eventId}-p3`, eventId, name: 'Étienne Gagnon', email: 'etienne@gagnon.co', postalCode: 'G1K 7P4', timeMs: 118400, registeredAt: now - 3600000 * 2 },
+        { id: `${eventId}-p4`, eventId, name: 'Camille Roy', email: 'camille.roy@videotron.ca', postalCode: 'H3C 1P8', timeMs: null, registeredAt: now - 1800000 }
       ];
       await db.participants.bulkPut(participants);
     } else {
       // Données génériques pour les autres types d'événements
       const attendees: GenericAttendee[] = [
-        { id: 'a1', eventId, name: 'Jean-Pierre Côté', email: 'jp.cote@bureau.ca', presenceConfirmed: true, feedbackScore: 5, feedbackText: 'Excellent atelier, j\'ai appris beaucoup de choses concrètes.', registeredAt: now - 7200000 },
-        { id: 'a2', eventId, name: 'Isabelle Tremblay', email: 'isabelle.t@sympatico.ca', presenceConfirmed: true, feedbackScore: 4, feedbackText: 'Très intéressant, explications très claires.', registeredAt: now - 5400000 },
-        { id: 'a3', eventId, name: 'Mathieu Roy', email: 'mathieu.roy@outlook.com', presenceConfirmed: false, registeredAt: now - 3600000 },
-        { id: 'a4', eventId, name: 'Valérie Dubé', email: 'valerie.dube@gmail.com', presenceConfirmed: true, feedbackScore: 5, registeredAt: now - 1800000 }
+        { id: `${eventId}-a1`, eventId, name: 'Jean-Pierre Côté', email: 'jp.cote@bureau.ca', presenceConfirmed: true, feedbackScore: 5, feedbackText: 'Excellent atelier, j\'ai appris beaucoup de choses concrètes.', registeredAt: now - 7200000 },
+        { id: `${eventId}-a2`, eventId, name: 'Isabelle Tremblay', email: 'isabelle.t@sympatico.ca', presenceConfirmed: true, feedbackScore: 4, feedbackText: 'Très intéressant, explications très claires.', registeredAt: now - 5400000 },
+        { id: `${eventId}-a3`, eventId, name: 'Mathieu Roy', email: 'mathieu.roy@outlook.com', presenceConfirmed: false, registeredAt: now - 3600000 },
+        { id: `${eventId}-a4`, eventId, name: 'Valérie Dubé', email: 'valerie.dube@gmail.com', presenceConfirmed: true, feedbackScore: 5, registeredAt: now - 1800000 }
       ];
       await db.attendees.bulkPut(attendees);
     }
