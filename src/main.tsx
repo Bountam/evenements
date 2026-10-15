@@ -2,7 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {MotionConfig} from 'motion/react';
 import App from './App.tsx';
-import { ToastContainer } from './components/shared/Toast';
+import { ToastContainer, showToast } from './components/shared/Toast';
 import { ConfirmDialogHost } from './components/shared/ConfirmDialog';
 import './index.css';
 
@@ -33,9 +33,27 @@ if (typeof window !== 'undefined') {
     (window.location.protocol === 'https:' || window.location.protocol === 'http:')
   ) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {
-        // Ignore en mode développement local si non applicable
-      });
+      // Premier passage : pas de version précédente, donc rien à annoncer
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      navigator.serviceWorker
+        .register('./sw.js')
+        .then((registration) => {
+          registration.addEventListener('updatefound', () => {
+            const worker = registration.installing;
+            worker?.addEventListener('statechange', () => {
+              if (worker.state === 'activated' && hadController) {
+                // Pas de rechargement forcé : un chrono ou un tirage peut être en cours
+                showToast('Une nouvelle version est prête.', 'info', {
+                  label: 'Recharger',
+                  onClick: () => window.location.reload()
+                });
+              }
+            });
+          });
+        })
+        .catch(() => {
+          // Ignore en mode développement local si non applicable
+        });
     });
   }
 }
