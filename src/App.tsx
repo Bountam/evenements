@@ -231,11 +231,11 @@ export default function App() {
       // Reprendre la session sur l'activité ouverte (celle du démarrage a pu être quittée depuis)
       const hostEventId = localStorage.getItem('insertech_active_event_id') || savedEventId;
       if (savedRole === 'host' && hostEventId) {
-        networkManager.startHost(hostEventId, savedCode)
+        networkManager.startHost(hostEventId, savedCode, true)
           .then((code) => setSessionCode(code))
           .catch(() => console.warn("Échec de la reconnexion automatique hôte."));
       } else if (savedRole === 'client') {
-        networkManager.joinSession(savedCode, savedEventId || 'temp')
+        networkManager.joinSession(savedCode, savedEventId || 'temp', true)
           .then(() => setSessionCode(savedCode))
           .catch(() => console.warn("Échec de la reconnexion automatique client."));
       }
@@ -352,9 +352,18 @@ export default function App() {
     setIsLoading(false);
   };
 
+  // Chargement initial, une seule fois : le relancer à chaque changement d'activité affichait l'écran
+  // de chargement et démontait toute l'interface, effaçant les formulaires en cours de saisie
   useEffect(() => {
     initApp();
+  }, []);
 
+  // Ouvrir ou quitter une activité affiche le haut de la nouvelle vue
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeEvent?.id]);
+
+  useEffect(() => {
     const unsubscribe = registerSyncListener(() => {
       loadPastEvents();
       const savedId = localStorage.getItem('insertech_active_event_id');
@@ -362,13 +371,13 @@ export default function App() {
         db.events.get(savedId).then(evt => {
           if (evt) setActiveEvent(evt);
         });
-      } else if (!savedId && activeEvent) {
+      } else {
         setActiveEvent(null);
       }
     });
 
     return () => unsubscribe();
-  }, [activeEvent?.id]);
+  }, []);
 
   // CRÉATION D'UN ÉVÉNEMENT
   const handleCreateEvent = async (settings: Omit<EventSettings, 'id' | 'createdAt'>) => {
@@ -1610,7 +1619,7 @@ export default function App() {
             <ReparothonMatrix event={activeEvent} activeTab={currentTab as any} />
           )}
           {activeEvent.type === 'kiosque_concours' && (
-            <TeardownMatrix event={activeEvent} activeTab={currentTab as any} />
+            <TeardownMatrix key={activeEvent.id} event={activeEvent} activeTab={currentTab as any} />
           )}
           {activeEvent.type !== 'reparothon' && activeEvent.type !== 'kiosque_concours' && (
             <GenericMatrix event={activeEvent} activeTab={currentTab as any} />

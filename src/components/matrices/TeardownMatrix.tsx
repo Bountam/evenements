@@ -116,11 +116,22 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const raffleDraws = getRaffleDraws(event);
   const eligibleForRaffle = getEligibleParticipants(participants, raffleDraws);
 
-  // Formulaire d'ajout de participant
-  const [newParticipantName, setNewParticipantName] = useState('');
-  const [newParticipantEmail, setNewParticipantEmail] = useState('');
-  const [newParticipantPostal, setNewParticipantPostal] = useState('');
-  const [newParticipantConsent, setNewParticipantConsent] = useState(false);
+  // Formulaire d'ajout de participant. Le brouillon est gardé pour cet onglet (sessionStorage) :
+  // un rechargement ou une reconnexion ne fait plus perdre une saisie pas encore enregistrée
+  const draftKey = `insertech_participant_draft_${event.id}`;
+  const [initialDraft] = useState(() => readParticipantDraft(draftKey));
+  const [newParticipantName, setNewParticipantName] = useState(initialDraft.name);
+  const [newParticipantEmail, setNewParticipantEmail] = useState(initialDraft.email);
+  const [newParticipantPostal, setNewParticipantPostal] = useState(initialDraft.postal);
+  const [newParticipantConsent, setNewParticipantConsent] = useState(initialDraft.consent);
+  useEffect(() => {
+    writeParticipantDraft(draftKey, {
+      name: newParticipantName,
+      email: newParticipantEmail,
+      postal: newParticipantPostal,
+      consent: newParticipantConsent
+    });
+  }, [draftKey, newParticipantName, newParticipantEmail, newParticipantPostal, newParticipantConsent]);
   const [formError, setFormError] = useState<{ field: 'name' | 'consent'; message: string } | null>(null);
   const raffleWinnerName = participants.find((p) => p.id === raffle.winnerId)?.name || 'Tirage complété';
 
@@ -2303,4 +2314,31 @@ function normalizeName(name: string): string {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+type ParticipantDraft = { name: string; email: string; postal: string; consent: boolean };
+
+function readParticipantDraft(key: string): ParticipantDraft {
+  const empty = { name: '', email: '', postal: '', consent: false };
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (!saved || typeof saved !== 'object') return empty;
+    return {
+      name: typeof saved.name === 'string' ? saved.name : '',
+      email: typeof saved.email === 'string' ? saved.email : '',
+      postal: typeof saved.postal === 'string' ? saved.postal : '',
+      consent: saved.consent === true
+    };
+  } catch (e) {
+    return empty;
+  }
+}
+
+function writeParticipantDraft(key: string, draft: ParticipantDraft) {
+  try {
+    if (draft.name || draft.email || draft.postal || draft.consent) sessionStorage.setItem(key, JSON.stringify(draft));
+    else sessionStorage.removeItem(key);
+  } catch (e) {
+    // Stockage indisponible (navigation privée) : le formulaire fonctionne sans brouillon
+  }
 }
