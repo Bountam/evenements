@@ -264,10 +264,12 @@ export default function App() {
     };
   }, [showNetModal, sessionCode]);
 
-  const handleStartHost = async () => {
-    if (!activeEvent) return;
+  // Depuis le menu principal, l'activité choisie dans la fenêtre Réseau est ouverte puis partagée
+  const handleStartHost = async (eventToHost: EventSettings | null = activeEvent) => {
+    if (!eventToHost) return;
+    if (eventToHost.id !== activeEvent?.id) handleSelectPastEvent(eventToHost);
     try {
-      const code = await networkManager.startHost(activeEvent.id);
+      const code = await networkManager.startHost(eventToHost.id);
       setSessionCode(code);
     } catch (e) {
       alert("Impossible de démarrer la session hôte. Vérifiez votre connexion Internet.");
@@ -1321,17 +1323,50 @@ export default function App() {
             // Pas de session active
             <div className="space-y-6 pt-2">
               {/* Créer session (Hôte) */}
-              {activeEvent && (
+              {activeEvent ? (
                 <div className="space-y-2">
                   <div className="text-[10px] uppercase font-bold text-app-text-muted">Créer une session</div>
                   <button
-                    onClick={handleStartHost}
+                    onClick={() => handleStartHost()}
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
                   >
                     <Share2 size={14} />
                     <span>Créer la session hôte</span>
                   </button>
                   <span className="text-[10px] text-app-text-muted block">Désignera cet appareil comme le PC principal (Master) et fournira le code de partage.</span>
+                </div>
+              ) : (
+                // Menu principal : la session partage une activité, il faut donc en choisir une
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase font-bold text-app-text-muted">Créer une session</div>
+                  {pastEvents.length > 0 ? (
+                    <>
+                      <span className="text-[10px] text-app-text-muted block">Choisissez l'activité à partager : cet appareil devient le PC principal et fournit le code.</span>
+                      {pastEvents.slice(0, 4).map((evt) => (
+                        <button
+                          key={evt.id}
+                          onClick={() => handleStartHost(evt)}
+                          className="w-full flex items-center justify-between gap-2 p-3 rounded-xl bg-primary text-secondary text-left hover:scale-[1.02] active:scale-95 transition cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <Share2 size={14} className="shrink-0" />
+                            <span className="font-bold font-display uppercase tracking-wider text-xs truncate">Partager « {evt.name} »</span>
+                          </span>
+                          <span className="text-[9px] uppercase font-bold shrink-0">{evt.type.replace('_', ' ')}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[10px] text-app-text-muted block">Créez d'abord une activité dans le menu principal, puis revenez ici pour la partager.</span>
+                      <button
+                        onClick={() => setShowNetModal(false)}
+                        className="w-full py-3 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
+                      >
+                        Créer une activité
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
