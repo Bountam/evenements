@@ -228,8 +228,10 @@ export default function App() {
         })
         .catch(() => showToast(`Session ${joinCode} introuvable. Vérifiez que le PC principal est en ligne.`, 'error'));
     } else if (savedRole && savedCode) {
-      if (savedRole === 'host' && savedEventId) {
-        networkManager.startHost(savedEventId, savedCode)
+      // Reprendre la session sur l'activité ouverte (celle du démarrage a pu être quittée depuis)
+      const hostEventId = localStorage.getItem('insertech_active_event_id') || savedEventId;
+      if (savedRole === 'host' && hostEventId) {
+        networkManager.startHost(hostEventId, savedCode)
           .then((code) => setSessionCode(code))
           .catch(() => console.warn("Échec de la reconnexion automatique hôte."));
       } else if (savedRole === 'client') {
@@ -292,6 +294,11 @@ export default function App() {
     setSessionCode('');
     setShowNetModal(false);
   };
+
+  // Le PC principal partage toujours l'activité qu'il affiche, même ouverte après le démarrage de la session
+  useEffect(() => {
+    if (activeEvent && !IS_PUBLIC_WINDOW) networkManager.setHostEvent(activeEvent.id);
+  }, [activeEvent?.id]);
 
   // Synchronisation et validation automatique de currentTab selon le type de matrice active
   useEffect(() => {

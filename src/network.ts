@@ -33,6 +33,8 @@ class P2PNetworkManager {
   peer: Peer | null = null;
   connections: DataConnection[] = [];
   role: 'host' | 'client' | 'standalone' = 'standalone';
+  // Activité partagée par l'hôte : suit l'activité ouverte sur le PC principal (voir setHostEvent)
+  private hostEventId: string | null = null;
   sessionId: string = '';
   isConnecting: boolean = false;
   onStatusChange: ((status: string) => void) | null = null;
@@ -164,6 +166,7 @@ class P2PNetworkManager {
   // DÉMARRER LA SESSION HÔTE (PC Principal)
   async startHost(eventId: string, existingCode?: string): Promise<string> {
     this.role = 'host';
+    this.hostEventId = eventId;
     this.isConnecting = true;
     this.stopClockSync();
     this.setClockOffset(0); // Le PC Principal est l'horloge de référence
@@ -210,7 +213,7 @@ class P2PNetworkManager {
         this.updateStatus(`Connecté (${this.connections.length} appareils)`);
 
         conn.on('data', (data) => {
-          this.handleIncomingData(conn, data as NetworkMessage, eventId);
+          this.handleIncomingData(conn, data as NetworkMessage, this.hostEventId ?? eventId);
         });
 
         conn.on('close', () => {
@@ -317,6 +320,43 @@ class P2PNetworkManager {
     this.updateStatus('Local uniquement');
   }
 
+  // Envoyer à un client toutes les tables de l'activité partagée, puis l'état des chronomètres
+  private async sendInitialSync(conn: DataConnection, eventId: string) {
+    const tickets = await db.tickets.where('eventId').equals(eventId).toArray();
+    const techs = await db.technicians.where('eventId').equals(eventId).toArray();
+    const participants = await db.participants.where('eventId').equals(eventId).toArray();
+    const attendees = await db.attendees.where('eventId').equals(eventId).toArray();
+    const eventSettings = await db.events.get(eventId);
+
+    conn.send({
+      type: 'INITIAL_SYNC',
+      payload: { event: eventSettings, tickets, technicians: techs, participants, attendees }
+    });
+    conn.send({
+      type: 'CHRONO_ACTION',
+      message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksState }
+    });
+  }
+
+  // L'hôte a ouvert une autre activité : la session la partage désormais et les tablettes basculent dessus.
+  // Sans cela, les tablettes restaient sur l'activité du démarrage de la session et leurs chronos
+  // n'apparaissaient pas sur le PC principal.
+  async setHostEvent(eventId: string) {
+    if (this.role !== 'host' || this.hostEventId === eventId) return;
+    this.hostEventId = eventId;
+    localStorage.setItem('insertech_net_event_id', eventId);
+    for (const conn of this.connections) {
+      if (conn.open) {
+        try {
+          await this.sendInitialSync(conn, eventId);
+        } catch (e) {
+          console.error("Erreur d'envoi de l'activité aux tablettes :", e);
+        }
+      }
+    }
+    if (this.peer && !this.peer.disconnected) this.startMqttDiscoveryAnnounce(eventId);
+  }
+
   // TRAITER LES MESSAGES ENTRANTS (Master & Clients)
   private async handleIncomingData(conn: DataConnection, msg: NetworkMessage, eventId: string) {
     if (this.role === 'host') {
@@ -327,22 +367,7 @@ class P2PNetworkManager {
           break;
 
         case 'REQUEST_INITIAL_SYNC':
-          // Envoyer toutes les tables de cet eventId au nouveau client connecté
-          const tickets = await db.tickets.where('eventId').equals(eventId).toArray();
-          const techs = await db.technicians.where('eventId').equals(eventId).toArray();
-          const participants = await db.participants.where('eventId').equals(eventId).toArray();
-          const attendees = await db.attendees.where('eventId').equals(eventId).toArray();
-          const eventSettings = await db.events.get(eventId);
-
-          conn.send({
-            type: 'INITIAL_SYNC',
-            payload: { event: eventSettings, tickets, technicians: techs, participants, attendees }
-          });
-          // Synchroniser aussi l'état courant des chronomètres
-          conn.send({
-            type: 'CHRONO_ACTION',
-            message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksState }
-          });
+          await this.sendInitialSync(conn, eventId);
           break;
 
         case 'DB_WRITE':
