@@ -170,3 +170,40 @@ jobs:
           path: InsertechEvenements-Android.apk
           if-no-files-found: error
           retention-days: ${{ inputs.retention-days }}
+
+  installers:
+    name: "Installeurs : .deb et Windows (NSIS)"
+    needs: desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-Windows-x64
+          path: bin/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-Linux-Debian-x64
+          path: bin/
+
+      - name: Installer NSIS
+        run: sudo apt-get update -q && sudo apt-get install -y -q nsis
+
+      - name: Construire le .deb et l'installeur Windows
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p installers
+          packaging/linux/build-deb.sh "$VERSION" bin/InsertechEvenements-linux-x64 installers
+          makensis -V2 -DVERSION="$VERSION" -DEXE="$PWD/bin/InsertechEvenements.exe" \
+            -DOUTFILE="$PWD/installers/InsertechEvenements-Setup-$VERSION.exe" packaging/windows/installer.nsi
+          ls -la installers/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InsertechEvenements-Installeurs
+          path: installers/
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

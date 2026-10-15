@@ -2302,6 +2302,12 @@ npm run build:linux
 ```
 Cela génère le binaire portable `InsertechEvenements-linux-x64` à la racine (idéal pour les *Install Fest Linux* ou les postes sous Debian/Ubuntu/Mint). Au premier lancement (`./InsertechEvenements-linux-x64`), il extrait automatiquement le logo du chapiteau magique et enregistre un raccourci Freedesktop (`~/.local/share/applications/insertech-evenements.desktop`) sans demander de mot de passe administrateur (`sudo`).
 
+**Installeurs.** La CI produit aussi, à partir des mêmes exécutables :
+- `InsertechEvenements-Setup-<version>.exe` (NSIS, `packaging/windows/installer.nsi`) : installation sans droits administrateur dans `%LOCALAPPDATA%\Programs`, raccourcis menu Démarrer et bureau, désinstallation depuis les paramètres Windows. Les données (`%LOCALAPPDATA%\InsertechEvenements`) sont conservées à la désinstallation.
+- `insertech-evenements_<version>_amd64.deb` (`packaging/linux/build-deb.sh`) : `sudo apt install ./insertech-evenements_<version>_amd64.deb`, puis lancer « Insertech Événements » depuis le menu ou `insertech-evenements`.
+
+Le lanceur affiche toujours l'interface embarquée dans l'exécutable : un `index.html` posé à côté est ignoré. Pour tester un autre bundle, définir `INSERTECH_DEV_HTML=/chemin/vers/index.html`.
+
 #### Option D : Exécutable Mobile Android APK (.apk) & PWA
 ```bash
 npm run build:mobile
@@ -2323,6 +2329,7 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
   - 📱 **Android Mobile** : `InsertechEvenements-Android.apk` (exécutable installable sur smartphones et tablettes Android).
   - 🪟 **Windows x64** : `InsertechEvenements.exe` (exécutable portable sans installation).
   - 🐧 **Linux Debian x64** : `InsertechEvenements-linux-x64` (exécutable portable ELF).
+  - 📦 **Installeurs** : `InsertechEvenements-Setup-<version>.exe` (Windows) et `insertech-evenements_<version>_amd64.deb` (Debian/Ubuntu).
   - 🌐 **PWA Web & Mobile** : `InsertechEvenements-PWA-Android.zip` et `InsertechEvenements-Mobile.html`.
 - **CD / Releases** : Publication automatique des exécutables et de l'APK dès qu'un tag `v*` est poussé, avec `SHA256SUMS.txt`. La release échoue s'il manque un fichier au lieu de partir incomplète.
 

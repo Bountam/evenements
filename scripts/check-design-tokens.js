@@ -1,6 +1,6 @@
 // Garde-fou du design system du kiosque : refuse les tailles de texte illisibles,
 // les couleurs codées en dur et les pas d'espacement hors grille dans les fichiers du module.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 const FILES = [
   'src/components/matrices/TeardownMatrix.tsx',
@@ -37,6 +37,21 @@ for (const file of FILES) {
         errors++;
         console.error(`${file}:${idx + 1}  ${match[0]}  →  ${rule.message}`);
       }
+    }
+  });
+}
+
+// Dans tout src/ : une classe Tailwind construite morceau par morceau (`bg-${couleur}-500`) n'est pas
+// vue par Tailwind au build et disparaît de l'interface compilée. Écrire les classes en entier.
+const DYNAMIC_CLASS = /\b(?:bg|text|border|from|via|to|ring|fill|stroke|shadow)-\$\{/g;
+const sourceFiles = readdirSync('src', { recursive: true })
+  .filter((name) => /\.(tsx?|jsx?)$/.test(name))
+  .map((name) => `src/${name}`);
+for (const file of sourceFiles) {
+  readFileSync(file, 'utf8').split('\n').forEach((line, idx) => {
+    for (const match of line.matchAll(DYNAMIC_CLASS)) {
+      errors++;
+      console.error(`${file}:${idx + 1}  ${match[0]}…  →  classe Tailwind dynamique, absente du CSS compilé : écrire la classe complète`);
     }
   });
 }

@@ -121,6 +121,12 @@ jobs:
           name: InsertechEvenements-Android-APK
           path: release/
 
+      - name: Télécharger les installeurs (.deb, Windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: InsertechEvenements-Installeurs
+          path: release/
+
       - name: Télécharger le bundle PWA
         uses: actions/download-artifact@v4
         with:
@@ -132,7 +138,9 @@ jobs:
           cp pwa/index.html release/index.html
           cp pwa/InsertechEvenements-Mobile.html release/InsertechEvenements-Mobile.html
           (cd pwa && zip -qr ../release/InsertechEvenements-PWA-Android.zip .)
-          for f in InsertechEvenements.exe InsertechEvenements-linux-x64 InsertechEvenements-linux-x64.tar.gz InsertechEvenements-Android.apk; do
+          VERSION=$(echo "${{ needs.version.outputs.release_tag }}" | sed 's/^[vV]//')
+          for f in InsertechEvenements.exe InsertechEvenements-linux-x64 InsertechEvenements-linux-x64.tar.gz InsertechEvenements-Android.apk \
+                   "insertech-evenements_${VERSION}_amd64.deb" "InsertechEvenements-Setup-${VERSION}.exe"; do
             test -f "release/$f" || { echo "Fichier manquant : $f"; exit 1; }
           done
           (cd release && sha256sum * > SHA256SUMS.txt)

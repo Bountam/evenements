@@ -14,7 +14,6 @@ namespace InsertechEvenements
             try
             {
                 bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 string appDataDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "InsertechEvenements"
@@ -27,7 +26,7 @@ namespace InsertechEvenements
                     SetupLinuxDesktopIntegration(appDataDir);
                 }
 
-                string targetHtmlPath = ResolveHtmlPath(baseDir, appDataDir);
+                string targetHtmlPath = ResolveHtmlPath(appDataDir);
 
                 if (!string.IsNullOrEmpty(targetHtmlPath) && File.Exists(targetHtmlPath))
                 {
@@ -51,27 +50,17 @@ namespace InsertechEvenements
             }
         }
 
-        static string ResolveHtmlPath(string baseDir, string appDataDir)
+        static string ResolveHtmlPath(string appDataDir)
         {
-            string localDist = Path.Combine(baseDir, "dist", "index.html");
-            string localSameDir = Path.Combine(baseDir, "index.html");
-
-            if (File.Exists(localDist))
+            // Mode développeur explicite uniquement : un index.html oublié à côté de l'exécutable
+            // (Téléchargements, clé USB, dossier du dépôt) afficherait sinon une ancienne interface.
+            string devHtml = Environment.GetEnvironmentVariable("INSERTECH_DEV_HTML");
+            if (!string.IsNullOrEmpty(devHtml) && File.Exists(devHtml))
             {
-                return localDist;
-            }
-            if (File.Exists(localSameDir))
-            {
-                return localSameDir;
+                return Path.GetFullPath(devHtml);
             }
 
-            string parentDist = Path.Combine(baseDir, "..", "dist", "index.html");
-            if (File.Exists(parentDist))
-            {
-                return Path.GetFullPath(parentDist);
-            }
-
-            // Mode 100% autonome : extraire la ressource HTML embarquée dans le dossier utilisateur
+            // Toujours l'interface embarquée dans cet exécutable, réextraite à chaque lancement
             string extractedPath = Path.Combine(appDataDir, "index.html");
             ExtractEmbeddedResource("app_index.html", extractedPath);
 

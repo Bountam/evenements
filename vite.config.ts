@@ -23,13 +23,25 @@ function serviceWorkerBuildId(): Plugin {
   };
 }
 
+// Favicon inliné : l'exe et l'APK n'embarquent que index.html, ./favicon.ico y serait introuvable
+function inlineFavicon(): Plugin {
+  return {
+    name: 'inline-favicon',
+    apply: 'build',
+    transformIndexHtml(html) {
+      const icon = readFileSync(path.resolve(__dirname, 'public/favicon.ico')).toString('base64');
+      return html.replace('href="./favicon.ico"', `href="data:image/x-icon;base64,${icon}"`);
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
     base: './',
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
-    plugins: [react(), tailwindcss(), viteSingleFile(), serviceWorkerBuildId()],
+    plugins: [react(), tailwindcss(), viteSingleFile(), serviceWorkerBuildId(), inlineFavicon()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
