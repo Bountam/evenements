@@ -1,4 +1,10 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/Bountam/evenements/releases/latest';
 
@@ -331,5 +337,269 @@ test('Réseau PC et tablette avec deux versions — avertissement sur le PC sans
   } finally {
     await hostContext.close();
     await tabletContext.close();
+  }
+});
+
+function resolveDotnetBinary(): string {
+  const candidates = [
+    process.env.DOTNET_ROOT ? path.join(process.env.DOTNET_ROOT, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet') : '',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'dotnet', 'dotnet.exe') : '',
+    process.env.HOME ? path.join(process.env.HOME, '.dotnet', 'dotnet') : '',
+    '/usr/bin/dotnet',
+    '/usr/share/dotnet/dotnet'
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      try {
+        const out = execFileSync(candidate, ['--list-sdks'], { encoding: 'utf8' });
+        if (out.trim().length > 0) return candidate;
+      } catch {
+        // Continuer avec le candidat suivant
+      }
+    }
+  }
+  return 'dotnet';
+}
+
+test('Mise à jour Windows (lanceur C#) — origine refusée, fichier tronqué, mauvaise et bonne empreinte SHA-256, copie SQLite et relance', async ({
+  page
+}) => {
+  test.setTimeout(60000);
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'insertech-maj-lot2-'));
+  const binDir = path.join(tmpRoot, 'bin');
+  const appDataDir = path.join(tmpRoot, 'appdata');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(appDataDir, { recursive: true });
+
+  // S'assurer que dist/index.html existe pour la ressource embarquée du lanceur
+  const distDir = path.resolve(process.cwd(), 'dist');
+  const distIndex = path.join(distDir, 'index.html');
+  let createdStubDist = false;
+  if (!fs.existsSync(distIndex)) {
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(distIndex, '<!doctype html><html><body>stub</body></html>', 'utf8');
+    createdStubDist = true;
+  }
+
+  const dotnetBin = resolveDotnetBinary();
+  let launcherProc: ChildProcess | null = null;
+  let releaseServer: http.Server | null = null;
+
+  try {
+    execFileSync(
+      dotnetBin,
+      [
+        'build',
+        'launcher',
+        '-p:SelfContained=false',
+        '-p:PublishSingleFile=false',
+        '-p:PublishTrimmed=false',
+        '-o',
+        binDir
+      ],
+      { cwd: process.cwd(), stdio: 'pipe' }
+    );
+
+    const dllPath = fs.existsSync(path.join(binDir, 'InsertechEvenements.dll'))
+      ? path.join(binDir, 'InsertechEvenements.dll')
+      : path.join(binDir, 'InsertechEvenements-linux-x64.dll');
+
+    // Faux installeur binaire (128 Ko) et son empreinte SHA-256 réelle
+    const installerBytes = crypto.randomBytes(128 * 1024);
+    const validSha256 = crypto.createHash('sha256').update(installerBytes).digest('hex');
+    const badSha256 = '0'.repeat(64);
+    const targetVersion = '1.9.0';
+    const installerFileName = `InsertechEvenements-Setup-${targetVersion}.exe`;
+
+    let serveMode: 'bad_hash' | 'truncated' | 'good_hash' = 'bad_hash';
+
+    releaseServer = http.createServer((req, res) => {
+      if (req.url === `/${installerFileName}`) {
+        if (serveMode === 'truncated') {
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': String(installerBytes.length)
+          });
+          res.write(installerBytes.subarray(0, 16 * 1024));
+          setTimeout(() => req.socket.destroy(), 20);
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': String(installerBytes.length)
+        });
+        res.end(installerBytes);
+        return;
+      }
+
+      if (req.url === '/SHA256SUMS.txt') {
+        const hashToUse = serveMode === 'bad_hash' ? badSha256 : validSha256;
+        const body = `${hashToUse}  ${installerFileName}\n${'f'.repeat(64)}  InsertechEvenements-Android.apk\n`;
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(body);
+        return;
+      }
+
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => releaseServer!.listen(0, '127.0.0.1', () => resolve()));
+    const mockPort = (releaseServer.address() as any).port as number;
+    const mockBaseUrl = `http://127.0.0.1:${mockPort}`;
+    const installerRecordPath = path.join(appDataDir, 'installer-launched.txt');
+
+    launcherProc = spawn(dotnetBin, [dllPath], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        INSERTECH_APPDATA_DIR: appDataDir,
+        INSERTECH_HEADLESS_COMPANION: '1',
+        INSERTECH_TEST_UPDATE_PREFIX: `${mockBaseUrl}/`,
+        INSERTECH_TEST_INSTALLER_RECORD: installerRecordPath
+      },
+      stdio: 'ignore'
+    });
+
+    // Attendre la création de stockage.txt par le lanceur C#
+    const stockageFile = path.join(appDataDir, 'stockage.txt');
+    let companionPort = '';
+    let companionToken = '';
+    for (let i = 0; i < 60; i++) {
+      if (fs.existsSync(stockageFile)) {
+        const lines = fs.readFileSync(stockageFile, 'utf8').trim().split(/\r?\n/);
+        if (lines.length >= 2 && lines[0] && lines[1]) {
+          companionPort = lines[0].trim();
+          companionToken = lines[1].trim();
+          break;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(companionPort).not.toBe('');
+    expect(companionToken).not.toBe('');
+
+    // 1. Toute adresse hors origine autorisée est refusée par le lanceur
+    const badOriginRes = await fetch(`http://127.0.0.1:${companionPort}/mise-a-jour?cle=${companionToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        version: targetVersion,
+        installerUrl: `https://evil.example.com/${installerFileName}`,
+        sha256SumsUrl: `${mockBaseUrl}/SHA256SUMS.txt`
+      })
+    });
+    expect(badOriginRes.status).toBe(400);
+    const badOriginJson = await badOriginRes.json();
+    expect(badOriginJson.state).toBe('error');
+    expect(badOriginJson.error).toBe('origine');
+
+    // Configurer la page Playwright connectée au vrai serveur SQLite/mise-à-jour du lanceur
+    await page.addInitScript((prefix: string) => {
+      (window as any).__INSERTECH_TEST_DOWNLOAD_PREFIX__ = prefix;
+      (window as any).__INSERTECH_SKIP_WINDOW_CLOSE__ = true;
+    }, `${mockBaseUrl}/`);
+
+    await page.route(GITHUB_RELEASE_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          makeReleasePayload({
+            tag_name: `v${targetVersion}`,
+            assets: [
+              {
+                name: installerFileName,
+                browser_download_url: `${mockBaseUrl}/${installerFileName}`
+              },
+              {
+                name: 'SHA256SUMS.txt',
+                browser_download_url: `${mockBaseUrl}/SHA256SUMS.txt`
+              }
+            ]
+          })
+        )
+      });
+    });
+
+    await page.goto(`http://localhost:4173/?stockage=${companionPort}&cle=${companionToken}`);
+
+    const dialog = page.getByRole('dialog', { name: `Version ${targetVersion} disponible` });
+    await expect(dialog).toBeVisible();
+
+    // 2. Mauvaise empreinte SHA-256 : le fichier est supprimé et rien n'est installé
+    serveMode = 'bad_hash';
+    await dialog.getByRole('button', { name: 'Mettre à jour' }).click();
+    await expect(dialog.getByRole('alert')).toContainText(/empreinte SHA-256 ne correspond pas/i);
+
+    const finalInstallerPath = path.join(appDataDir, 'mises-a-jour', installerFileName);
+    const partInstallerPath = `${finalInstallerPath}.part`;
+    expect(fs.existsSync(finalInstallerPath)).toBe(false);
+    expect(fs.existsSync(partInstallerPath)).toBe(false);
+    expect(fs.existsSync(installerRecordPath)).toBe(false);
+
+    // 3. Fichier tronqué : le fichier .part est supprimé et rien n'est installé
+    serveMode = 'truncated';
+    await dialog.getByRole('button', { name: 'Mettre à jour' }).click();
+    await expect(dialog.getByRole('alert')).toContainText(/fichier tronqué/i);
+    expect(fs.existsSync(finalInstallerPath)).toBe(false);
+    expect(fs.existsSync(partInstallerPath)).toBe(false);
+    expect(fs.existsSync(installerRecordPath)).toBe(false);
+
+    // 4. Bonne empreinte SHA-256 : copie SQLite, téléchargement vérifié, lancement /S /RELANCER et sortie du lanceur
+    serveMode = 'good_hash';
+    const exitPromise = new Promise<number | null>((resolve) => {
+      launcherProc!.once('exit', (code) => resolve(code));
+    });
+
+    await dialog.getByRole('button', { name: 'Mettre à jour' }).click();
+    await expect(dialog.getByText(/Installation en cours/)).toBeVisible();
+
+    const exitCode = await exitPromise;
+    expect(exitCode).toBe(0);
+
+    // L'installeur vérifié est présent dans mises-a-jour/ avec la bonne empreinte
+    expect(fs.existsSync(finalInstallerPath)).toBe(true);
+    const savedHash = crypto.createHash('sha256').update(fs.readFileSync(finalInstallerPath)).digest('hex');
+    expect(savedHash).toBe(validSha256);
+
+    // La copie SQLite avant installation est présente dans sauvegardes-sqlite/
+    const backupsDir = path.join(appDataDir, 'sauvegardes-sqlite');
+    const backupFiles = fs.readdirSync(backupsDir);
+    expect(backupFiles.some((f) => f.includes('-avant-maj.db'))).toBe(true);
+
+    // L'installeur a été invoqué avec /S /RELANCER et stockage.txt a été nettoyé
+    expect(fs.existsSync(installerRecordPath)).toBe(true);
+    const launchedContent = fs.readFileSync(installerRecordPath, 'utf8').trim().split(/\r?\n/);
+    expect(launchedContent[0]).toBe(finalInstallerPath);
+    expect(launchedContent[1]).toBe('/S /RELANCER');
+    expect(launchedContent[2]).toBe(targetVersion);
+    expect(fs.existsSync(stockageFile)).toBe(false);
+
+    // 5. À la relance après mise à jour, l'application affiche « Mise à jour vers 1.9.0 terminée »
+    await page.addInitScript((ver: string) => {
+      (window as any).__INSERTECH_APP_VERSION__ = ver;
+    }, targetVersion);
+    await page.goto(`http://localhost:4173/?maj=${targetVersion}`);
+    await expect(page.getByText(`Mise à jour vers ${targetVersion} terminée`)).toBeVisible();
+  } finally {
+    if (launcherProc && !launcherProc.killed) {
+      try {
+        launcherProc.kill();
+      } catch {}
+    }
+    if (releaseServer) {
+      await new Promise<void>((resolve) => releaseServer!.close(() => resolve()));
+    }
+    if (createdStubDist) {
+      try {
+        fs.rmSync(distDir, { recursive: true, force: true });
+      } catch {}
+    }
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch {}
   }
 });

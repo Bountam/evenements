@@ -4,6 +4,7 @@ import {MotionConfig} from 'motion/react';
 import App from './App.tsx';
 import { ToastContainer, showToast } from './components/shared/Toast';
 import { ConfirmDialogHost } from './components/shared/ConfirmDialog';
+import { markPwaUpdateCompleted } from './utils/updateCheck';
 import './index.css';
 
 // Prevent benign sandbox WebSocket error from appearing as an unhandled rejection overlay
@@ -45,7 +46,10 @@ if (typeof window !== 'undefined') {
                 // Pas de rechargement forcé : un chrono ou un tirage peut être en cours
                 showToast('Une nouvelle version est prête.', 'info', {
                   label: 'Recharger',
-                  onClick: () => window.location.reload()
+                  onClick: () => {
+                    markPwaUpdateCompleted();
+                    window.location.reload();
+                  }
                 });
               }
             });

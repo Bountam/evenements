@@ -9,6 +9,18 @@ import { db, onDatabaseMutation } from '../db';
 
 export type SqliteBackupStatus = 'unavailable' | 'pending' | 'ok' | 'error';
 
+export interface LauncherUpdateStatus {
+  ok: boolean;
+  supported?: boolean;
+  state: 'idle' | 'downloading' | 'verifying' | 'installing' | 'error';
+  version?: string | null;
+  downloadedBytes?: number;
+  totalBytes?: number;
+  percent?: number;
+  error?: string | null;
+  message?: string | null;
+}
+
 const TABLES = ['events', 'tickets', 'technicians', 'participants', 'attendees'] as const;
 const PARAMS_KEY = 'insertech_stockage';
 const FLUSH_DELAY_MS = 1500;
@@ -22,11 +34,23 @@ interface Backend {
   save(body: string): Promise<{ ok: boolean; status: number }>;
   load(): Promise<Snapshot | null>;
   ping(): Promise<boolean>;
+  startUpdate?(body: string): Promise<LauncherUpdateStatus>;
+  getUpdateStatus?(): Promise<LauncherUpdateStatus | null>;
+}
+
+let pcCanUpdate = false;
+const capabilityListeners = new Set<(canUpdate: boolean) => void>();
+
+function setPcCanUpdate(next: boolean) {
+  if (pcCanUpdate === next) return;
+  pcCanUpdate = next;
+  capabilityListeners.forEach((cb) => cb(pcCanUpdate));
 }
 
 function httpBackend(port: string, key: string): Backend {
   const base = `http://127.0.0.1:${encodeURIComponent(port)}`;
   const q = `cle=${encodeURIComponent(key)}`;
+  pcCanUpdate = true;
   return {
     kind: 'pc',
     // text/plain : requête simple, sans prévol CORS
@@ -40,10 +64,38 @@ function httpBackend(port: string, key: string): Backend {
     },
     async ping() {
       try {
-        return (await fetch(`${base}/ping?${q}`, { cache: 'no-store' })).ok;
+        const res = await fetch(`${base}/ping?${q}`, { cache: 'no-store' });
+        if (!res.ok) return false;
+        const data = await res.json().catch(() => null);
+        if (data && typeof data.canUpdate === 'boolean') {
+          setPcCanUpdate(data.canUpdate);
+        }
+        return true;
       } catch (e) {
         return false;
       }
+    },
+    async startUpdate(body) {
+      const res = await fetch(`${base}/mise-a-jour?${q}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body
+      });
+      const data = await res.json().catch(() => null);
+      if (data && typeof data === 'object' && typeof data.state === 'string') {
+        return data as LauncherUpdateStatus;
+      }
+      return {
+        ok: false,
+        state: 'error',
+        error: 'reseau',
+        message: 'Réponse invalide du lanceur lors du démarrage de la mise à jour.'
+      };
+    },
+    async getUpdateStatus() {
+      const res = await fetch(`${base}/mise-a-jour?${q}`, { cache: 'no-store' });
+      if (!res.ok) return null;
+      return (await res.json()) as LauncherUpdateStatus;
     }
   };
 }
@@ -104,6 +156,15 @@ export function onSqliteBackupStatus(cb: (s: SqliteBackupStatus, at: number | nu
   return () => statusListeners.delete(cb);
 }
 
+export function canLauncherUpdate(): boolean {
+  return backend?.kind === 'pc' && pcCanUpdate;
+}
+
+export function onLauncherUpdateCapabilityChange(cb: (canUpdate: boolean) => void): () => void {
+  capabilityListeners.add(cb);
+  return () => capabilityListeners.delete(cb);
+}
+
 // Démarrage : si la base du navigateur a été vidée (nettoyage, quota, réinstallation), la remplir depuis SQLite.
 // Renvoie le nombre d'activités restaurées.
 // Vrai seulement quand la comparaison avec SQLite a réussi : une base vide ne peut alors venir que d'une
@@ -143,12 +204,12 @@ let flushTimer: any = null;
 let flushing = false;
 let dirtyWhileFlushing = false;
 
-async function flush() {
+async function flush(): Promise<boolean> {
   flushTimer = null;
-  if (!backend) return;
+  if (!backend) return true;
   if (flushing) {
     dirtyWhileFlushing = true;
-    return;
+    return status === 'ok';
   }
   flushing = true;
   dirtyWhileFlushing = false;
@@ -160,16 +221,20 @@ async function flush() {
     if (res.ok) {
       lastSavedAt = savedAt;
       setStatus('ok');
+      return true;
     } else if (res.status === 409) {
       // SQLite refuse d'être vidée par une base du navigateur non vérifiée : relire au prochain démarrage
       setStatus('error');
+      return false;
     } else {
       setStatus('error');
       schedule(RETRY_MS);
+      return false;
     }
   } catch (e) {
     setStatus('error');
     schedule(RETRY_MS);
+    return false;
   } finally {
     flushing = false;
     if (dirtyWhileFlushing) schedule(FLUSH_DELAY_MS);
@@ -181,10 +246,55 @@ function schedule(delay = FLUSH_DELAY_MS) {
   flushTimer = setTimeout(flush, delay);
 }
 
+// Force une dernière copie SQLite immédiate avant de lancer une mise à jour
+export async function flushSqliteBackupNow(): Promise<boolean> {
+  if (!backend) return true;
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  return flush();
+}
+
+export async function startLauncherUpdate(payload: {
+  version: string;
+  installerUrl: string;
+  sha256SumsUrl: string;
+}): Promise<LauncherUpdateStatus> {
+  if (!backend || !backend.startUpdate) {
+    return {
+      ok: false,
+      state: 'error',
+      error: 'indisponible',
+      message: 'Serveur local du lanceur non connecté.'
+    };
+  }
+  try {
+    return await backend.startUpdate(JSON.stringify(payload));
+  } catch (e) {
+    return {
+      ok: false,
+      state: 'error',
+      error: 'reseau',
+      message: 'Impossible de joindre le lanceur local pour démarrer la mise à jour.'
+    };
+  }
+}
+
+export async function getLauncherUpdateStatus(): Promise<LauncherUpdateStatus | null> {
+  if (!backend || !backend.getUpdateStatus) return null;
+  try {
+    return await backend.getUpdateStatus();
+  } catch (e) {
+    return null;
+  }
+}
+
 // À appeler une fois la restauration de démarrage faite (jamais dans la fenêtre Projecteur)
 export function startSqliteBackup() {
   if (!backend || started) return;
   started = true;
+  backend.ping();
   onDatabaseMutation(() => schedule());
   schedule(0);
   // Tant que la page est ouverte, le PC garde le serveur de sauvegarde actif

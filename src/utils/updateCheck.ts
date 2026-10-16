@@ -120,8 +120,82 @@ export function clearReleaseDismissal(): void {
   }
 }
 
+const PENDING_UPDATE_VERSION_KEY = 'insertech_pending_update_version';
+const LAST_INSTALLED_VERSION_KEY = 'insertech_last_installed_version';
+const PWA_UPDATED_FLAG_KEY = 'insertech_pwa_updated';
+
+export function markPendingUpdateVersion(version: string): void {
+  const normalized = normalizeVersion(version) || version;
+  try {
+    localStorage.setItem(PENDING_UPDATE_VERSION_KEY, normalized);
+  } catch (e) {
+    // Ignorer quota localStorage
+  }
+}
+
+export function markPwaUpdateCompleted(): void {
+  try {
+    localStorage.setItem(PWA_UPDATED_FLAG_KEY, '1');
+  } catch (e) {
+    // Ignorer quota localStorage
+  }
+}
+
+// Vérifie au lancement si une mise à jour (Windows, APK ou PWA) vient de se terminer et renvoie la version installée
+export function consumeCompletedUpdateNotice(currentVersion = getAppVersion()): string | null {
+  let completedVersion: string | null = null;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const url = new URL(window.location.href);
+      const majParam = url.searchParams.get('maj');
+      if (majParam) {
+        completedVersion = normalizeVersion(majParam) || currentVersion;
+        url.searchParams.delete('maj');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {
+      // Ignorer URL non standard
+    }
+  }
+
+  try {
+    const pending = localStorage.getItem(PENDING_UPDATE_VERSION_KEY);
+    if (pending) {
+      localStorage.removeItem(PENDING_UPDATE_VERSION_KEY);
+      if (!completedVersion && compareVersions(currentVersion, pending) >= 0) {
+        completedVersion = currentVersion;
+      }
+    }
+
+    const pwaUpdated = localStorage.getItem(PWA_UPDATED_FLAG_KEY);
+    if (pwaUpdated === '1') {
+      localStorage.removeItem(PWA_UPDATED_FLAG_KEY);
+      if (!completedVersion) {
+        completedVersion = currentVersion;
+      }
+    }
+
+    const lastInstalled = localStorage.getItem(LAST_INSTALLED_VERSION_KEY);
+    localStorage.setItem(LAST_INSTALLED_VERSION_KEY, currentVersion);
+    if (!completedVersion && lastInstalled && compareVersions(currentVersion, lastInstalled) > 0) {
+      completedVersion = currentVersion;
+    }
+  } catch (e) {
+    // Ignorer localStorage indisponible
+  }
+
+  return completedVersion;
+}
+
 function sanitizeDownloadUrl(url: unknown): string | null {
   if (typeof url !== 'string') return null;
+  if (typeof window !== 'undefined') {
+    const testPrefix = (window as any).__INSERTECH_TEST_DOWNLOAD_PREFIX__;
+    if (typeof testPrefix === 'string' && testPrefix && url.startsWith(testPrefix)) {
+      return url;
+    }
+  }
   return url.startsWith(ALLOWED_DOWNLOAD_PREFIX) ? url : null;
 }
 

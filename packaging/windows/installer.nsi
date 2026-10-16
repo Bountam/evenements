@@ -35,6 +35,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "Copyright © 2026 Insertech"
 
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 !define MUI_ICON "../../app.ico"
 !define MUI_UNICON "../../app.ico"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\InsertechEvenements.exe"
@@ -46,6 +47,13 @@ VIAddVersionKey "LegalCopyright" "Copyright © 2026 Insertech"
 !insertmacro MUI_LANGUAGE "French"
 
 Section "Installer"
+  ; Le lanceur reste ouvert depuis la v1.2.6 : attendre sa fermeture ou l'arrêter avant de remplacer l'exécutable
+  IfSilent 0 +2
+    Sleep 600
+  nsExec::Exec 'taskkill /F /IM InsertechEvenements.exe'
+  Pop $0
+  Sleep 300
+
   SetOutPath "$INSTDIR"
   File "/oname=InsertechEvenements.exe" "${EXE}"
   WriteUninstaller "$INSTDIR\Desinstaller.exe"
@@ -61,11 +69,22 @@ Section "Installer"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\Desinstaller.exe"'
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
+
+  ; En mise à jour silencieuse (/S /RELANCER), relancer l'application une fois le nouvel exécutable en place
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/RELANCER" $R1
+  IfErrors pas_de_relance 0
+    Exec '"$INSTDIR\InsertechEvenements.exe" --maj-terminee=${VERSION}'
+  pas_de_relance:
 SectionEnd
 
 ; Les données (événements, participants, tirages) restent dans %LOCALAPPDATA%\InsertechEvenements :
 ; la désinstallation ne les efface pas.
 Section "Uninstall"
+  nsExec::Exec 'taskkill /F /IM InsertechEvenements.exe'
+  Pop $0
+  Sleep 200
   Delete "$INSTDIR\InsertechEvenements.exe"
   Delete "$INSTDIR\Desinstaller.exe"
   RMDir "$INSTDIR"

@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { EventSettings, EventType } from './types';
 import { db, notifySync, registerSyncListener, clearAllData, seedDemoData, saveAutoSnapshot } from './db';
-import { SqliteBackupStatus, getSqliteBackupStatus, onSqliteBackupStatus, restoreFromSqliteIfEmpty, startSqliteBackup } from './utils/sqliteBackup';
+import {
+  LauncherUpdateStatus,
+  SqliteBackupStatus,
+  canLauncherUpdate,
+  flushSqliteBackupNow,
+  getLauncherUpdateStatus,
+  getSqliteBackupStatus,
+  onLauncherUpdateCapabilityChange,
+  onSqliteBackupStatus,
+  restoreFromSqliteIfEmpty,
+  startLauncherUpdate,
+  startSqliteBackup
+} from './utils/sqliteBackup';
 import { FileBackupState, buildEventBackup, enableFileBackup, getFileBackupName, getFileBackupState, requestPersistentStorage, writeFileBackup } from './utils/backupFile';
 import {
   ReleaseUpdateInfo,
   UPDATE_CHECK_INTERVAL_MS,
   checkForUpdates,
   clearReleaseDismissal,
+  consumeCompletedUpdateNotice,
   getAppVersion,
   ignoreRelease,
   isReleaseDismissed,
+  markPendingUpdateVersion,
   postponeRelease
 } from './utils/updateCheck';
 import { networkManager } from './network';
@@ -257,6 +271,9 @@ export default function App() {
   const [isUpdateDismissed, setIsUpdateDismissed] = useState<boolean>(false);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
+  const [launcherUpdateSupported, setLauncherUpdateSupported] = useState<boolean>(() => canLauncherUpdate());
+  const [updateProgress, setUpdateProgress] = useState<LauncherUpdateStatus | null>(null);
+  useEffect(() => onLauncherUpdateCapabilityChange((canUpdate) => setLauncherUpdateSupported(canUpdate)), []);
   const [importValidation, setImportValidation] = useState<{
     fileName: string;
     eventData: {
@@ -384,6 +401,7 @@ export default function App() {
         clearReleaseDismissal();
         setAvailableRelease(res.release);
         setIsUpdateDismissed(false);
+        setUpdateProgress(null);
         setShowUpdateModal(true);
       } else if (res.status === 'up_to_date') {
         setAvailableRelease(null);
@@ -414,8 +432,67 @@ export default function App() {
     setShowUpdateModal(false);
   };
 
-  const handleTriggerUpdate = () => {
+  const handleTriggerUpdate = async () => {
     if (!availableRelease || isUpdateBlocked || Boolean(sessionCode)) return;
+
+    if (
+      launcherUpdateSupported &&
+      availableRelease.windowsInstallerUrl &&
+      availableRelease.sha256SumsUrl
+    ) {
+      setUpdateProgress({
+        ok: true,
+        state: 'downloading',
+        version: availableRelease.version,
+        downloadedBytes: 0,
+        totalBytes: 0,
+        percent: 0
+      });
+
+      // Avant d'installer, forcer une dernière copie SQLite
+      await flushSqliteBackupNow();
+      markPendingUpdateVersion(availableRelease.version);
+
+      const initial = await startLauncherUpdate({
+        version: availableRelease.version,
+        installerUrl: availableRelease.windowsInstallerUrl,
+        sha256SumsUrl: availableRelease.sha256SumsUrl
+      });
+      setUpdateProgress(initial);
+      if (initial.state === 'error') {
+        return;
+      }
+
+      const pollTimer = setInterval(async () => {
+        const status = await getLauncherUpdateStatus();
+        if (!status) {
+          clearInterval(pollTimer);
+          setUpdateProgress((prev) =>
+            prev && prev.state !== 'error'
+              ? { ...prev, state: 'installing', percent: 100 }
+              : prev
+          );
+          return;
+        }
+        setUpdateProgress(status);
+        if (status.state === 'error') {
+          clearInterval(pollTimer);
+        } else if (status.state === 'installing') {
+          clearInterval(pollTimer);
+          if (!(window as any).__INSERTECH_SKIP_WINDOW_CLOSE__) {
+            setTimeout(() => {
+              try {
+                window.close();
+              } catch (e) {
+                // Ignorer si l'onglet ne peut pas se fermer de lui-même
+              }
+            }, 600);
+          }
+        }
+      }, 200);
+      return;
+    }
+
     window.open(availableRelease.htmlUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -511,6 +588,10 @@ export default function App() {
         showToast(`${restored} activité${restored > 1 ? 's' : ''} restaurée${restored > 1 ? 's' : ''} depuis la sauvegarde SQLite.`, 'success');
       }
       startSqliteBackup();
+      const completedUpdate = consumeCompletedUpdateNotice(getAppVersion());
+      if (completedUpdate) {
+        showToast(`Mise à jour vers ${completedUpdate} terminée`, 'success');
+      }
     }
     await loadPastEvents();
     
@@ -2004,6 +2085,8 @@ export default function App() {
         release={availableRelease}
         currentVersion={currentVersion}
         isBlocked={isUpdateBlocked || Boolean(sessionCode)}
+        canLauncherUpdate={launcherUpdateSupported}
+        updateProgress={updateProgress}
         onPostpone={handlePostponeUpdate}
         onIgnore={handleIgnoreUpdate}
         onTriggerUpdate={handleTriggerUpdate}

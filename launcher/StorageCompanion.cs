@@ -35,7 +35,11 @@ namespace InsertechEvenements
             dbPath = Path.Combine(appDataDir, "insertech.db");
         }
 
+        public string AppDataDir => Path.GetDirectoryName(dbPath);
+
         public TimeSpan IdleFor => DateTime.UtcNow - new DateTime(Interlocked.Read(ref lastRequestTicks), DateTimeKind.Utc);
+
+        public void TouchActivity() => Interlocked.Exchange(ref lastRequestTicks, DateTime.UtcNow.Ticks);
 
         public void Start()
         {
@@ -81,15 +85,16 @@ namespace InsertechEvenements
             cmd.ExecuteNonQuery();
         }
 
-        // Une copie de la base à chaque lancement (10 gardées) : un mauvais enregistrement reste rattrapable
-        void BackupOnStart()
+        // Une copie de la base à chaque lancement et juste avant une mise à jour (10 gardées)
+        void WriteDatabaseBackup(string suffix = "")
         {
             try
             {
                 string dir = Path.Combine(Path.GetDirectoryName(dbPath), "sauvegardes-sqlite");
                 Directory.CreateDirectory(dir);
+                string fileName = $"insertech-{DateTime.Now:yyyyMMdd-HHmmss}{suffix}.db";
                 using (var src = Open())
-                using (var dst = new SqliteConnection($"Data Source={Path.Combine(dir, $"insertech-{DateTime.Now:yyyyMMdd-HHmmss}.db")}"))
+                using (var dst = new SqliteConnection($"Data Source={Path.Combine(dir, fileName)}"))
                 {
                     dst.Open();
                     src.BackupDatabase(dst);
@@ -100,7 +105,17 @@ namespace InsertechEvenements
             }
             catch
             {
-                // La sauvegarde de lancement est un filet de plus, jamais bloquante
+                // La sauvegarde est un filet de plus, jamais bloquante
+            }
+        }
+
+        void BackupOnStart() => WriteDatabaseBackup();
+
+        public void BackupBeforeUpdate()
+        {
+            lock (dbLock)
+            {
+                WriteDatabaseBackup("-avant-maj");
             }
         }
 
@@ -143,12 +158,22 @@ namespace InsertechEvenements
                     }
 
                     if (path == "/ping" && method == "GET")
-                        await Write(stream, 200, "{\"ok\":true,\"backend\":\"sqlite\",\"path\":" + JsonSerializer.Serialize(dbPath, AppJson.Default.String) + "}");
+                    {
+                        string canUpdate = Program.CanUpdateOnThisPlatform() ? "true" : "false";
+                        await Write(stream, 200, "{\"ok\":true,\"backend\":\"sqlite\",\"canUpdate\":" + canUpdate + ",\"path\":" + JsonSerializer.Serialize(dbPath, AppJson.Default.String) + "}");
+                    }
                     else if (path == "/snapshot" && method == "GET")
                         await Write(stream, 200, LoadSnapshot());
                     else if (path == "/snapshot" && method == "POST")
                     {
                         var (status, json) = SaveSnapshot(body);
+                        await Write(stream, status, json);
+                    }
+                    else if (path == "/mise-a-jour" && method == "GET")
+                        await Write(stream, 200, Program.GetUpdateStatusJson());
+                    else if (path == "/mise-a-jour" && method == "POST")
+                    {
+                        var (status, json) = Program.StartUpdateFromHttp(AppDataDir, this, body);
                         await Write(stream, status, json);
                     }
                     else
@@ -346,6 +371,7 @@ namespace InsertechEvenements
         public void Dispose()
         {
             try { listener?.Stop(); } catch { }
+            try { SqliteConnection.ClearAllPools(); } catch { }
         }
     }
 
