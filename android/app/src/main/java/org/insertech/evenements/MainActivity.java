@@ -38,6 +38,9 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
 
+        // Sauvegarde SQLite hors du navigateur (window.InsertechStockage), voir src/utils/sqliteBackup.ts
+        webView.addJavascriptInterface(new StorageBridge(getApplicationContext()), "InsertechStockage");
+
         // Charger l'application autonome embarquée hors-ligne
         webView.loadUrl("file:///android_asset/index.html");
     }

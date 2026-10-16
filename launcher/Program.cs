@@ -1,8 +1,11 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
 
 namespace InsertechEvenements
 {
@@ -30,23 +33,83 @@ namespace InsertechEvenements
 
                 if (!string.IsNullOrEmpty(targetHtmlPath) && File.Exists(targetHtmlPath))
                 {
-                    string fileUri = new Uri(targetHtmlPath).AbsoluteUri;
+                    // Sauvegarde persistante SQLite : réutiliser celle d'une fenêtre déjà ouverte, sinon la démarrer
+                    StorageCompanion companion = null;
+                    string storageQuery = ReuseRunningCompanion(appDataDir);
+                    if (storageQuery == null)
+                    {
+                        try
+                        {
+                            companion = new StorageCompanion(appDataDir);
+                            companion.Start();
+                            File.WriteAllText(CompanionInfoPath(appDataDir), companion.Port + "\n" + companion.Token);
+                            storageQuery = $"?stockage={companion.Port}&cle={companion.Token}";
+                        }
+                        catch
+                        {
+                            // Sans SQLite, l'application fonctionne comme avant (base du navigateur seulement)
+                            companion?.Dispose();
+                            companion = null;
+                            storageQuery = "";
+                        }
+                    }
+
+                    string fileUri = new Uri(targetHtmlPath).AbsoluteUri + storageQuery;
                     string profileDir = Path.Combine(appDataDir, "Profile");
                     Directory.CreateDirectory(profileDir);
 
-                    if (isLinux)
+                    Process browser = isLinux ? LaunchOnLinux(fileUri, profileDir) : LaunchOnWindows(fileUri, profileDir);
+
+                    if (companion != null)
                     {
-                        LaunchOnLinux(fileUri, profileDir);
-                    }
-                    else
-                    {
-                        LaunchOnWindows(fileUri, profileDir);
+                        KeepCompanionAlive(companion, browser);
+                        try { File.Delete(CompanionInfoPath(appDataDir)); } catch { }
+                        companion.Dispose();
                     }
                 }
             }
             catch
             {
                 // Repli silencieux pour éviter tout crash bloquant
+            }
+        }
+
+        static string CompanionInfoPath(string appDataDir) => Path.Combine(appDataDir, "stockage.txt");
+
+        // La page interroge la sauvegarde toutes les 30 s : elle reste active tant qu'une fenêtre est ouverte,
+        // puis s'arrête 2 minutes après la fermeture du navigateur
+        static void KeepCompanionAlive(StorageCompanion companion, Process browser)
+        {
+            while (true)
+            {
+                Thread.Sleep(5000);
+                bool browserGone;
+                try { browserGone = browser == null || browser.HasExited; }
+                catch { browserGone = true; }
+                if (browserGone && companion.IdleFor > TimeSpan.FromMinutes(2)) return;
+            }
+        }
+
+        static string ReuseRunningCompanion(string appDataDir)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(CompanionInfoPath(appDataDir));
+                if (lines.Length < 2 || !int.TryParse(lines[0], out int port)) return null;
+                string token = lines[1].Trim();
+                using var client = new TcpClient();
+                if (!client.ConnectAsync("127.0.0.1", port).Wait(1000)) return null;
+                var stream = client.GetStream();
+                var request = Encoding.ASCII.GetBytes($"GET /ping?cle={token} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+                stream.Write(request, 0, request.Length);
+                stream.ReadTimeout = 2000;
+                var buffer = new byte[64];
+                int n = stream.Read(buffer, 0, buffer.Length);
+                return Encoding.ASCII.GetString(buffer, 0, n).Contains(" 200 ") ? $"?stockage={port}&cle={token}" : null;
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -127,7 +190,7 @@ namespace InsertechEvenements
             }
         }
 
-        static void LaunchOnWindows(string fileUri, string profileDir)
+        static Process LaunchOnWindows(string fileUri, string profileDir)
         {
             string browserPath = FindWindowsChromiumBrowser();
 
@@ -145,15 +208,16 @@ namespace InsertechEvenements
                     Arguments = args,
                     UseShellExecute = false
                 };
-                Process.Start(psi);
+                return Process.Start(psi);
             }
             else
             {
-                Process.Start(new ProcessStartInfo(fileUri) { UseShellExecute = true });
+                // Ouverture par le système : sans paramètres, une adresse file:// avec « ? » n'est pas un fichier
+                return Process.Start(new ProcessStartInfo(fileUri.Split('?')[0]) { UseShellExecute = true });
             }
         }
 
-        static void LaunchOnLinux(string fileUri, string profileDir)
+        static Process LaunchOnLinux(string fileUri, string profileDir)
         {
             // 1. Priorité aux navigateurs Chromium (supportent le mode fenêtre native --app sans barre d'adresse)
             string chromiumBrowser = FindLinuxChromiumBrowser();
@@ -171,8 +235,7 @@ namespace InsertechEvenements
                     Arguments = args,
                     UseShellExecute = false
                 };
-                Process.Start(psi);
-                return;
+                return Process.Start(psi);
             }
 
             // 2. Navigateur par défaut sur Debian : Firefox ESR ou Firefox standard
@@ -185,14 +248,13 @@ namespace InsertechEvenements
                     Arguments = "--new-window \"" + fileUri + "\"",
                     UseShellExecute = false
                 };
-                Process.Start(psi);
-                return;
+                return Process.Start(psi);
             }
 
             // 3. Repli universel Freedesktop (xdg-open)
             if (File.Exists("/usr/bin/xdg-open"))
             {
-                Process.Start(new ProcessStartInfo
+                return Process.Start(new ProcessStartInfo
                 {
                     FileName = "/usr/bin/xdg-open",
                     Arguments = "\"" + fileUri + "\"",
@@ -201,7 +263,8 @@ namespace InsertechEvenements
             }
             else
             {
-                Process.Start(new ProcessStartInfo(fileUri) { UseShellExecute = true });
+                // Ouverture par le système : sans paramètres, une adresse file:// avec « ? » n'est pas un fichier
+                return Process.Start(new ProcessStartInfo(fileUri.Split('?')[0]) { UseShellExecute = true });
             }
         }
 
