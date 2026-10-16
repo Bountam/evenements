@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { EventSettings, EventType } from './types';
 import { db, notifySync, registerSyncListener, clearAllData, seedDemoData, saveAutoSnapshot } from './db';
+import { FileBackupState, buildEventBackup, enableFileBackup, getFileBackupName, getFileBackupState, requestPersistentStorage, writeFileBackup } from './utils/backupFile';
 import { networkManager } from './network';
 import MatrixSelector from './components/MatrixSelector';
 import DashboardShell from './components/DashboardShell';
@@ -108,6 +109,59 @@ export default function App() {
       localStorage.setItem('insertech_theme_light', 'false');
     }
   }, [isLightTheme]);
+
+  // Le navigateur garde la base locale même quand l'espace disque manque
+  useEffect(() => {
+    if (!IS_PUBLIC_WINDOW) requestPersistentStorage();
+  }, []);
+
+  // Fichier de secours sur le disque : réécrit chaque minute quand les données ont changé
+  const [fileBackupState, setFileBackupState] = useState<FileBackupState>('unsupported');
+  const [fileBackupName, setFileBackupName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeEvent || IS_PUBLIC_WINDOW) return;
+    const eventId = activeEvent.id;
+    let cancelled = false;
+    let dirty = true;
+    getFileBackupState(eventId).then((state) => { if (!cancelled) setFileBackupState(state); });
+    getFileBackupName(eventId).then((name) => { if (!cancelled) setFileBackupName(name); });
+    const unsubscribe = registerSyncListener(() => { dirty = true; });
+    const timer = setInterval(async () => {
+      if (!dirty) return;
+      try {
+        if (await writeFileBackup(eventId)) {
+          dirty = false;
+        } else if ((await getFileBackupState(eventId)) === 'needs-permission' && !cancelled) {
+          setFileBackupState('needs-permission');
+        }
+      } catch (e) {
+        console.warn('Échec du fichier de secours :', e);
+      }
+    }, 60000);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      clearInterval(timer);
+    };
+  }, [activeEvent?.id]);
+
+  const handleFileBackupClick = async () => {
+    if (!activeEvent) return;
+    try {
+      const state = await enableFileBackup(activeEvent.id, `insertech_secours_${activeEvent.name}_${activeEvent.date}.json`.replace(/[\\/:*?"<>|]+/g, '-'));
+      setFileBackupState(state);
+      setFileBackupName(await getFileBackupName(activeEvent.id));
+      if (state === 'on' && (await writeFileBackup(activeEvent.id))) {
+        showToast('Fichier de secours enregistré. Il sera mis à jour chaque minute.', 'success');
+      }
+    } catch (e) {
+      // Fenêtre de choix fermée sans fichier : rien à signaler
+      if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        console.error(e);
+        showToast("Impossible d'écrire le fichier de secours.", 'error');
+      }
+    }
+  };
 
   // Sauvegarde automatique locale toutes les 5 minutes (300 000 ms)
   useEffect(() => {
@@ -517,16 +571,7 @@ export default function App() {
       let fileName = `insertech_export_${activeEvent.type}_${activeEvent.date}.${format}`;
 
       if (format === 'json') {
-        const payload = {
-          exportVersion: '1.0',
-          exportedAt: Date.now(),
-          event: activeEvent,
-          tickets,
-          technicians,
-          participants,
-          attendees
-        };
-        content = JSON.stringify(payload, null, 2);
+        content = JSON.stringify(await buildEventBackup(eventId), null, 2);
         mimeType = 'application/json';
       } else if (format === 'csv') {
         mimeType = 'text/csv;charset=utf-8;';
@@ -1611,6 +1656,9 @@ export default function App() {
           sessionCode={sessionCode}
           onOpenNetModal={() => setShowNetModal(true)}
           onOpenPublicWindow={handleOpenPublicWindow}
+          fileBackupState={fileBackupState}
+          fileBackupName={fileBackupName}
+          onFileBackupClick={handleFileBackupClick}
           isPublicWindow={IS_PUBLIC_WINDOW}
           isLightTheme={isLightTheme}
           onToggleTheme={() => setIsLightTheme(!isLightTheme)}

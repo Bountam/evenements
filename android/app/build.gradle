@@ -31,8 +31,8 @@ android {
         applicationId "org.insertech.evenements"
         minSdk 24
         targetSdk 34
-        versionCode 10204
-        versionName "1.2.4"
+        versionCode 10205
+        versionName "1.2.5"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -116,8 +116,8 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const raffleDraws = getRaffleDraws(event);
   const eligibleForRaffle = getEligibleParticipants(participants, raffleDraws);
 
-  // Formulaire d'ajout de participant. Le brouillon est gardé pour cet onglet (sessionStorage) :
-  // un rechargement ou une reconnexion ne fait plus perdre une saisie pas encore enregistrée
+  // Formulaire d'ajout de participant. Le brouillon est gardé sur l'appareil jusqu'à l'inscription :
+  // un rechargement, une fermeture ou une reconnexion ne fait plus perdre une saisie pas encore enregistrée
   const draftKey = `insertech_participant_draft_${event.id}`;
   const [initialDraft] = useState(() => readParticipantDraft(draftKey));
   const [newParticipantName, setNewParticipantName] = useState(initialDraft.name);
@@ -2321,7 +2321,7 @@ type ParticipantDraft = { name: string; email: string; postal: string; consent: 
 function readParticipantDraft(key: string): ParticipantDraft {
   const empty = { name: '', email: '', postal: '', consent: false };
   try {
-    const saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+    const saved = JSON.parse(localStorage.getItem(key) || 'null');
     if (!saved || typeof saved !== 'object') return empty;
     return {
       name: typeof saved.name === 'string' ? saved.name : '',
@@ -2336,8 +2336,8 @@ function readParticipantDraft(key: string): ParticipantDraft {
 
 function writeParticipantDraft(key: string, draft: ParticipantDraft) {
   try {
-    if (draft.name || draft.email || draft.postal || draft.consent) sessionStorage.setItem(key, JSON.stringify(draft));
-    else sessionStorage.removeItem(key);
+    if (draft.name || draft.email || draft.postal || draft.consent) localStorage.setItem(key, JSON.stringify(draft));
+    else localStorage.removeItem(key);
   } catch (e) {
     // Stockage indisponible (navigation privée) : le formulaire fonctionne sans brouillon
   }

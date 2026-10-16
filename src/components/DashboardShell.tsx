@@ -3,8 +3,9 @@ import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
   House, Download, Database, Wifi,
-  Maximize, Minimize, Settings2, MonitorUp
+  Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload
 } from 'lucide-react';
+import type { FileBackupState } from '../utils/backupFile';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
@@ -21,6 +22,10 @@ interface DashboardShellProps {
   sessionCode: string;
   onOpenNetModal: () => void;
   onOpenPublicWindow: () => void;
+  // Fichier de secours sur le disque (absent quand le navigateur ne le permet pas, ex. tablette)
+  fileBackupState?: FileBackupState;
+  fileBackupName?: string | null;
+  onFileBackupClick?: () => void;
   isPublicWindow: boolean; // Fenêtre dédiée au projecteur : pas de retour vers la régie
   isLightTheme: boolean;
   onToggleTheme: () => void;
@@ -39,6 +44,9 @@ export default function DashboardShell({
   sessionCode,
   onOpenNetModal,
   onOpenPublicWindow,
+  fileBackupState = 'unsupported',
+  fileBackupName = null,
+  onFileBackupClick,
   isPublicWindow,
   isLightTheme,
   onToggleTheme,
@@ -359,6 +367,32 @@ export default function DashboardShell({
                 <Download size={13} aria-hidden="true" />
                 <span>Sauvegarder</span>
               </Button>
+
+              {fileBackupState !== 'unsupported' && onFileBackupClick && (
+                <Button
+                  size="sm"
+                  onClick={onFileBackupClick}
+                  title={
+                    fileBackupState === 'on'
+                      ? `Fichier de secours actif${fileBackupName ? ` (${fileBackupName})` : ''}, mis à jour chaque minute. Cliquez pour en choisir un autre.`
+                      : fileBackupState === 'needs-permission'
+                        ? "Le fichier de secours n'est plus mis à jour depuis le redémarrage : cliquez pour l'autoriser à nouveau"
+                        : 'Choisir un fichier sur le disque, mis à jour chaque minute avec les données de cette activité'
+                  }
+                  className={
+                    fileBackupState === 'on'
+                      ? '!bg-success/15 !border-success/50 text-success'
+                      : fileBackupState === 'needs-permission'
+                        ? '!bg-warning/15 !border-warning/50 text-warning'
+                        : ''
+                  }
+                >
+                  <HardDriveDownload size={13} aria-hidden="true" />
+                  <span>
+                    {fileBackupState === 'on' ? 'Secours actif' : fileBackupState === 'needs-permission' ? 'Réactiver le secours' : 'Fichier de secours'}
+                  </span>
+                </Button>
+              )}
 
               {/* Séparateur pour isoler le retour au menu de Sauvegarder */}
               <div className="w-px h-5 bg-app-card-border mx-1 hidden sm:block" />
