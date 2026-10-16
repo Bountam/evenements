@@ -6,6 +6,7 @@ import {
   Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload
 } from 'lucide-react';
 import type { FileBackupState } from '../utils/backupFile';
+import type { SqliteBackupStatus } from '../utils/sqliteBackup';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
@@ -22,6 +23,9 @@ interface DashboardShellProps {
   sessionCode: string;
   onOpenNetModal: () => void;
   onOpenPublicWindow: () => void;
+  // Sauvegarde SQLite hors du navigateur (exe PC, APK) ; 'unavailable' ailleurs
+  sqliteStatus?: SqliteBackupStatus;
+  sqliteSavedAt?: number | null;
   // Fichier de secours sur le disque (absent quand le navigateur ne le permet pas, ex. tablette)
   fileBackupState?: FileBackupState;
   fileBackupName?: string | null;
@@ -44,6 +48,8 @@ export default function DashboardShell({
   sessionCode,
   onOpenNetModal,
   onOpenPublicWindow,
+  sqliteStatus = 'unavailable',
+  sqliteSavedAt = null,
   fileBackupState = 'unsupported',
   fileBackupName = null,
   onFileBackupClick,
@@ -367,6 +373,27 @@ export default function DashboardShell({
                 <Download size={13} aria-hidden="true" />
                 <span>Sauvegarder</span>
               </Button>
+
+              {sqliteStatus !== 'unavailable' && (
+                <span
+                  role="status"
+                  title={
+                    sqliteStatus === 'ok'
+                      ? `Sauvegarde SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA')})` : ''} : les données sont aussi gardées hors du navigateur`
+                      : sqliteStatus === 'error'
+                        ? 'Sauvegarde SQLite injoignable : les données restent dans le navigateur, nouvel essai automatique'
+                        : 'Sauvegarde SQLite en cours'
+                  }
+                  className={`inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg border text-xs font-bold font-display uppercase tracking-wider ${
+                    sqliteStatus === 'error'
+                      ? 'bg-warning/15 border-warning/50 text-warning'
+                      : 'bg-success/15 border-success/50 text-success'
+                  }`}
+                >
+                  <Database size={13} aria-hidden="true" />
+                  <span>{sqliteStatus === 'error' ? 'SQLite hors ligne' : 'SQLite'}</span>
+                </span>
+              )}
 
               {fileBackupState !== 'unsupported' && onFileBackupClick && (
                 <Button

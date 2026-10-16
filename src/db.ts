@@ -89,6 +89,36 @@ class InsertechDatabase extends Dexie {
 
 export const db = new InsertechDatabase();
 
+// Toute écriture dans la base (locale, réseau, import) prévient ces abonnés : la sauvegarde SQLite
+// s'en sert pour savoir quand recopier les données. Les instantanés internes ne comptent pas.
+const mutationListeners = new Set<() => void>();
+export function onDatabaseMutation(callback: () => void): () => void {
+  mutationListeners.add(callback);
+  return () => mutationListeners.delete(callback);
+}
+db.use({
+  stack: 'dbcore',
+  name: 'mutationListeners',
+  create(down) {
+    return {
+      ...down,
+      table(name) {
+        const table = down.table(name);
+        if (name === 'snapshots') return table;
+        return {
+          ...table,
+          mutate(req) {
+            return table.mutate(req).then((res) => {
+              mutationListeners.forEach((cb) => cb());
+              return res;
+            });
+          }
+        };
+      }
+    };
+  }
+});
+
 // Fonction pour vider complètement la base de données locale
 export async function clearAllData(): Promise<void> {
   await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees, db.snapshots], async () => {

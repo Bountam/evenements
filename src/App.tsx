@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { EventSettings, EventType } from './types';
 import { db, notifySync, registerSyncListener, clearAllData, seedDemoData, saveAutoSnapshot } from './db';
+import { SqliteBackupStatus, getSqliteBackupStatus, onSqliteBackupStatus, restoreFromSqliteIfEmpty, startSqliteBackup } from './utils/sqliteBackup';
 import { FileBackupState, buildEventBackup, enableFileBackup, getFileBackupName, getFileBackupState, requestPersistentStorage, writeFileBackup } from './utils/backupFile';
 import { networkManager } from './network';
 import MatrixSelector from './components/MatrixSelector';
@@ -114,6 +115,13 @@ export default function App() {
   useEffect(() => {
     if (!IS_PUBLIC_WINDOW) requestPersistentStorage();
   }, []);
+
+  // Sauvegarde SQLite (exe PC, APK) : état affiché dans l'en-tête
+  const [sqliteStatus, setSqliteStatus] = useState<{ status: SqliteBackupStatus; at: number | null }>(() => {
+    const s = getSqliteBackupStatus();
+    return { status: s.status, at: s.lastSavedAt };
+  });
+  useEffect(() => onSqliteBackupStatus((status, at) => setSqliteStatus({ status, at })), []);
 
   // Fichier de secours sur le disque : réécrit chaque minute quand les données ont changé
   const [fileBackupState, setFileBackupState] = useState<FileBackupState>('unsupported');
@@ -388,6 +396,14 @@ export default function App() {
 
   const initApp = async () => {
     setIsLoading(true);
+    if (!IS_PUBLIC_WINDOW) {
+      // Base du navigateur effacée : la reprendre depuis la sauvegarde SQLite avant tout affichage
+      const restored = await restoreFromSqliteIfEmpty();
+      if (restored > 0) {
+        showToast(`${restored} activité${restored > 1 ? 's' : ''} restaurée${restored > 1 ? 's' : ''} depuis la sauvegarde SQLite.`, 'success');
+      }
+      startSqliteBackup();
+    }
     await loadPastEvents();
     
     // Vérifier s'il y a un événement actif sauvegardé dans localStorage
@@ -1656,7 +1672,9 @@ export default function App() {
           sessionCode={sessionCode}
           onOpenNetModal={() => setShowNetModal(true)}
           onOpenPublicWindow={handleOpenPublicWindow}
-          fileBackupState={fileBackupState}
+          sqliteStatus={sqliteStatus.status}
+          sqliteSavedAt={sqliteStatus.at}
+          fileBackupState={sqliteStatus.status === 'unavailable' ? fileBackupState : 'unsupported'}
           fileBackupName={fileBackupName}
           onFileBackupClick={handleFileBackupClick}
           isPublicWindow={IS_PUBLIC_WINDOW}
