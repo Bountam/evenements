@@ -1,6 +1,14 @@
 import { Peer, DataConnection } from 'peerjs';
 import { db, notifySync } from './db';
 import { SyncMessage, TrackState } from './types';
+import { getAppVersion, normalizeVersion } from './utils/updateCheck';
+
+function getPeerClass(): typeof Peer {
+  if (typeof window !== 'undefined' && typeof (window as any).__INSERTECH_PEER_CLASS__ === 'function') {
+    return (window as any).__INSERTECH_PEER_CLASS__;
+  }
+  return Peer;
+}
 
 // Types de messages réseau P2P
 export type NetworkMessage =
@@ -12,7 +20,7 @@ export type NetworkMessage =
   | { type: 'ACK'; opId: string }
   | { type: 'PING' }
   | { type: 'PONG' }
-  | { type: 'REQUEST_INITIAL_SYNC' }
+  | { type: 'REQUEST_INITIAL_SYNC'; version?: string }
   | { type: 'CLOCK_PING'; t0: number }
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
   | { type: 'INITIAL_SYNC'; payload: { event: any; tickets: any[]; technicians: any[]; participants: any[]; attendees: any[] } };
@@ -50,6 +58,11 @@ class P2PNetworkManager {
   onTracksSync: ((tracks: Record<number, TrackState>) => void) | null = null;
   onCelebration: ((payload: any) => void) | null = null;
   onRaffleAction: ((action: SyncMessage) => void) | null = null;
+  onClientVersionsChange: ((mismatchedVersions: string[]) => void) | null = null;
+  onActivityStateChange: (() => void) | null = null;
+
+  // Versions des tablettes connectées au PC principal (connectionId -> version X.Y.Z)
+  private clientVersions = new Map<string, string>();
 
   // Découverte réseau MQTT
   mqttClient: any = null;
@@ -206,6 +219,33 @@ class P2PNetworkManager {
     if (this.onStatusChange) {
       this.onStatusChange(status);
     }
+    if (this.onActivityStateChange) {
+      this.onActivityStateChange();
+    }
+  }
+
+  isUpdateBlocked(): boolean {
+    const hasRunningTrack = Object.values(this.tracksState).some((t) => Boolean(t && t.isRunning));
+    return this.role !== 'standalone' || Boolean(this.sessionId) || this.connections.length > 0 || hasRunningTrack;
+  }
+
+  getMismatchedClientVersions(): string[] {
+    if (this.role !== 'host') return [];
+    const hostVer = getAppVersion();
+    const mismatched = new Set<string>();
+    for (const ver of this.clientVersions.values()) {
+      if (ver && ver !== hostVer) mismatched.add(ver);
+    }
+    return Array.from(mismatched);
+  }
+
+  private notifyClientVersions() {
+    if (this.onClientVersionsChange) {
+      this.onClientVersionsChange(this.getMismatchedClientVersions());
+    }
+    if (this.onActivityStateChange) {
+      this.onActivityStateChange();
+    }
   }
 
   // DÉMARRER LA SESSION HÔTE (PC Principal)
@@ -236,7 +276,8 @@ class P2PNetworkManager {
 
     return new Promise((resolve, reject) => {
       if (this.peer) this.peer.destroy();
-      const peer = new Peer(this.sessionId, {
+      const PeerClass = getPeerClass();
+      const peer = new PeerClass(this.sessionId, {
         host: '0.peerjs.com',
         port: 443,
         secure: true,
@@ -289,6 +330,9 @@ class P2PNetworkManager {
           this.connections = this.connections.filter(c => c.connectionId !== conn.connectionId);
           this.lastClientPingAt.delete(conn.connectionId);
           this.incomingChains.delete(conn.connectionId);
+          if (this.clientVersions.delete(conn.connectionId)) {
+            this.notifyClientVersions();
+          }
           if (this.role === 'host') {
             this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte, aucun client)');
           }
@@ -400,7 +444,8 @@ class P2PNetworkManager {
     this.connections = [];
 
     return new Promise((resolve, reject) => {
-      const peer = new Peer({
+      const PeerClass = getPeerClass();
+      const peer = new PeerClass({
         host: '0.peerjs.com',
         port: 443,
         secure: true,
@@ -446,7 +491,7 @@ class P2PNetworkManager {
               console.error('Erreur de renvoi en attente :', e);
             }
           }
-          conn.send({ type: 'REQUEST_INITIAL_SYNC' });
+          conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion() });
 
           // Se caler sur l'horloge du Master
           this.startClockSync();
@@ -559,6 +604,8 @@ class P2PNetworkManager {
     this.connections = [];
     this.incomingChains.clear();
     this.lastClientPingAt.clear();
+    this.clientVersions.clear();
+    this.notifyClientVersions();
     if (this.peer) {
       this.peer.destroy();
       this.peer = null;
@@ -681,6 +728,11 @@ class P2PNetworkManager {
           break;
 
         case 'REQUEST_INITIAL_SYNC':
+          if (typeof msg.version === 'string' && msg.version.trim()) {
+            const cleanVer = normalizeVersion(msg.version) || msg.version.trim();
+            this.clientVersions.set(conn.connectionId, cleanVer);
+            this.notifyClientVersions();
+          }
           await this.sendInitialSync(conn, eventId);
           break;
 
@@ -856,6 +908,9 @@ class P2PNetworkManager {
       localStorage.setItem('insertech_tracks_state', JSON.stringify(this.tracksState));
     } catch (e) {
       // Ignorer quota localStorage
+    }
+    if (this.onActivityStateChange) {
+      this.onActivityStateChange();
     }
   }
 

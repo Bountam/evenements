@@ -3,7 +3,7 @@ import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
   House, Download, Database, Wifi,
-  Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload
+  Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload, AlertTriangle
 } from 'lucide-react';
 import type { FileBackupState } from '../utils/backupFile';
 import type { SqliteBackupStatus } from '../utils/sqliteBackup';
@@ -30,6 +30,8 @@ interface DashboardShellProps {
   fileBackupState?: FileBackupState;
   fileBackupName?: string | null;
   onFileBackupClick?: () => void;
+  mismatchedClientVersions?: string[];
+  currentVersion?: string;
   isPublicWindow: boolean; // Fenêtre dédiée au projecteur : pas de retour vers la régie
   isLightTheme: boolean;
   onToggleTheme: () => void;
@@ -53,6 +55,8 @@ export default function DashboardShell({
   fileBackupState = 'unsupported',
   fileBackupName = null,
   onFileBackupClick,
+  mismatchedClientVersions = [],
+  currentVersion = __APP_VERSION__,
   isPublicWindow,
   isLightTheme,
   onToggleTheme,
@@ -367,6 +371,18 @@ export default function DashboardShell({
                 <span>{sessionCode ? sessionCode : 'Réseau LAN'}</span>
               </Button>
 
+              {mismatchedClientVersions.map((clientVer) => (
+                <span
+                  key={clientVer}
+                  role="status"
+                  title="Une tablette connectée n'utilise pas la même version que le PC principal. La synchronisation continue normalement."
+                  className="inline-flex items-center gap-1.5 min-h-[32px] px-2.5 rounded-lg border bg-warning/15 border-warning/50 text-warning text-xs font-bold font-display"
+                >
+                  <AlertTriangle size={13} aria-hidden="true" />
+                  <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
+                </span>
+              ))}
+
               <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
 
               <Button size="sm" onClick={onExportData} title="Exporter une sauvegarde JSON de cet événement">
@@ -463,7 +479,7 @@ export default function DashboardShell({
       {!isPublicView && (
         <footer className="py-4 border-t border-app-card-border bg-app-bg-footer text-center text-micro text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300">
           <Database size={11} className="text-primary animate-pulse" />
-          <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur • v{__APP_VERSION__}</span>
+          <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur • v{currentVersion}</span>
         </footer>
       )}
     </div>

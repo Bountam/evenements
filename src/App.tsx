@@ -3,6 +3,16 @@ import { EventSettings, EventType } from './types';
 import { db, notifySync, registerSyncListener, clearAllData, seedDemoData, saveAutoSnapshot } from './db';
 import { SqliteBackupStatus, getSqliteBackupStatus, onSqliteBackupStatus, restoreFromSqliteIfEmpty, startSqliteBackup } from './utils/sqliteBackup';
 import { FileBackupState, buildEventBackup, enableFileBackup, getFileBackupName, getFileBackupState, requestPersistentStorage, writeFileBackup } from './utils/backupFile';
+import {
+  ReleaseUpdateInfo,
+  UPDATE_CHECK_INTERVAL_MS,
+  checkForUpdates,
+  clearReleaseDismissal,
+  getAppVersion,
+  ignoreRelease,
+  isReleaseDismissed,
+  postponeRelease
+} from './utils/updateCheck';
 import { networkManager } from './network';
 import MatrixSelector from './components/MatrixSelector';
 import DashboardShell from './components/DashboardShell';
@@ -11,13 +21,14 @@ import TeardownMatrix from './components/matrices/TeardownMatrix';
 import GenericMatrix from './components/matrices/GenericMatrix';
 import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
+import UpdateModal from './components/shared/UpdateModal';
 import Modal from './components/shared/Modal';
 import SessionQrPanel from './components/shared/SessionQrPanel';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
-  History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone
+  History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
 } from 'lucide-react';
 import logoImage from './assets/logo.png';
 import { formatTime } from './components/shared/Stopwatch';
@@ -235,6 +246,17 @@ export default function App() {
   const [showNetModal, setShowNetModal] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [discoveredSessions, setDiscoveredSessions] = useState<any[]>([]);
+  const [mismatchedClientVersions, setMismatchedClientVersions] = useState<string[]>(() =>
+    networkManager.getMismatchedClientVersions()
+  );
+  const [isUpdateBlocked, setIsUpdateBlocked] = useState<boolean>(() => networkManager.isUpdateBlocked());
+
+  // États des mises à jour depuis GitHub Releases
+  const currentVersion = getAppVersion();
+  const [availableRelease, setAvailableRelease] = useState<ReleaseUpdateInfo | null>(null);
+  const [isUpdateDismissed, setIsUpdateDismissed] = useState<boolean>(false);
+  const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState<boolean>(false);
   const [importValidation, setImportValidation] = useState<{
     fileName: string;
     eventData: {
@@ -260,9 +282,16 @@ export default function App() {
   } | null>(null);
 
   useEffect(() => {
-    // S'abonner aux changements de statut réseau
+    // S'abonner aux changements de statut réseau et aux versions des tablettes
     networkManager.onStatusChange = (status) => {
       setNetStatus(status);
+      setIsUpdateBlocked(networkManager.isUpdateBlocked());
+    };
+    networkManager.onClientVersionsChange = (versions) => {
+      setMismatchedClientVersions(versions);
+    };
+    networkManager.onActivityStateChange = () => {
+      setIsUpdateBlocked(networkManager.isUpdateBlocked());
     };
 
     // Auto-reconnexion réseau au chargement (jamais dans la fenêtre d'écran public :
@@ -270,6 +299,8 @@ export default function App() {
     if (IS_PUBLIC_WINDOW) {
       return () => {
         networkManager.onStatusChange = null;
+        networkManager.onClientVersionsChange = null;
+        networkManager.onActivityStateChange = null;
       };
     }
     const savedRole = localStorage.getItem('insertech_net_role');
@@ -308,8 +339,85 @@ export default function App() {
 
     return () => {
       networkManager.onStatusChange = null;
+      networkManager.onClientVersionsChange = null;
+      networkManager.onActivityStateChange = null;
     };
   }, []);
+
+  // Vérification automatique des mises à jour au lancement puis toutes les 6 h (jamais sur l'écran public)
+  useEffect(() => {
+    if (IS_PUBLIC_WINDOW || isLoading) return;
+    let cancelled = false;
+
+    const runAutoCheck = async () => {
+      const res = await checkForUpdates();
+      if (cancelled) return;
+      if (res.status === 'update_available') {
+        const dismissed = isReleaseDismissed(res.release.version);
+        setAvailableRelease(res.release);
+        setIsUpdateDismissed(dismissed);
+        // Ouvrir automatiquement la fenêtre uniquement au menu principal et jamais pendant une session hôte
+        const hasSavedEvent = Boolean(localStorage.getItem('insertech_active_event_id'));
+        const isHostActive = networkManager.role === 'host' || localStorage.getItem('insertech_net_role') === 'host';
+        if (!dismissed && !hasSavedEvent && !isHostActive) {
+          setShowUpdateModal(true);
+        }
+      } else if (res.status === 'up_to_date') {
+        setAvailableRelease(null);
+      }
+    };
+
+    runAutoCheck();
+    const interval = setInterval(runAutoCheck, UPDATE_CHECK_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isLoading]);
+
+  const handleManualUpdateCheck = async () => {
+    if (isCheckingUpdate) return;
+    setIsCheckingUpdate(true);
+    try {
+      const res = await checkForUpdates();
+      if (res.status === 'update_available') {
+        clearReleaseDismissal();
+        setAvailableRelease(res.release);
+        setIsUpdateDismissed(false);
+        setShowUpdateModal(true);
+      } else if (res.status === 'up_to_date') {
+        setAvailableRelease(null);
+        showToast(`Vous utilisez déjà la dernière version (v${res.currentVersion}).`, 'info');
+      } else if (res.status === 'rate_limited') {
+        showToast('Limite de vérifications GitHub atteinte. Réessayez plus tard.', 'warning');
+      } else {
+        showToast('Impossible de vérifier les mises à jour hors ligne.', 'warning');
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handlePostponeUpdate = () => {
+    if (availableRelease) {
+      postponeRelease(availableRelease.version);
+      setIsUpdateDismissed(true);
+    }
+    setShowUpdateModal(false);
+  };
+
+  const handleIgnoreUpdate = () => {
+    if (availableRelease) {
+      ignoreRelease(availableRelease.version);
+      setIsUpdateDismissed(true);
+    }
+    setShowUpdateModal(false);
+  };
+
+  const handleTriggerUpdate = () => {
+    if (!availableRelease || isUpdateBlocked || Boolean(sessionCode)) return;
+    window.open(availableRelease.htmlUrl, '_blank', 'noopener,noreferrer');
+  };
 
   // Découverte automatique des sessions actives (MQTT) lors de l'ouverture du modal
   useEffect(() => {
@@ -1677,6 +1785,8 @@ export default function App() {
           fileBackupState={sqliteStatus.status === 'unavailable' ? fileBackupState : 'unsupported'}
           fileBackupName={fileBackupName}
           onFileBackupClick={handleFileBackupClick}
+          mismatchedClientVersions={mismatchedClientVersions}
+          currentVersion={currentVersion}
           isPublicWindow={IS_PUBLIC_WINDOW}
           isLightTheme={isLightTheme}
           onToggleTheme={() => setIsLightTheme(!isLightTheme)}
@@ -1720,6 +1830,32 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {/* Pastille de nouvelle version disponible (jamais pendant une session hôte) */}
+            {availableRelease && !isUpdateDismissed && networkManager.role !== 'host' && (
+              <button
+                type="button"
+                onClick={() => setShowUpdateModal(true)}
+                title={`Version ${availableRelease.version} disponible — Voir les notes de mise à jour`}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary/15 border border-primary/50 text-primary text-xs font-bold font-display uppercase tracking-wider hover:bg-primary/25 transition cursor-pointer shadow-sm"
+              >
+                <Sparkles size={13} aria-hidden="true" />
+                <span>Nouvelle version ({availableRelease.version})</span>
+              </button>
+            )}
+
+            {/* Avertissement de version différente entre tablette connectée et PC principal */}
+            {mismatchedClientVersions.map((clientVer) => (
+              <span
+                key={clientVer}
+                role="status"
+                title="Une tablette connectée n'utilise pas la même version que le PC principal. La synchronisation continue normalement."
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border bg-warning/15 border-warning/50 text-warning text-xs font-bold font-display"
+              >
+                <AlertTriangle size={13} aria-hidden="true" />
+                <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
+              </span>
+            ))}
+
             {/* Bouton Thème */}
             <ThemeToggle isLightTheme={isLightTheme} onToggle={() => setIsLightTheme(!isLightTheme)} />
 
@@ -1845,13 +1981,33 @@ export default function App() {
         )}
       </main>
 
-      <footer className="py-6 border-t border-app-card-border bg-app-bg-footer text-center text-[10px] text-app-text-muted font-sans flex items-center justify-center gap-1.5 mt-12 transition-colors duration-300">
+      <footer className="py-6 px-4 border-t border-app-card-border bg-app-bg-footer text-center text-[10px] text-app-text-muted font-sans flex flex-wrap items-center justify-center gap-2 mt-12 transition-colors duration-300">
         <Sparkles size={11} className="text-primary animate-pulse" />
-        <span>Insertech Éco-Concours & Réparothons • Outil hors-ligne autonome v{__APP_VERSION__}</span>
+        <span>Insertech Éco-Concours & Réparothons • Outil hors-ligne autonome v{currentVersion}</span>
+        <span aria-hidden="true">•</span>
+        <button
+          type="button"
+          onClick={handleManualUpdateCheck}
+          disabled={isCheckingUpdate}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-app-card border border-app-card-border text-app-text hover:border-primary/50 text-[10px] font-bold transition cursor-pointer disabled:opacity-50"
+        >
+          <RefreshCw size={10} className={isCheckingUpdate ? 'animate-spin text-primary' : 'text-primary'} aria-hidden="true" />
+          <span>Rechercher une mise à jour</span>
+        </button>
       </footer>
 
       {renderNetModal()}
       {renderImportValidationModal()}
+      <UpdateModal
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        release={availableRelease}
+        currentVersion={currentVersion}
+        isBlocked={isUpdateBlocked || Boolean(sessionCode)}
+        onPostpone={handlePostponeUpdate}
+        onIgnore={handleIgnoreUpdate}
+        onTriggerUpdate={handleTriggerUpdate}
+      />
       <MobileInstallModal
         isOpen={showMobileInstallModal}
         onClose={() => setShowMobileInstallModal(false)}
