@@ -74,6 +74,14 @@ for (const target of TARGETS) {
       await expect(page.locator('#launch-raffle')).toBeVisible();
       await page.getByRole('tab', { name: 'Participants' }).click();
       await expect(page.locator('#participant-name')).toHaveValue('Brouillon conservé');
+
+      // Pastille de file d'attente, puis envoi sur piste avec retour aux pistes depuis le toast
+      await page.getByRole('button', { name: 'Inscrire le participant' }).click();
+      await expect(page.getByRole('tab', { name: /Participants \(\d+ personnes? en attente\)/ })).toBeVisible();
+      await page.locator('#participant-name').fill('Coureur test');
+      await page.getByRole('button', { name: 'Inscrire et assigner à la première piste libre' }).click();
+      await page.getByRole('button', { name: 'Voir les pistes' }).click();
+      await expect(page.getByRole('tab', { name: /^Pistes/ })).toHaveAttribute('aria-selected', 'true');
       await expectIntactUi(page);
 
       expect(errors, 'erreurs JavaScript').toEqual([]);

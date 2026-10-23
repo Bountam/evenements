@@ -10,7 +10,7 @@ import type { SqliteBackupStatus } from '../utils/sqliteBackup';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
-import TabSwitcher, { type TabItem } from './shared/TabSwitcher';
+import TabSwitcher, { type TabBadge, type TabItem } from './shared/TabSwitcher';
 import BrandLogo from './shared/BrandLogo';
 import Button from './shared/Button';
 
@@ -18,6 +18,8 @@ interface DashboardShellProps {
   event: EventSettings;
   currentTab: string;
   onTabChange: (tab: string) => void;
+  // Pastilles d'état fournies par le module actif, par id d'onglet
+  tabBadges?: Record<string, TabBadge>;
   onLeaveEvent: () => void;
   onExportData: () => void;
   netStatus: string;
@@ -45,6 +47,7 @@ export default function DashboardShell({
   event,
   currentTab,
   onTabChange,
+  tabBadges = {},
   onLeaveEvent,
   onExportData,
   netStatus,
@@ -305,7 +308,7 @@ export default function DashboardShell({
           {/* Onglets de navigation et boutons d'actions */}
           <div className="flex flex-wrap items-center gap-2.5 ml-auto justify-end">
             <TabSwitcher
-              tabs={tabs}
+              tabs={tabs.map((tab) => (tabBadges[tab.id] ? { ...tab, badge: tabBadges[tab.id] } : tab))}
               currentTab={currentTab}
               onTabChange={onTabChange}
               ariaLabel="Navigation des vues de l'événement"
