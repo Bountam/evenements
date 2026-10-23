@@ -1791,6 +1791,7 @@ export default function App() {
           mismatchedClientVersions={mismatchedClientVersions}
           currentVersion={currentVersion}
           isPublicWindow={IS_PUBLIC_WINDOW}
+          isNetworkClient={networkManager.role === 'client'}
           isLightTheme={isLightTheme}
           onToggleTheme={() => setIsLightTheme(!isLightTheme)}
         >
