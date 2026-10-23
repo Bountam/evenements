@@ -64,6 +64,18 @@ for (const target of TARGETS) {
       await expect(page.getByRole('tablist')).toBeVisible();
       await expectIntactUi(page);
 
+      // Régie en onglets : chaque onglet n'affiche que sa tâche
+      await expect(page.getByRole('tab', { name: 'Pistes' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.locator('#participant-name')).toHaveCount(0);
+      await page.getByRole('tab', { name: 'Participants' }).click();
+      await expect(page.locator('#participant-name')).toBeVisible();
+      await page.locator('#participant-name').fill('Brouillon conservé');
+      await page.getByRole('tab', { name: 'Tirage' }).click();
+      await expect(page.locator('#launch-raffle')).toBeVisible();
+      await page.getByRole('tab', { name: 'Participants' }).click();
+      await expect(page.locator('#participant-name')).toHaveValue('Brouillon conservé');
+      await expectIntactUi(page);
+
       expect(errors, 'erreurs JavaScript').toEqual([]);
     });
   }

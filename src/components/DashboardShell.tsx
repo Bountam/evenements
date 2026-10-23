@@ -10,6 +10,7 @@ import type { SqliteBackupStatus } from '../utils/sqliteBackup';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
+import TabSwitcher, { type TabItem } from './shared/TabSwitcher';
 import BrandLogo from './shared/BrandLogo';
 import Button from './shared/Button';
 
@@ -91,22 +92,6 @@ export default function DashboardShell({
     };
   }, [isPublicView]);
 
-  // Navigation clavier des onglets (motif ARIA « tabs » à activation automatique)
-  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const index = tabs.findIndex((t) => t.id === currentTab);
-    if (index === -1) return;
-    let next = index;
-    if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
-    else if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = tabs.length - 1;
-    else return;
-    e.preventDefault();
-    onTabChange(tabs[next].id);
-    // Le bouton existe déjà : seul son état sélectionné change
-    document.getElementById(`tab-${tabs[next].id}`)?.focus();
-  };
-
   // Hauteur réelle de l'en-tête régie, exposée en variable CSS pour les colonnes collantes
   const adminHeaderRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -145,8 +130,11 @@ export default function DashboardShell({
   // Logos des partenaires enregistrés dans extraData
   const partnerLogos: PartnerLogo[] = event.extraData?.partnerLogos || [];
 
+  // Les onglets de régie du kiosque partagent un seul module : il reste monté (saisie, chronos, tirage)
+  const panelKey = event.type === 'kiosque_concours' && !isPublicView ? 'regie' : currentTab;
+
   // Définir les onglets selon la matrice active
-  let tabs: { id: string; label: string }[] = [];
+  let tabs: TabItem[] = [];
   if (event.type === 'reparothon') {
     tabs = [
       { id: 'accueil', label: 'Console d\'accueil' },
@@ -155,8 +143,10 @@ export default function DashboardShell({
     ];
   } else if (event.type === 'kiosque_concours') {
     tabs = [
-      { id: 'admin', label: 'Chronomètre & Inscriptions' },
-      { id: 'public', label: 'Classement Public' }
+      { id: 'pistes', label: 'Pistes' },
+      { id: 'participants', label: 'Participants' },
+      { id: 'tirage', label: 'Tirage' },
+      { id: 'public', label: 'Écran public' }
     ];
   } else {
     tabs = [
@@ -243,8 +233,8 @@ export default function DashboardShell({
               {!isPublicWindow && (
               <Button
                 size="sm"
-                onClick={() => onTabChange(event.type === 'kiosque_concours' ? 'admin' : tabs[0].id)}
-                title="Basculer vers la console Chronomètre & Inscriptions"
+                onClick={() => onTabChange(tabs[0].id)}
+                title="Basculer vers la console de régie"
                 aria-label="Basculer vers la console d'administration"
               >
                 <Settings2 size={14} className="text-primary" aria-hidden="true" />
@@ -314,41 +304,12 @@ export default function DashboardShell({
 
           {/* Onglets de navigation et boutons d'actions */}
           <div className="flex flex-wrap items-center gap-2.5 ml-auto justify-end">
-            <div 
-              role="tablist" 
-              aria-label="Navigation des vues de l'événement"
-              onKeyDown={handleTabKeyDown}
-              className="flex items-center bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative"
-            >
-              {tabs.map((tab) => {
-                const isActive = currentTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    role="tab"
-                    id={`tab-${tab.id}`}
-                    aria-selected={isActive}
-                    aria-controls={`panel-${tab.id}`}
-                    tabIndex={isActive ? 0 : -1}
-                    onClick={() => onTabChange(tab.id)}
-                    className={`relative px-3.5 py-1.5 rounded-lg text-xs font-bold font-display uppercase transition cursor-pointer z-10 ${
-                      isActive
-                        ? 'bg-primary text-secondary font-extrabold shadow-sm'
-                        : 'text-app-text-muted hover:text-app-text'
-                    }`}
-                  >
-                    {isActive && (
-                      <motion.span
-                        layoutId="activeTabPill"
-                        transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-                        className="absolute inset-0 bg-primary rounded-lg -z-10 shadow-md shadow-primary/25"
-                      />
-                    )}
-                    <span className="relative z-10">{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <TabSwitcher
+              tabs={tabs}
+              currentTab={currentTab}
+              onTabChange={onTabChange}
+              ariaLabel="Navigation des vues de l'événement"
+            />
 
             <div className="flex items-center gap-1.5">
               <Button
@@ -460,7 +421,7 @@ export default function DashboardShell({
       }`}>
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${event.id}-${currentTab}`}
+            key={`${event.id}-${panelKey}`}
             initial={{ opacity: 0, y: 10, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.99 }}
