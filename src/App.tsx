@@ -480,8 +480,8 @@ export default function App() {
           setCurrentTab('accueil');
         }
       } else if (activeEvent.type === 'kiosque_concours') {
-        if (!['admin', 'public'].includes(currentTab)) {
-          setCurrentTab('admin');
+        if (!['pistes', 'participants', 'tirage', 'public'].includes(currentTab)) {
+          setCurrentTab('pistes');
         }
       } else {
         if (!['enregistrements', 'bilan', 'public'].includes(currentTab)) {
@@ -585,7 +585,7 @@ export default function App() {
       if (newEvent.type === 'reparothon') {
         setCurrentTab('accueil');
       } else if (newEvent.type === 'kiosque_concours') {
-        setCurrentTab('admin');
+        setCurrentTab('pistes');
       } else {
         setCurrentTab('enregistrements');
       }
@@ -606,7 +606,7 @@ export default function App() {
     if (event.type === 'reparothon') {
       setCurrentTab('accueil');
     } else if (event.type === 'kiosque_concours') {
-      setCurrentTab('admin');
+      setCurrentTab('pistes');
     } else {
       setCurrentTab('enregistrements');
     }
@@ -921,7 +921,7 @@ export default function App() {
         if (importedEvent.type === 'reparothon') {
           setCurrentTab('accueil');
         } else if (importedEvent.type === 'kiosque_concours') {
-          setCurrentTab('admin');
+          setCurrentTab('pistes');
         } else {
           setCurrentTab('enregistrements');
         }

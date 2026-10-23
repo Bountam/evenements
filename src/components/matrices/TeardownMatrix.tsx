@@ -46,7 +46,7 @@ import {
 
 interface TeardownMatrixProps {
   event: EventSettings;
-  activeTab: 'admin' | 'public';
+  activeTab: 'pistes' | 'participants' | 'tirage' | 'public';
 }
 
 // Fanfare sonore Web Audio API lors d'un nouveau record (1re place)
@@ -1202,7 +1202,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         onSave={handleSavePrizes}
       />
 
-      {/* Cockpit 3 Colonnes Zéro-Scroll */}
+      {/* Contenu de l'onglet de régie actif */}
       <div
         inert={raffle.status === 'spinning'}
         className={`grid grid-cols-12 gap-3.5 items-start transition-all duration-500 ${
@@ -1210,9 +1210,10 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
         }`}
       >
         {/* ================================================================ */}
-        {/* COLONNE 1 (GAUCHE ~25%) : Inscription & Tirage au sort           */}
+        {/* ONGLET PARTICIPANTS (gauche) : Inscription                      */}
         {/* ================================================================ */}
-        <div className="col-span-12 lg:col-span-3 space-y-3">
+        {activeTab === 'participants' && (
+        <div className="col-span-12 lg:col-span-4 space-y-3">
           {/* Formulaire Nouveau Participant compacté */}
           <div className="@container bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm">
             <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
@@ -1317,7 +1318,14 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
               </div>
             </form>
           </div>
+        </div>
+        )}
 
+        {/* ================================================================ */}
+        {/* ONGLET TIRAGE : Tirage au sort, historique et prix               */}
+        {/* ================================================================ */}
+        {activeTab === 'tirage' && (
+        <div className="col-span-12 w-full max-w-xl mx-auto">
           {/* Bloc Tirage au sort unifié */}
           <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5">
             <div className="flex items-center justify-between">
@@ -1413,11 +1421,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             </button>
           </div>
         </div>
+        )}
 
         {/* ================================================================ */}
-        {/* COLONNE 2 (CENTRE ~50%) : Stat-bar KPIs + Les 5 Pistes           */}
+        {/* ONGLET PISTES : Stat-bar KPIs + Les 5 Pistes                     */}
         {/* ================================================================ */}
-        <div className="col-span-12 lg:col-span-6 space-y-3">
+        {activeTab === 'pistes' && (
+        <div className="col-span-12 space-y-3">
           {/* Bandeau de statistiques compact (stat-bar en 1 ligne) */}
           <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
             <StatTile icon={Users} label="Participants">
@@ -1485,11 +1495,13 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
           </div>
           </div>
         </div>
+        )}
 
         {/* ================================================================ */}
-        {/* COLONNE 3 (DROITE ~25%) : File d'attente & Classement Unifiés    */}
+        {/* ONGLET PARTICIPANTS (droite) : File d'attente & Classement       */}
         {/* ================================================================ */}
-        <div className="col-span-12 lg:col-span-3 lg:self-stretch">
+        {activeTab === 'participants' && (
+        <div className="col-span-12 lg:col-span-8 lg:self-stretch">
           <div className="bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm space-y-2.5 flex flex-col max-h-[70dvh] lg:max-h-none lg:sticky lg:top-[calc(var(--app-header-h,0px)+0.75rem)] lg:h-[calc(100dvh-var(--app-header-h,0px)-1.5rem)]">
             <div className="flex items-center justify-between shrink-0">
               <h3 className="text-xs font-bold font-display text-app-text uppercase tracking-wider flex items-center gap-1.5">
@@ -1543,7 +1555,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
                   <div className="text-center py-8 px-3 space-y-1.5">
                     <UserPlus size={22} className="mx-auto text-primary" aria-hidden="true" />
                     <p className="text-xs font-bold text-app-text">Aucun inscrit pour l'instant</p>
-                    <p className="text-micro text-app-text-muted">Inscrivez le premier participant avec le formulaire à gauche.</p>
+                    <p className="text-micro text-app-text-muted">Inscrivez le premier participant avec le formulaire d'inscription.</p>
                   </div>
                 ) : searchQuery.trim() ? (
                   <div className="text-center py-8 px-3 space-y-2">
@@ -1693,6 +1705,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ const FILES = [
   'src/components/shared/RecordChip.tsx',
   'src/components/shared/SessionQrPanel.tsx',
   'src/components/shared/StatTile.tsx',
+  'src/components/shared/TabSwitcher.tsx',
   'src/components/shared/TextField.tsx',
   'src/components/shared/Toast.tsx',
   'src/components/shared/UpdateModal.tsx'
