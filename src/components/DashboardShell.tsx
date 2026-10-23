@@ -3,13 +3,14 @@ import { EventSettings, PartnerLogo } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
 import { 
   House, Download, Database, Wifi,
-  Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload, AlertTriangle
+  Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload, AlertTriangle, Sun, Moon
 } from 'lucide-react';
 import type { FileBackupState } from '../utils/backupFile';
 import type { SqliteBackupStatus } from '../utils/sqliteBackup';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
+import MoreMenu from './shared/MoreMenu';
 import TabSwitcher, { type TabBadge, type TabItem } from './shared/TabSwitcher';
 import BrandLogo from './shared/BrandLogo';
 import Button from './shared/Button';
@@ -36,6 +37,7 @@ interface DashboardShellProps {
   mismatchedClientVersions?: string[];
   currentVersion?: string;
   isPublicWindow: boolean; // Fenêtre dédiée au projecteur : pas de retour vers la régie
+  isNetworkClient?: boolean; // Tablette connectée au PC principal
   isLightTheme: boolean;
   onToggleTheme: () => void;
   children: React.ReactNode;
@@ -62,6 +64,7 @@ export default function DashboardShell({
   mismatchedClientVersions = [],
   currentVersion = __APP_VERSION__,
   isPublicWindow,
+  isNetworkClient = false,
   isLightTheme,
   onToggleTheme,
   children
@@ -276,7 +279,7 @@ export default function DashboardShell({
               <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
                 Insertech <span className="text-primary font-black">Événements</span>
               </h1>
-              <p className="text-micro text-app-text-muted font-semibold mt-1">
+              <p className="hidden lg:block text-micro text-app-text-muted font-semibold mt-1">
                 Tableau de bord autonome et 100% hors-ligne
               </p>
             </div>
@@ -314,17 +317,7 @@ export default function DashboardShell({
               ariaLabel="Navigation des vues de l'événement"
             />
 
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                onClick={onOpenPublicWindow}
-                title="Ouvrir l'écran public dans une nouvelle fenêtre, à glisser sur le projecteur ou la télé"
-                className="!bg-primary/15 !border-primary/50 text-primary"
-              >
-                <MonitorUp size={13} aria-hidden="true" />
-                <span>Projecteur</span>
-              </Button>
-
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
               <Button
                 size="sm"
                 onClick={onOpenNetModal}
@@ -347,62 +340,103 @@ export default function DashboardShell({
                 </span>
               ))}
 
-              <ThemeToggle isLightTheme={isLightTheme} onToggle={onToggleTheme} />
+              {/* Commandes rares regroupées : projecteur, thème, sauvegardes */}
+              <MoreMenu
+                alert={sqliteStatus === 'error' || fileBackupState === 'needs-permission'}
+                alertText={sqliteStatus === 'error' ? 'sauvegarde SQLite hors ligne' : 'fichier de secours à réactiver'}
+              >
+                {(close) => (
+                  <>
+                    {/* Une tablette ne pilote pas le projecteur : la fenêtre s'ouvre depuis le PC principal */}
+                    {!isNetworkClient && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          close();
+                          onOpenPublicWindow();
+                        }}
+                        title="Ouvrir l'écran public dans une nouvelle fenêtre, à glisser sur le projecteur ou la télé"
+                        className="w-full !justify-start"
+                      >
+                        <MonitorUp size={13} className="text-primary" aria-hidden="true" />
+                        <span>Ouvrir le projecteur</span>
+                      </Button>
+                    )}
 
-              <Button size="sm" onClick={onExportData} title="Exporter une sauvegarde JSON de cet événement">
-                <Download size={13} aria-hidden="true" />
-                <span>Sauvegarder</span>
-              </Button>
+                    <Button size="sm" onClick={onToggleTheme} className="w-full !justify-start">
+                      {isLightTheme ? <Moon size={13} aria-hidden="true" /> : <Sun size={13} aria-hidden="true" />}
+                      <span>{isLightTheme ? 'Passer au thème sombre' : 'Passer au thème clair'}</span>
+                    </Button>
 
-              {sqliteStatus !== 'unavailable' && (
-                <span
-                  role="status"
-                  title={
-                    sqliteStatus === 'ok'
-                      ? `Sauvegarde SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA')})` : ''} : les données sont aussi gardées hors du navigateur`
-                      : sqliteStatus === 'error'
-                        ? 'Sauvegarde SQLite injoignable : les données restent dans le navigateur, nouvel essai automatique'
-                        : 'Sauvegarde SQLite en cours'
-                  }
-                  className={`inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg border text-xs font-bold font-display uppercase tracking-wider ${
-                    sqliteStatus === 'error'
-                      ? 'bg-warning/15 border-warning/50 text-warning'
-                      : 'bg-success/15 border-success/50 text-success'
-                  }`}
-                >
-                  <Database size={13} aria-hidden="true" />
-                  <span>{sqliteStatus === 'error' ? 'SQLite hors ligne' : 'SQLite'}</span>
-                </span>
-              )}
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        close();
+                        onExportData();
+                      }}
+                      title="Exporter une sauvegarde JSON de cet événement"
+                      className="w-full !justify-start"
+                    >
+                      <Download size={13} aria-hidden="true" />
+                      <span>Sauvegarder (JSON)</span>
+                    </Button>
 
-              {fileBackupState !== 'unsupported' && onFileBackupClick && (
-                <Button
-                  size="sm"
-                  onClick={onFileBackupClick}
-                  title={
-                    fileBackupState === 'on'
-                      ? `Fichier de secours actif${fileBackupName ? ` (${fileBackupName})` : ''}, mis à jour chaque minute. Cliquez pour en choisir un autre.`
-                      : fileBackupState === 'needs-permission'
-                        ? "Le fichier de secours n'est plus mis à jour depuis le redémarrage : cliquez pour l'autoriser à nouveau"
-                        : 'Choisir un fichier sur le disque, mis à jour chaque minute avec les données de cette activité'
-                  }
-                  className={
-                    fileBackupState === 'on'
-                      ? '!bg-success/15 !border-success/50 text-success'
-                      : fileBackupState === 'needs-permission'
-                        ? '!bg-warning/15 !border-warning/50 text-warning'
-                        : ''
-                  }
-                >
-                  <HardDriveDownload size={13} aria-hidden="true" />
-                  <span>
-                    {fileBackupState === 'on' ? 'Secours actif' : fileBackupState === 'needs-permission' ? 'Réactiver le secours' : 'Fichier de secours'}
-                  </span>
-                </Button>
-              )}
+                    {fileBackupState !== 'unsupported' && onFileBackupClick && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          close();
+                          onFileBackupClick();
+                        }}
+                        title={
+                          fileBackupState === 'on'
+                            ? `Fichier de secours actif${fileBackupName ? ` (${fileBackupName})` : ''}, mis à jour chaque minute. Cliquez pour en choisir un autre.`
+                            : fileBackupState === 'needs-permission'
+                              ? "Le fichier de secours n'est plus mis à jour depuis le redémarrage : cliquez pour l'autoriser à nouveau"
+                              : 'Choisir un fichier sur le disque, mis à jour chaque minute avec les données de cette activité'
+                        }
+                        className={`w-full !justify-start ${
+                          fileBackupState === 'on'
+                            ? '!bg-success/15 !border-success/50 text-success'
+                            : fileBackupState === 'needs-permission'
+                              ? '!bg-warning/15 !border-warning/50 text-warning'
+                              : ''
+                        }`}
+                      >
+                        <HardDriveDownload size={13} aria-hidden="true" />
+                        <span>
+                          {fileBackupState === 'on' ? 'Secours actif' : fileBackupState === 'needs-permission' ? 'Réactiver le secours' : 'Fichier de secours'}
+                        </span>
+                      </Button>
+                    )}
 
-              {/* Séparateur pour isoler le retour au menu de Sauvegarder */}
-              <div className="w-px h-5 bg-app-card-border mx-1 hidden sm:block" />
+                    {sqliteStatus !== 'unavailable' && (
+                      <span
+                        role="status"
+                        title={
+                          sqliteStatus === 'ok'
+                            ? `Sauvegarde SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA')})` : ''} : les données sont aussi gardées hors du navigateur`
+                            : sqliteStatus === 'error'
+                              ? 'Sauvegarde SQLite injoignable : les données restent dans le navigateur, nouvel essai automatique'
+                              : 'Sauvegarde SQLite en cours'
+                        }
+                        className={`inline-flex items-center gap-1.5 min-h-9 px-3 rounded-xl border text-xs font-bold ${
+                          sqliteStatus === 'error'
+                            ? 'bg-warning/15 border-warning/50 text-warning'
+                            : 'bg-success/15 border-success/50 text-success'
+                        }`}
+                      >
+                        <Database size={13} aria-hidden="true" />
+                        <span>
+                          {sqliteStatus === 'error'
+                            ? 'SQLite hors ligne'
+                            : `SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })})` : ''}`}
+                        </span>
+                      </span>
+                    )}
+                  </>
+                )}
+              </MoreMenu>
 
               {/* Les données restent enregistrées : l'activité se rouvre depuis l'historique du menu principal */}
               <Button size="sm" onClick={onLeaveEvent} title="Retourner au menu principal (l'activité reste enregistrée)">

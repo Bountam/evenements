@@ -64,6 +64,14 @@ for (const target of TARGETS) {
       await expect(page.getByRole('tablist')).toBeVisible();
       await expectIntactUi(page);
 
+      // En-tête allégé : les commandes rares sont dans le volet « Plus »
+      const moreButton = page.getByRole('button', { name: /^Plus/ });
+      await moreButton.click();
+      await expect(page.getByRole('button', { name: 'Sauvegarder (JSON)' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('button', { name: 'Sauvegarder (JSON)' })).toHaveCount(0);
+      await expect(moreButton).toBeFocused();
+
       // Régie en onglets : chaque onglet n'affiche que sa tâche
       await expect(page.getByRole('tab', { name: 'Pistes' })).toHaveAttribute('aria-selected', 'true');
       await expect(page.locator('#participant-name')).toHaveCount(0);
