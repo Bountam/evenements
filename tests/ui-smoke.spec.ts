@@ -78,6 +78,12 @@ for (const target of TARGETS) {
       // Pastille de file d'attente, puis envoi sur piste avec retour aux pistes depuis le toast
       await page.getByRole('button', { name: 'Inscrire le participant' }).click();
       await expect(page.getByRole('tab', { name: /Participants \(\d+ personnes? en attente\)/ })).toBeVisible();
+
+      // Actions rares de la file regroupées sous « Plus d'actions »
+      await page.getByRole('button', { name: "Plus d'actions pour Brouillon conservé" }).click();
+      await page.getByRole('button', { name: 'Saisir un temps' }).click();
+      await expect(page.getByRole('button', { name: "Plus d'actions pour Brouillon conservé" })).toHaveAttribute('aria-expanded', 'false');
+
       await page.locator('#participant-name').fill('Coureur test');
       await page.getByRole('button', { name: 'Inscrire et assigner à la première piste libre' }).click();
       await page.getByRole('button', { name: 'Voir les pistes' }).click();
