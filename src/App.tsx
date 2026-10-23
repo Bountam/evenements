@@ -18,6 +18,7 @@ import MatrixSelector from './components/MatrixSelector';
 import DashboardShell from './components/DashboardShell';
 import ReparothonMatrix from './components/matrices/ReparothonMatrix';
 import TeardownMatrix from './components/matrices/TeardownMatrix';
+import type { TabBadge } from './components/shared/TabSwitcher';
 import GenericMatrix from './components/matrices/GenericMatrix';
 import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
@@ -54,6 +55,7 @@ export default function App() {
   const [activeEvent, setActiveEvent] = useState<EventSettings | null>(null);
   const [pastEvents, setPastEvents] = useState<EventSettings[]>([]);
   const [currentTab, setCurrentTab] = useState<string>(readSavedTab);
+  const [tabBadges, setTabBadges] = useState<Record<string, TabBadge>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteConfirmId, setShowDeleteConfirmId] = useState<string | null>(null);
   const [deferredPwaPrompt, setDeferredPwaPrompt] = useState<any>(null);
@@ -1774,6 +1776,7 @@ export default function App() {
           event={activeEvent}
           currentTab={currentTab}
           onTabChange={setCurrentTab}
+          tabBadges={tabBadges}
           onLeaveEvent={handleLeaveEvent}
           onExportData={handleExportData}
           netStatus={netStatus}
@@ -1795,7 +1798,13 @@ export default function App() {
             <ReparothonMatrix event={activeEvent} activeTab={currentTab as any} />
           )}
           {activeEvent.type === 'kiosque_concours' && (
-            <TeardownMatrix key={activeEvent.id} event={activeEvent} activeTab={currentTab as any} />
+            <TeardownMatrix
+              key={activeEvent.id}
+              event={activeEvent}
+              activeTab={currentTab as any}
+              onTabChange={setCurrentTab}
+              onTabBadgesChange={setTabBadges}
+            />
           )}
           {activeEvent.type !== 'reparothon' && activeEvent.type !== 'kiosque_concours' && (
             <GenericMatrix event={activeEvent} activeTab={currentTab as any} />

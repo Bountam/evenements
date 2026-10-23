@@ -18,6 +18,7 @@ import StatTile from '../shared/StatTile';
 import RecordChip from '../shared/RecordChip';
 import InlineTimeEditor from '../shared/InlineTimeEditor';
 import TextField from '../shared/TextField';
+import type { TabBadge } from '../shared/TabSwitcher';
 import confetti from 'canvas-confetti';
 import {
   UserPlus,
@@ -47,6 +48,9 @@ import {
 interface TeardownMatrixProps {
   event: EventSettings;
   activeTab: 'pistes' | 'participants' | 'tirage' | 'public';
+  onTabChange?: (tab: string) => void;
+  // Pastilles d'état des onglets de régie (chronos en marche, file d'attente, tirage)
+  onTabBadgesChange?: (badges: Record<string, TabBadge>) => void;
 }
 
 // Fanfare sonore Web Audio API lors d'un nouveau record (1re place)
@@ -73,7 +77,7 @@ function playRecordFanfare() {
   }
 }
 
-export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps) {
+export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBadgesChange }: TeardownMatrixProps) {
   // 1. États principaux
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [lastSavedParticipantId, setLastSavedParticipantId] = useState<string | null>(null);
@@ -398,6 +402,11 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
     });
   };
 
+  // Après un envoi sur piste depuis un autre onglet, un bouton du toast ouvre les pistes
+  const goToTracksAction = onTabChange && activeTab !== 'pistes'
+    ? { label: 'Voir les pistes', onClick: () => onTabChange('pistes') }
+    : undefined;
+
   // Assigner rapidement un participant à la première piste libre
   const handleQuickSendToTrack = (participantId: string) => {
     const alreadyOnTrack = Object.values(tracks).find((t) => t.participantId === participantId);
@@ -414,7 +423,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
 
     handleAssignParticipant(freeTrack.trackId, participantId);
     const p = participants.find((part) => part.id === participantId);
-    showToast(`${p?.name || 'Participant'} envoyé sur la Piste ${freeTrack.trackId}`, 'success');
+    showToast(`${p?.name || 'Participant'} envoyé sur la Piste ${freeTrack.trackId}`, 'success', goToTracksAction);
   };
 
   // ENREGISTREMENT FIABLE D'UN SCORE DEPUIS UNE PISTE
@@ -786,7 +795,7 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
             participantName: newP.name,
             eventId: event.id
           });
-          showToast(`${newP.name} inscrit et assigné à la Piste ${freeTrack.trackId} !`, 'success');
+          showToast(`${newP.name} inscrit et assigné à la Piste ${freeTrack.trackId} !`, 'success', goToTracksAction);
         } else {
           showToast(`${newP.name} inscrit (toutes les pistes sont occupées).`, 'info');
         }
@@ -877,6 +886,39 @@ export default function TeardownMatrix({ event, activeTab }: TeardownMatrixProps
   const freeTrackIds = Object.values(tracks)
     .filter((t) => t.participantId === null)
     .map((t) => t.trackId);
+
+  // Pastilles des onglets : ce qui demande l'attention sans ouvrir l'onglet
+  const runningCount = Object.values(tracks).filter((t) => t.isRunning).length;
+  const waitingCount = waitingForLiveRace.length;
+  useEffect(() => {
+    if (!onTabBadgesChange) return;
+    const badges: Record<string, TabBadge> = {};
+    if (runningCount > 0) {
+      badges.pistes = {
+        text: String(runningCount),
+        srText: `${runningCount} chrono${runningCount > 1 ? 's' : ''} en marche`,
+        tone: 'success',
+        pulse: true
+      };
+    }
+    if (waitingCount > 0) {
+      badges.participants = {
+        text: String(waitingCount),
+        srText: `${waitingCount} personne${waitingCount > 1 ? 's' : ''} en attente`,
+        tone: 'info'
+      };
+    }
+    if (raffle.status !== 'idle') {
+      badges.tirage = {
+        text: raffle.status === 'spinning' ? 'En cours' : 'Gagnant',
+        srText: raffle.status === 'spinning' ? 'tirage en cours' : 'gagnant tiré',
+        tone: 'warning',
+        pulse: raffle.status === 'spinning'
+      };
+    }
+    onTabBadgesChange(badges);
+  }, [runningCount, waitingCount, raffle.status, onTabBadgesChange]);
+  useEffect(() => () => onTabBadgesChange?.({}), [onTabBadgesChange]);
 
   // ============================================================================
   // RENDU DE L'ÉCRAN PUBLIC DE PROJECTION (Kiosque Plein Écran Adaptatif)
