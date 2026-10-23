@@ -42,7 +42,8 @@ import {
   Zap,
   Pause,
   Settings2,
-  Medal
+  Medal,
+  Ellipsis
 } from 'lucide-react';
 
 interface TeardownMatrixProps {
@@ -84,6 +85,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [participantFilter, setParticipantFilter] = useState<'all' | 'waiting' | 'ranked'>('all');
   const [manualScoreParticipantId, setManualScoreParticipantId] = useState<string | null>(null);
+  const [rowActionsParticipantId, setRowActionsParticipantId] = useState<string | null>(null);
 
   // État des 5 pistes (géré en local et synchronisé via networkManager + BroadcastChannel)
   const [rawTracks, setTracks] = useState<Record<number, TrackState>>(() => ({
@@ -1255,6 +1257,47 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
         {/* ONGLET PARTICIPANTS (gauche) : Inscription                      */}
         {/* ================================================================ */}
         {activeTab === 'participants' && (
+        <div className="col-span-12">
+          {/* Bandeau de statistiques compact (stat-bar en 1 ligne) */}
+          <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
+            <StatTile icon={Users} label="Participants">
+              <span className="text-sm font-display font-black text-app-text">{participants.length}</span>
+            </StatTile>
+
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
+
+            <StatTile icon={Check} label="Scores validés" tone="info">
+              <span className="text-sm font-display font-black text-app-text">
+                {rankedParticipants.length}{' '}
+                <span className="text-micro font-sans text-app-text-muted font-normal">/ {participants.length}</span>
+              </span>
+            </StatTile>
+
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
+
+            <StatTile icon={Trophy} label="Record actuel" tone="warning">
+              <div className="flex items-baseline gap-1 min-w-0">
+                <span className="text-sm font-mono font-black text-primary">
+                  {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
+                </span>
+                {bestParticipant && (
+                  <span className="text-micro text-app-text-muted font-medium truncate max-w-[6rem]">({bestParticipant.name})</span>
+                )}
+              </div>
+            </StatTile>
+
+            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
+
+            <StatTile icon={Clock} label="Temps moyen" tone="accent">
+              <span className="text-sm font-mono font-bold text-app-text">
+                {averageTimeMs ? formatTime(averageTimeMs) : '--:--.--'}
+              </span>
+            </StatTile>
+          </div>
+        </div>
+        )}
+
+        {activeTab === 'participants' && (
         <div className="col-span-12 lg:col-span-4 space-y-3">
           {/* Formulaire Nouveau Participant compacté */}
           <div className="@container bg-app-card border border-app-card-border p-3.5 rounded-2xl shadow-sm">
@@ -1466,50 +1509,26 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
         )}
 
         {/* ================================================================ */}
-        {/* ONGLET PISTES : Stat-bar KPIs + Les 5 Pistes                     */}
+        {/* ONGLET PISTES : Record à battre + Les 5 Pistes                   */}
         {/* ================================================================ */}
         {activeTab === 'pistes' && (
         <div className="col-span-12 space-y-3">
-          {/* Bandeau de statistiques compact (stat-bar en 1 ligne) */}
-          <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2.5 text-xs">
-            <StatTile icon={Users} label="Participants">
-              <span className="text-sm font-display font-black text-app-text">{participants.length}</span>
-            </StatTile>
-
-            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
-
-            <StatTile icon={Check} label="Scores validés" tone="info">
-              <span className="text-sm font-display font-black text-app-text">
-                {rankedParticipants.length}{' '}
-                <span className="text-micro font-sans text-app-text-muted font-normal">/ {participants.length}</span>
-              </span>
-            </StatTile>
-
-            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
-
-            <StatTile icon={Trophy} label="Record actuel" tone="warning">
-              <div className="flex items-baseline gap-1 min-w-0">
+          {/* Record à battre, rappelé au-dessus des pistes */}
+          <div className="bg-app-card border border-app-card-border px-3.5 py-2 rounded-2xl shadow-sm">
+            <StatTile icon={Trophy} label="Record à battre" tone="warning">
+              <div className="flex items-baseline gap-1.5 min-w-0">
                 <span className="text-sm font-mono font-black text-primary">
                   {bestParticipant ? formatTime(bestParticipant.timeMs!) : '--:--.--'}
                 </span>
                 {bestParticipant && (
-                  <span className="text-micro text-app-text-muted font-medium truncate max-w-[6rem]">({bestParticipant.name})</span>
+                  <span className="text-micro text-app-text-muted font-medium truncate">({bestParticipant.name})</span>
                 )}
               </div>
             </StatTile>
-
-            <div className="hidden sm:block h-5 w-px bg-app-card-border" aria-hidden="true" />
-
-            <StatTile icon={Clock} label="Temps moyen" tone="accent">
-              <span className="text-sm font-mono font-bold text-app-text">
-                {averageTimeMs ? formatTime(averageTimeMs) : '--:--.--'}
-              </span>
-            </StatTile>
           </div>
 
-          {/* Grille des pistes : autant de colonnes de 18rem que la largeur le permet */}
-          <div className="@container">
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(18rem,100%),1fr))] gap-2.5">
+          {/* Grille des pistes : 1 colonne sur téléphone, 2 sur tablette, 3 sur grand écran */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
             {Object.values(tracks).map((track, idx, all) => {
               // Sur 2 colonnes, une dernière piste seule occupe toute la ligne
               const isLoneLastTrack = all.length % 2 === 1 && idx === all.length - 1;
@@ -1517,7 +1536,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
               return (
                 <div
                   key={track.trackId}
-                  className={isLoneLastTrack ? '@min-[36.625rem]:@max-[55.25rem]:col-span-2' : ''}
+                  className={isLoneLastTrack ? 'sm:col-span-2 xl:col-span-1' : ''}
                 >
                   <AdminTrackBlock
                     track={track}
@@ -1534,7 +1553,6 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
                 </div>
               );
             })}
-          </div>
           </div>
         </div>
         )}
@@ -1632,6 +1650,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
                   const assignedTrack = Object.values(tracks).find((t) => t.participantId === p.id);
                   const isAssigned = Boolean(assignedTrack);
                   const isManualEditing = manualScoreParticipantId === p.id;
+                  const isRowActionsOpen = rowActionsParticipantId === p.id;
 
                   const rankIndex = rankMap.get(p.id) ?? null;
 
@@ -1684,50 +1703,75 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
                                   : 'Envoyer sur une piste libre'
                               }
                               aria-label={`${hasTime ? 'Nouvelle tentative' : 'Envoyer sur une piste libre'} : ${p.name}`}
-                              className="p-2 rounded-lg bg-primary/15 text-primary hover:bg-primary hover:text-secondary transition cursor-pointer"
+                              className="min-w-10 min-h-10 flex items-center justify-center rounded-lg bg-primary/15 text-primary hover:bg-primary hover:text-secondary transition cursor-pointer"
                             >
-                              <Play size={14} fill="currentColor" aria-hidden="true" />
+                              <Play size={16} fill="currentColor" aria-hidden="true" />
                             </button>
                           )}
 
+                          {/* Actions moins fréquentes regroupées sous « Plus » pour alléger la file */}
                           <button
-                            onClick={() => {
-                              if (isManualEditing) {
-                                setManualScoreParticipantId(null);
-                              } else {
-                                setManualScoreParticipantId(p.id);
-                              }
-                            }}
-                            title="Saisir ou corriger le temps manuellement"
-                            aria-label={`Saisir ou corriger le temps de ${p.name}`}
-                            aria-expanded={isManualEditing}
-                            className="p-2 rounded-lg text-app-text-muted hover:text-app-text hover:bg-app-card-border/50 transition cursor-pointer"
+                            type="button"
+                            onClick={() => setRowActionsParticipantId(isRowActionsOpen ? null : p.id)}
+                            title="Plus d'actions"
+                            aria-label={`Plus d'actions pour ${p.name}`}
+                            aria-expanded={isRowActionsOpen}
+                            aria-controls={`row-actions-${p.id}`}
+                            className={`min-w-10 min-h-10 flex items-center justify-center rounded-lg transition cursor-pointer ${
+                              isRowActionsOpen || isManualEditing
+                                ? 'bg-app-card-border/60 text-app-text'
+                                : 'text-app-text-muted hover:text-app-text hover:bg-app-card-border/50'
+                            }`}
                           >
-                            <Edit3 size={14} aria-hidden="true" />
-                          </button>
-
-                          {hasTime && !isAssigned && (
-                            <button
-                              onClick={() => handleResetParticipantScore(p.id)}
-                              title="Réinitialiser le score"
-                              aria-label={`Effacer le temps de ${p.name}`}
-                              className="p-2 rounded-lg text-app-text-muted hover:text-warning hover:bg-warning/10 transition cursor-pointer"
-                            >
-                              <RotateCcw size={14} aria-hidden="true" />
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => deleteParticipant(p.id)}
-                            disabled={isAssigned}
-                            title="Supprimer le participant"
-                            aria-label={`Supprimer ${p.name}`}
-                            className="ml-1.5 p-2 rounded-lg text-app-text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-30 cursor-pointer"
-                          >
-                            <Trash2 size={14} aria-hidden="true" />
+                            <Ellipsis size={16} aria-hidden="true" />
                           </button>
                         </div>
                       </div>
+
+                      {isRowActionsOpen && (
+                        <div
+                          id={`row-actions-${p.id}`}
+                          className="pt-1.5 border-t border-app-card-border flex flex-wrap gap-1.5"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualScoreParticipantId(p.id);
+                              setRowActionsParticipantId(null);
+                            }}
+                            className="min-h-9 px-3 rounded-lg bg-app-input border border-app-card-border text-xs font-bold text-app-text hover:border-primary inline-flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Edit3 size={13} aria-hidden="true" />
+                            {hasTime ? 'Corriger le temps' : 'Saisir un temps'}
+                          </button>
+                          {hasTime && !isAssigned && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRowActionsParticipantId(null);
+                                handleResetParticipantScore(p.id);
+                              }}
+                              className="min-h-9 px-3 rounded-lg bg-app-input border border-app-card-border text-xs font-bold text-warning hover:border-warning inline-flex items-center gap-1.5 transition cursor-pointer"
+                            >
+                              <RotateCcw size={13} aria-hidden="true" />
+                              Effacer le temps
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRowActionsParticipantId(null);
+                              deleteParticipant(p.id);
+                            }}
+                            disabled={isAssigned}
+                            title={isAssigned ? 'Libérez sa piste avant de le supprimer' : undefined}
+                            className="min-h-9 px-3 rounded-lg bg-app-input border border-app-card-border text-xs font-bold text-danger hover:border-danger disabled:opacity-40 disabled:pointer-events-none inline-flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Trash2 size={13} aria-hidden="true" />
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
 
                       {/* Zone de saisie manuelle de score inline */}
                       {isManualEditing && (
