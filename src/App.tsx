@@ -20,6 +20,8 @@ import ReparothonMatrix from './components/matrices/ReparothonMatrix';
 import TeardownMatrix from './components/matrices/TeardownMatrix';
 import type { TabBadge } from './components/shared/TabSwitcher';
 import GenericMatrix from './components/matrices/GenericMatrix';
+import InstallFestMatrix from './components/matrices/InstallFestMatrix';
+import { INSTALL_FEST_EXPORT_HEADER, installFestExportRows } from './utils/installFest';
 import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
 import UpdateModal from './components/shared/UpdateModal';
@@ -477,7 +479,7 @@ export default function App() {
     if (activeEvent) {
       if (IS_PUBLIC_WINDOW) {
         if (currentTab !== 'public') setCurrentTab('public');
-      } else if (activeEvent.type === 'reparothon') {
+      } else if (activeEvent.type === 'reparothon' || activeEvent.type === 'install_fest_linux') {
         if (!['accueil', 'techniciens', 'public'].includes(currentTab)) {
           setCurrentTab('accueil');
         }
@@ -584,7 +586,7 @@ export default function App() {
       setActiveEvent(newEvent);
       
       // 4. Définir l'onglet selon le type de matrice
-      if (newEvent.type === 'reparothon') {
+      if (newEvent.type === 'reparothon' || newEvent.type === 'install_fest_linux') {
         setCurrentTab('accueil');
       } else if (newEvent.type === 'kiosque_concours') {
         setCurrentTab('pistes');
@@ -605,7 +607,7 @@ export default function App() {
   const handleSelectPastEvent = (event: EventSettings) => {
     localStorage.setItem('insertech_active_event_id', event.id);
     setActiveEvent(event);
-    if (event.type === 'reparothon') {
+    if (event.type === 'reparothon' || event.type === 'install_fest_linux') {
       setCurrentTab('accueil');
     } else if (event.type === 'kiosque_concours') {
       setCurrentTab('pistes');
@@ -689,6 +691,10 @@ export default function App() {
           ];
         });
 
+      // Install Fest : une ligne par ordinateur, champs lisibles (distribution, OS précédent, double démarrage)
+      const installHeader = INSTALL_FEST_EXPORT_HEADER;
+      const installRows = installFestExportRows(tickets);
+
       // Map technicien ID → numéro de table (pour l'export des tickets)
       const techTableMap = new Map(technicians.map(t => [t.id, t.tableNumber ?? '']));
 
@@ -716,6 +722,9 @@ export default function App() {
             escapeCsvCell(t.resultRemarks || ''),
             escapeCsvCell(t.weightKg || '')
           ].join(';')).join('\n');
+        } else if (activeEvent.type === 'install_fest_linux') {
+          content = installHeader.join(';') + "\n";
+          content += installRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         } else if (activeEvent.type === 'kiosque_concours') {
           content = contestHeader.join(';') + "\n";
           content += contestRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
@@ -743,6 +752,10 @@ export default function App() {
           content += "| Nom visiteur | Courriel visiteur | Nom de l'appareil | Catégorie | Système d'exploitation | Diagnostic | Technicien | Table Technicien | Statut | Remarques de résolution | Poids (kg) |\n";
           content += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n";
           content += tickets.map(t => `| ${t.visitorName} | ${t.visitorEmail || ''} | ${t.objectName} | ${t.objectCategory} | ${t.operatingSystem} | ${t.initialDiagnosis || ''} | ${t.assignedTechName || ''} | ${t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''} | ${t.status} | ${t.resultRemarks || ''} | ${t.weightKg || ''} |`).join('\n');
+        } else if (activeEvent.type === 'install_fest_linux') {
+          content += `| ${installHeader.join(' | ')} |\n`;
+          content += `|${installHeader.map(() => ' :--- ').join('|')}|\n`;
+          content += installRows.map(row => `| ${row.join(' | ')} |`).join('\n');
         } else if (activeEvent.type === 'kiosque_concours') {
           content += `| ${contestHeader.join(' | ')} |\n`;
           content += `|${contestHeader.map(() => ' :--- ').join('|')}|\n`;
@@ -771,6 +784,10 @@ export default function App() {
             escapeLatex(t.resultRemarks || ''),
             escapeLatex(t.weightKg || '')
           ].join(' & ') + ' \\\\').join('\n');
+          content += "\n\\end{tabular}\n";
+        } else if (activeEvent.type === 'install_fest_linux') {
+          content += `\\begin{tabular}{${installHeader.map(() => 'l').join(' ')}}\n`;
+          content += installRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else if (activeEvent.type === 'kiosque_concours') {
           content += "\\begin{tabular}{l l l l l l l l}\n";
@@ -815,6 +832,11 @@ export default function App() {
                 protectFormula(t.resultRemarks || ''),
                 t.weightKg || ''
               ])
+            ];
+          } else if (activeEvent.type === 'install_fest_linux') {
+            ws_data = [
+              installHeader,
+              ...installRows.map(row => row.map(cell => protectFormula(cell)))
             ];
           } else if (activeEvent.type === 'kiosque_concours') {
             ws_data = [
@@ -920,7 +942,7 @@ export default function App() {
         localStorage.setItem('insertech_active_event_id', importedEvent.id);
         setActiveEvent(importedEvent);
         
-        if (importedEvent.type === 'reparothon') {
+        if (importedEvent.type === 'reparothon' || importedEvent.type === 'install_fest_linux') {
           setCurrentTab('accueil');
         } else if (importedEvent.type === 'kiosque_concours') {
           setCurrentTab('pistes');
@@ -1807,7 +1829,10 @@ export default function App() {
               onTabBadgesChange={setTabBadges}
             />
           )}
-          {activeEvent.type !== 'reparothon' && activeEvent.type !== 'kiosque_concours' && (
+          {activeEvent.type === 'install_fest_linux' && (
+            <InstallFestMatrix key={activeEvent.id} event={activeEvent} activeTab={currentTab as any} />
+          )}
+          {!['reparothon', 'kiosque_concours', 'install_fest_linux'].includes(activeEvent.type) && (
             <GenericMatrix event={activeEvent} activeTab={currentTab as any} />
           )}
         </DashboardShell>
