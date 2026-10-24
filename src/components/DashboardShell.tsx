@@ -147,6 +147,12 @@ export default function DashboardShell({
       { id: 'techniciens', label: 'Gestion Techniciens' },
       { id: 'public', label: 'Écran Public' }
     ];
+  } else if (event.type === 'install_fest_linux') {
+    tabs = [
+      { id: 'accueil', label: 'Accueil et suivi' },
+      { id: 'techniciens', label: 'Bénévoles' },
+      { id: 'public', label: 'Écran public' }
+    ];
   } else if (event.type === 'kiosque_concours') {
     tabs = [
       { id: 'pistes', label: 'Pistes' },
@@ -177,7 +183,7 @@ export default function DashboardShell({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 text-kiosk-caption font-black uppercase font-display tracking-widest shrink-0">
-                  Concours Insertech
+                  {event.type === 'install_fest_linux' ? 'Install Fest Linux' : 'Concours Insertech'}
                 </span>
                 <h1
                   className="text-app-text font-black tracking-tight uppercase font-display line-clamp-1 sm:line-clamp-2"
