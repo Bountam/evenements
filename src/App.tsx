@@ -36,6 +36,7 @@ import {
 import logoImage from './assets/logo.png';
 import { formatTime } from './components/shared/Stopwatch';
 import { getRaffleDraws } from './utils/raffle';
+import { CONTACT_EXPORT_HEADER, CONTACT_IMPORT_IGNORED, contactExportCells, readContact } from './utils/contact';
 
 // Fenêtre dédiée à l'écran public (ouverte avec ?vue=public) : toujours verrouillée sur l'onglet public
 const IS_PUBLIC_WINDOW =
@@ -668,7 +669,7 @@ export default function App() {
 
       // Kiosque-concours : lignes triées par classement, temps lisible et résultat du tirage.
       // La colonne « Temps (ms) » est conservée pour la réimportation.
-      const contestHeader = ['Rang', 'Nom participant', 'Courriel', 'Code postal', 'Meilleur chrono', 'Temps (ms)', 'Consentement', 'Tirage au sort'];
+      const contestHeader = ['Rang', ...CONTACT_EXPORT_HEADER, 'Meilleur chrono', 'Temps (ms)', 'Tirage au sort'];
       const raffleDraws = getRaffleDraws((await db.events.get(eventId)) || activeEvent);
       const contestRows: Array<Array<string | number>> = [...participants]
         .sort((a, b) => {
@@ -681,12 +682,9 @@ export default function App() {
           const draw = [...raffleDraws].reverse().find(d => d.participantId === p.id);
           return [
             hasTime ? idx + 1 : '',
-            p.name,
-            p.email || '',
-            p.postalCode || '',
+            ...contactExportCells(readContact(p)),
             hasTime ? formatTime(p.timeMs!) : '',
             hasTime ? p.timeMs! : '',
-            p.extraData?.consentContact ? 'Oui' : '',
             draw ? (draw.status === 'gagnant' ? 'Gagnant' : 'Absent') : ''
           ];
         });
@@ -1131,6 +1129,11 @@ export default function App() {
       let idxResultRemarks = -1;
       let idxWeight = -1;
 
+      let idxFirstName = -1;
+      let idxLastName = -1;
+      const contactName = (cols: string[]) =>
+        idxFirstName !== -1 && idxLastName !== -1 ? `${cols[idxFirstName] || ''} ${cols[idxLastName] || ''}`.trim() : '';
+
       let idxPartName = 0;
       let idxPartEmail = 1;
       let idxPartPostal = 2;
@@ -1147,7 +1150,8 @@ export default function App() {
         const headersRaw = rawRows[0].map(h => h.toLowerCase().trim());
         
         const hasReparothon = headersRaw.some(h => h.includes('diagnostic') || h.includes('visiteur') || h.includes('panne') || h.includes('appareil'));
-        const hasKiosque = headersRaw.some(h => h.includes('temps') || h.includes('chrono') || h.includes('postal') || h.includes('participant'));
+        const hasContactColumns = headersRaw.includes('prénom');
+        const hasKiosque = headersRaw.some(h => h.includes('temps') || h.includes('chrono') || (h.includes('postal') && !hasContactColumns) || h.includes('participant'));
         
         if (hasReparothon) {
           type = 'reparothon';
@@ -1158,6 +1162,10 @@ export default function App() {
         }
 
         headersRaw.forEach((h, index) => {
+          // Colonnes du formulaire de contact commun : prénom et nom sont recombinés, les autres ignorées
+          if (h === 'prénom') { idxFirstName = index; return; }
+          if (h === 'nom') { idxLastName = index; return; }
+          if (CONTACT_IMPORT_IGNORED.has(h)) return;
           if (h.includes('nom') && (h.includes('visiteur') || h.includes('client') || h.includes('personne'))) idxVisitorName = index;
           else if (h.includes('courriel') || h.includes('email') || h.includes('mail')) {
             idxVisitorEmail = index;
@@ -1229,7 +1237,7 @@ export default function App() {
 
       for (let i = startIdx; i < rawRows.length; i++) {
         const cols = rawRows[i];
-        if (cols.length === 0 || !cols[0]) {
+        if (cols.length === 0 || cols.every(c => !String(c ?? '').trim())) {
           conflicts.push({
             row: i + 1,
             cell: "Ligne",
@@ -1241,7 +1249,7 @@ export default function App() {
         }
 
         if (type === 'reparothon') {
-          const visitorName = cols[idxVisitorName];
+          const visitorName = contactName(cols) || cols[idxVisitorName];
           const visitorEmail = idxVisitorEmail !== -1 ? cols[idxVisitorEmail] || undefined : undefined;
           let objectName = cols[idxObjectName];
           let category = cols[idxCategory];
@@ -1368,7 +1376,7 @@ export default function App() {
             });
           }
         } else if (type === 'kiosque_concours') {
-          const name = cols[idxPartName];
+          const name = contactName(cols) || cols[idxPartName];
           const email = idxPartEmail !== -1 ? cols[idxPartEmail] || '' : '';
           const postalCode = idxPartPostal !== -1 ? cols[idxPartPostal] || '' : '';
           const timeStr = idxPartTime !== -1 ? cols[idxPartTime] : null;
@@ -1419,7 +1427,7 @@ export default function App() {
             registeredAt: Date.now()
           });
         } else {
-          const name = cols[idxAttName];
+          const name = contactName(cols) || cols[idxAttName];
           const email = idxAttEmail !== -1 ? cols[idxAttEmail] : undefined;
           const presenceStr = idxAttPresence !== -1 ? cols[idxAttPresence] : '';
           const notes = idxAttNotes !== -1 ? cols[idxAttNotes] : undefined;

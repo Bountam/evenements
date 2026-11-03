@@ -17,7 +17,18 @@ import RankBadge from '../shared/RankBadge';
 import StatTile from '../shared/StatTile';
 import RecordChip from '../shared/RecordChip';
 import InlineTimeEditor from '../shared/InlineTimeEditor';
-import TextField from '../shared/TextField';
+import ContactForm from '../shared/ContactForm';
+import {
+  ContactDraft,
+  ContactErrors,
+  buildContactInfo,
+  emptyContactDraft,
+  firstContactError,
+  formatPhone,
+  fullName,
+  readContact,
+  validateContact
+} from '../../utils/contact';
 import type { TabBadge } from '../shared/TabSwitcher';
 import confetti from 'canvas-confetti';
 import {
@@ -28,8 +39,6 @@ import {
   Check,
   Sparkles,
   User,
-  Mail,
-  MapPin,
   Timer,
   Trophy,
   Search,
@@ -125,20 +134,11 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
   // Formulaire d'ajout de participant. Le brouillon est gardé sur l'appareil jusqu'à l'inscription :
   // un rechargement, une fermeture ou une reconnexion ne fait plus perdre une saisie pas encore enregistrée
   const draftKey = `insertech_participant_draft_${event.id}`;
-  const [initialDraft] = useState(() => readParticipantDraft(draftKey));
-  const [newParticipantName, setNewParticipantName] = useState(initialDraft.name);
-  const [newParticipantEmail, setNewParticipantEmail] = useState(initialDraft.email);
-  const [newParticipantPostal, setNewParticipantPostal] = useState(initialDraft.postal);
-  const [newParticipantConsent, setNewParticipantConsent] = useState(initialDraft.consent);
+  const [contactDraft, setContactDraft] = useState(() => readParticipantDraft(draftKey));
   useEffect(() => {
-    writeParticipantDraft(draftKey, {
-      name: newParticipantName,
-      email: newParticipantEmail,
-      postal: newParticipantPostal,
-      consent: newParticipantConsent
-    });
-  }, [draftKey, newParticipantName, newParticipantEmail, newParticipantPostal, newParticipantConsent]);
-  const [formError, setFormError] = useState<{ field: 'name' | 'consent'; message: string } | null>(null);
+    writeParticipantDraft(draftKey, contactDraft);
+  }, [draftKey, contactDraft]);
+  const [contactErrors, setContactErrors] = useState<ContactErrors>({});
   const raffleWinnerName = participants.find((p) => p.id === raffle.winnerId)?.name || 'Tirage complété';
 
   // Focus clavier pendant le tirage : le cockpit devient inert, le focus passe au bandeau,
@@ -647,6 +647,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
           participantId: winner.id,
           name: winner.name,
           email: winner.email || '',
+          phone: readContact(winner).phone,
           postalCode: winner.postalCode || '',
           at: Date.now(),
           status: 'gagnant'
@@ -658,6 +659,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
           raffleWinnerId: winner.id,
           raffleWinnerName: winner.name,
           raffleWinnerEmail: winner.email || '',
+          raffleWinnerPhone: readContact(winner).phone,
           raffleWinnerPostal: winner.postalCode || '',
           raffleWinnerAt: Date.now()
         };
@@ -692,6 +694,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
         raffleWinnerId,
         raffleWinnerName,
         raffleWinnerEmail,
+        raffleWinnerPhone,
         raffleWinnerPostal,
         raffleWinnerAt,
         ...rest
@@ -735,26 +738,27 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
   // ACTIONS PARTICIPANTS
   const addParticipant = async (e: React.FormEvent, autoAssignTrack: boolean = false) => {
     e.preventDefault();
-    if (!newParticipantName.trim()) {
-      setFormError({ field: 'name', message: 'Veuillez saisir le nom du participant.' });
-      document.getElementById('participant-name')?.focus();
+    // Loi 25 : courriel ou téléphone requis pour joindre un gagnant, avec consentement explicite
+    const errors = validateContact(contactDraft, 'contest');
+    setContactErrors(errors);
+    const firstError = firstContactError(errors);
+    if (firstError) {
+      document.getElementById(`participant-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
       return;
     }
-
-    // Loi 25 : pas de coordonnées sans consentement explicite
-    const hasContactInfo = newParticipantEmail.trim() !== '' || newParticipantPostal.trim() !== '';
-    if (hasContactInfo && !newParticipantConsent) {
-      setFormError({ field: 'consent', message: 'Cochez le consentement ou retirez le courriel et le code postal.' });
-      return;
-    }
-    setFormError(null);
+    const contact = buildContactInfo(contactDraft, 'contest', 'kiosque_concours', Date.now());
+    const name = fullName(contact);
 
     // Prévenir les inscriptions en double (une seule chance au tirage par personne)
-    const nameKey = normalizeName(newParticipantName);
-    const emailKey = newParticipantEmail.trim().toLowerCase();
-    const duplicate = participants.find(
-      (p) => normalizeName(p.name) === nameKey || (emailKey !== '' && (p.email || '').trim().toLowerCase() === emailKey)
-    );
+    const nameKey = normalizeName(name);
+    const duplicate = participants.find((p) => {
+      const other = readContact(p);
+      return (
+        normalizeName(p.name) === nameKey ||
+        (contact.email !== '' && (p.email || '').trim().toLowerCase() === contact.email) ||
+        (contact.phone !== '' && other.phone === contact.phone)
+      );
+    });
     if (
       duplicate &&
       !(await confirmDialog({
@@ -771,21 +775,19 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
     const newP: Participant = {
       id: 'p-' + Math.random().toString(36).substring(2, 11),
       eventId: event.id,
-      name: newParticipantName.trim(),
-      email: newParticipantEmail.trim(),
-      postalCode: newParticipantPostal.trim().toUpperCase() || undefined,
+      name,
+      email: contact.email,
+      postalCode: contact.postalCode || undefined,
       timeMs: null,
       registeredAt: Date.now(),
-      ...(hasContactInfo ? { extraData: { consentContact: true, consentAt: Date.now() } } : {})
+      extraData: { contact, consentContact: true, consentAt: contact.consent.activity }
     };
 
     try {
       await networkManager.writeToDatabase('participants', 'put', newP);
       setParticipants((prev) => [newP, ...prev]);
-      setNewParticipantName('');
-      setNewParticipantEmail('');
-      setNewParticipantPostal('');
-      setNewParticipantConsent(false);
+      setContactDraft(emptyContactDraft('contest'));
+      setContactErrors({});
 
       if (autoAssignTrack) {
         const freeTrack = Object.values(tracks).find((t) => t.participantId === null);
@@ -866,7 +868,8 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
         !searchQuery.trim() ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (p.email && p.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (p.postalCode && p.postalCode.toLowerCase().includes(searchQuery.toLowerCase()));
+        (p.postalCode && p.postalCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (searchQuery.replace(/\D/g, '').length >= 3 && readContact(p).phone.includes(searchQuery.replace(/\D/g, '')));
 
       if (!matchesSearch) return false;
 
@@ -1307,76 +1310,16 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
             </h3>
 
             <form onSubmit={(e) => addParticipant(e, false)} className="space-y-2" noValidate>
-              <TextField
-                id="participant-name"
-                label="Nom complet *"
-                icon={User}
-                type="text"
-                autoComplete="name"
-                required
-                aria-required="true"
-                value={newParticipantName}
-                onChange={(e) => {
-                  setNewParticipantName(e.target.value);
-                  setFormError(null);
+              <ContactForm
+                idPrefix="participant"
+                mode="contest"
+                value={contactDraft}
+                onChange={(next) => {
+                  setContactDraft(next);
+                  setContactErrors({});
                 }}
-                placeholder="Jean Tremblay"
-                aria-invalid={formError?.field === 'name' ? true : undefined}
-                aria-describedby={formError?.field === 'name' ? 'participant-form-error' : undefined}
+                errors={contactErrors}
               />
-
-              {/* Courriel et code postal côte à côte quand la colonne est assez large */}
-              <div className="grid grid-cols-1 @xs:grid-cols-5 gap-2">
-                <TextField
-                  id="participant-email"
-                  label="Courriel"
-                  icon={Mail}
-                  type="email"
-                  autoComplete="email"
-                  value={newParticipantEmail}
-                  onChange={(e) => setNewParticipantEmail(e.target.value)}
-                  placeholder="jean@email.com"
-                  className="@xs:col-span-3"
-                />
-                <TextField
-                  id="participant-postal"
-                  label="Code postal"
-                  icon={MapPin}
-                  type="text"
-                  autoComplete="postal-code"
-                  value={newParticipantPostal}
-                  onChange={(e) => setNewParticipantPostal(e.target.value)}
-                  placeholder="H2W 1Y4"
-                  className="@xs:col-span-2"
-                  inputClassName="uppercase"
-                />
-              </div>
-
-              <label className="flex items-start gap-1.5 text-micro leading-snug text-app-text-muted cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newParticipantConsent}
-                  aria-invalid={formError?.field === 'consent'}
-                  aria-describedby={formError?.field === 'consent' ? 'participant-form-error' : undefined}
-                  onChange={(e) => {
-                    setNewParticipantConsent(e.target.checked);
-                    setFormError(null);
-                  }}
-                  className="mt-0.5 accent-[var(--color-primary)] cursor-pointer"
-                />
-                <span>
-                  La personne accepte que son courriel et son code postal servent uniquement à la joindre pour ce concours.
-                  {(newParticipantEmail.trim() || newParticipantPostal.trim()) && !newParticipantConsent && (
-                    <span className="text-warning font-bold"> Requis si un courriel ou un code postal est saisi.</span>
-                  )}
-                </span>
-              </label>
-
-              {formError && (
-                <p id="participant-form-error" role="alert" className="text-xs font-bold text-danger">
-                  {formError.message}
-                </p>
-              )}
 
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
@@ -1448,6 +1391,7 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
                       </h4>
                       <div className="text-micro text-app-text-muted space-y-0.5 font-sans">
                         {last.email && <p className="truncate">Courriel : {last.email}</p>}
+                        {last.phone && <p>Téléphone : {formatPhone(last.phone)}</p>}
                         {last.postalCode && <p>Code postal : {last.postalCode}</p>}
                         <p className="text-micro text-app-text-muted/70 pt-0.5">
                           Tiré à {new Date(last.at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
@@ -2415,27 +2359,34 @@ function normalizeName(name: string): string {
     .trim();
 }
 
-type ParticipantDraft = { name: string; email: string; postal: string; consent: boolean };
-
-function readParticipantDraft(key: string): ParticipantDraft {
-  const empty = { name: '', email: '', postal: '', consent: false };
+// Brouillon du formulaire de contact ; un ancien brouillon (nom complet) est repris dans le prénom
+function readParticipantDraft(key: string): ContactDraft {
+  const empty = emptyContactDraft('contest');
   try {
     const saved = JSON.parse(localStorage.getItem(key) || 'null');
     if (!saved || typeof saved !== 'object') return empty;
-    return {
-      name: typeof saved.name === 'string' ? saved.name : '',
-      email: typeof saved.email === 'string' ? saved.email : '',
-      postal: typeof saved.postal === 'string' ? saved.postal : '',
-      consent: saved.consent === true
-    };
+    if (typeof saved.firstName !== 'string') {
+      return {
+        ...empty,
+        firstName: typeof saved.name === 'string' ? saved.name : '',
+        email: typeof saved.email === 'string' ? saved.email : '',
+        postalCode: typeof saved.postal === 'string' ? saved.postal : '',
+        consentActivity: saved.consent === true
+      };
+    }
+    return { ...empty, ...saved };
   } catch (e) {
     return empty;
   }
 }
 
-function writeParticipantDraft(key: string, draft: ParticipantDraft) {
+function writeParticipantDraft(key: string, draft: ContactDraft) {
   try {
-    if (draft.name || draft.email || draft.postal || draft.consent) localStorage.setItem(key, JSON.stringify(draft));
+    const empty = emptyContactDraft('contest');
+    const touched = (Object.keys(empty) as Array<keyof ContactDraft>).some(
+      (k) => JSON.stringify(draft[k]) !== JSON.stringify(empty[k])
+    );
+    if (touched) localStorage.setItem(key, JSON.stringify(draft));
     else localStorage.removeItem(key);
   } catch (e) {
     // Stockage indisponible (navigation privée) : le formulaire fonctionne sans brouillon

@@ -5,6 +5,7 @@ export interface RaffleDraw {
   participantId: string;
   name: string;
   email: string;
+  phone?: string;
   postalCode: string;
   at: number;
   status: 'gagnant' | 'absent'; // « absent » : non présent à l'annonce, un nouveau tirage a été fait
@@ -20,6 +21,7 @@ export function getRaffleDraws(event: EventSettings): RaffleDraw[] {
         participantId: event.extraData.raffleWinnerId,
         name: event.extraData.raffleWinnerName || '',
         email: event.extraData.raffleWinnerEmail || '',
+        phone: event.extraData.raffleWinnerPhone || '',
         postalCode: event.extraData.raffleWinnerPostal || '',
         at: event.extraData.raffleWinnerAt || Date.now(),
         status: 'gagnant'
