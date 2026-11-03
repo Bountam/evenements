@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
 import MoreMenu from './shared/MoreMenu';
+import VolunteerSurveyButton from './shared/VolunteerSurveyButton';
 import TabSwitcher, { type TabBadge, type TabItem } from './shared/TabSwitcher';
 import BrandLogo from './shared/BrandLogo';
 import Button from './shared/Button';
@@ -345,6 +346,8 @@ export default function DashboardShell({
                   <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
                 </span>
               ))}
+
+              <VolunteerSurveyButton eventId={event.id} />
 
               {/* Commandes rares regroupées : projecteur, thème, sauvegardes */}
               <MoreMenu

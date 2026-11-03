@@ -74,14 +74,17 @@ for (const target of TARGETS) {
 
       // Régie en onglets : chaque onglet n'affiche que sa tâche
       await expect(page.getByRole('tab', { name: 'Pistes' })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.locator('#participant-name')).toHaveCount(0);
+      await expect(page.locator('#participant-firstName')).toHaveCount(0);
       await page.getByRole('tab', { name: 'Participants' }).click();
-      await expect(page.locator('#participant-name')).toBeVisible();
-      await page.locator('#participant-name').fill('Brouillon conservé');
+      await expect(page.locator('#participant-firstName')).toBeVisible();
+      await page.locator('#participant-firstName').fill('Brouillon');
+      await page.locator('#participant-lastName').fill('conservé');
+      await page.locator('#participant-email').fill('brouillon@exemple.com');
+      await page.locator('#participant-consentActivity').check();
       await page.getByRole('tab', { name: 'Tirage' }).click();
       await expect(page.locator('#launch-raffle')).toBeVisible();
       await page.getByRole('tab', { name: 'Participants' }).click();
-      await expect(page.locator('#participant-name')).toHaveValue('Brouillon conservé');
+      await expect(page.locator('#participant-firstName')).toHaveValue('Brouillon');
 
       // Pastille de file d'attente, puis envoi sur piste avec retour aux pistes depuis le toast
       await page.getByRole('button', { name: 'Inscrire le participant' }).click();
@@ -92,7 +95,10 @@ for (const target of TARGETS) {
       await page.getByRole('button', { name: 'Saisir un temps' }).click();
       await expect(page.getByRole('button', { name: "Plus d'actions pour Brouillon conservé" })).toHaveAttribute('aria-expanded', 'false');
 
-      await page.locator('#participant-name').fill('Coureur test');
+      await page.locator('#participant-firstName').fill('Coureur');
+      await page.locator('#participant-lastName').fill('test');
+      await page.locator('#participant-phone').fill('514-555-1234');
+      await page.locator('#participant-consentActivity').check();
       await page.getByRole('button', { name: 'Inscrire et assigner à la première piste libre' }).click();
       await page.getByRole('button', { name: 'Voir les pistes' }).click();
       await expect(page.getByRole('tab', { name: /^Pistes/ })).toHaveAttribute('aria-selected', 'true');

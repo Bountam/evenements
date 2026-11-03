@@ -128,6 +128,37 @@ export interface GenericAttendee {
   tags?: string[];
 }
 
+// Formulaire de contact commun à toutes les activités
+export type VolunteerRole = 'accueil' | 'technique' | 'animation' | 'logistique' | 'communication';
+export type TechSkill = 'windows' | 'mac' | 'linux' | 'cellulaires' | 'soudure' | 'electronique' | 'reseau' | 'son_eclairage';
+export type TshirtSize = '' | 'XS' | 'S' | 'M' | 'L' | 'XL' | '2XL' | '3XL';
+export type ContactMode = 'contest' | 'activity' | 'volunteer';
+export type ContactSource = 'kiosque_concours' | 'reparothon' | 'install_fest_linux' | 'activite' | 'sondage_benevole';
+
+export interface VolunteerProfile {
+  roles: VolunteerRole[];
+  techSkills: TechSkill[]; // vide si 'technique' n'est pas coché
+  hasVehicle: boolean;
+  tshirtSize: TshirtSize;
+  dietaryRestrictions: string;
+  birthDay: number | null; // 1 à 31
+  birthMonth: number | null; // 1 à 12, jamais d'année
+}
+
+export interface ContactInfo {
+  firstName: string;
+  lastName: string;
+  phone: string; // 10 chiffres sans séparateur au Canada ; texte libre si outsideCanada
+  email: string; // en minuscules
+  postalCode: string; // « H2W 1Y4 » au Canada ; texte libre si outsideCanada
+  outsideCanada: boolean;
+  wantsToVolunteer: boolean;
+  volunteer?: VolunteerProfile; // présent seulement si wantsToVolunteer
+  consent: { activity: number | null; volunteer: number | null; newsletter: number | null }; // horodatage ms ou null
+  source: ContactSource;
+  updatedAt: number;
+}
+
 // Système de synchronisation local et réseau P2P
 export type SyncMessage =
   | { type: 'EVENT_CHANGED'; eventId: string }

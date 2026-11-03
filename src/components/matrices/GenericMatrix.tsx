@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { formatTime } from '../shared/Stopwatch';
 import { confirmDialog } from '../shared/ConfirmDialog';
+import ContactForm from '../shared/ContactForm';
+import { ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
 
 interface GenericMatrixProps {
   event: EventSettings;
@@ -18,8 +20,8 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   const [attendees, setAttendees] = useState<GenericAttendee[]>([]);
   
   // États Formulaires
-  const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
+  const [contactDraft, setContactDraft] = useState(() => emptyContactDraft('activity'));
+  const [contactErrors, setContactErrors] = useState<ContactErrors>({});
   const [newNote, setNewNote] = useState('');
   const [newPresence, setNewPresence] = useState(true);
   
@@ -75,7 +77,15 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   // Ajouter un inscrit/présent
   const handleAddAttendee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    // Loi 25 : pas de coordonnées sans consentement explicite
+    const errors = validateContact(contactDraft, 'activity');
+    setContactErrors(errors);
+    const firstError = firstContactError(errors);
+    if (firstError) {
+      document.getElementById(`att-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+      return;
+    }
+    const contact = buildContactInfo(contactDraft, 'activity', 'activite', Date.now());
 
     // Déterminer des tags automatiques selon le type d'événement
     const tags: string[] = [];
@@ -86,18 +96,22 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
     const newAttendee: GenericAttendee = {
       id: 'att-' + Math.random().toString(36).substring(2, 11),
       eventId: event.id,
-      name: newName.trim(),
-      email: newEmail.trim() || undefined,
+      name: fullName(contact),
+      email: contact.email || undefined,
       presenceConfirmed: newPresence,
       notes: newNote.trim() || undefined,
       registeredAt: Date.now(),
-      tags: tags.length > 0 ? tags : undefined
+      tags: tags.length > 0 ? tags : undefined,
+      extraData: {
+        contact,
+        ...(contact.consent.activity ? { consentContact: true, consentAt: contact.consent.activity } : {})
+      }
     };
 
     try {
       await networkManager.writeToDatabase('attendees', 'put', newAttendee);
-      setNewName('');
-      setNewEmail('');
+      setContactDraft(emptyContactDraft('activity'));
+      setContactErrors({});
       setNewNote('');
       setNewPresence(true);
       await loadAttendees();
@@ -311,29 +325,17 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
             <span>Nouvelle inscription</span>
           </h3>
 
-          <form onSubmit={handleAddAttendee} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-300 block">Nom du participant</label>
-              <input
-                type="text"
-                required
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Ex. Sylvain Tremblay"
-                className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-300 block">Adresse courriel</label>
-              <input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="sylvain@email.com"
-                className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
-              />
-            </div>
+          <form onSubmit={handleAddAttendee} className="space-y-4" noValidate>
+            <ContactForm
+              idPrefix="att"
+              mode="activity"
+              value={contactDraft}
+              onChange={(next) => {
+                setContactDraft(next);
+                setContactErrors({});
+              }}
+              errors={contactErrors}
+            />
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase text-slate-300 block">Notes rapides</label>

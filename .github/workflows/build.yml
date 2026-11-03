@@ -15,7 +15,7 @@ permissions:
 jobs:
   web:
     name: "Web : lint, bundle et test de rendu"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 ne prend pas encore en charge Ubuntu 26.04 (ubuntu-latest)
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

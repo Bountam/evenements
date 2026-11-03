@@ -29,6 +29,9 @@ import Modal from './components/shared/Modal';
 import SessionQrPanel from './components/shared/SessionQrPanel';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
+import VolunteerSurveyButton from './components/shared/VolunteerSurveyButton';
+import Button from './components/shared/Button';
+import { downloadAllContactsXlsx } from './utils/contactExport';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -36,6 +39,7 @@ import {
 import logoImage from './assets/logo.png';
 import { formatTime } from './components/shared/Stopwatch';
 import { getRaffleDraws } from './utils/raffle';
+import { CONTACT_EXPORT_HEADER, CONTACT_IMPORT_IGNORED, contactExportCells, protectFormula, readContact } from './utils/contact';
 
 // Fenêtre dédiée à l'écran public (ouverte avec ?vue=public) : toujours verrouillée sur l'onglet public
 const IS_PUBLIC_WINDOW =
@@ -668,7 +672,7 @@ export default function App() {
 
       // Kiosque-concours : lignes triées par classement, temps lisible et résultat du tirage.
       // La colonne « Temps (ms) » est conservée pour la réimportation.
-      const contestHeader = ['Rang', 'Nom participant', 'Courriel', 'Code postal', 'Meilleur chrono', 'Temps (ms)', 'Consentement', 'Tirage au sort'];
+      const contestHeader = ['Rang', ...CONTACT_EXPORT_HEADER, 'Meilleur chrono', 'Temps (ms)', 'Tirage au sort'];
       const raffleDraws = getRaffleDraws((await db.events.get(eventId)) || activeEvent);
       const contestRows: Array<Array<string | number>> = [...participants]
         .sort((a, b) => {
@@ -681,22 +685,54 @@ export default function App() {
           const draw = [...raffleDraws].reverse().find(d => d.participantId === p.id);
           return [
             hasTime ? idx + 1 : '',
-            p.name,
-            p.email || '',
-            p.postalCode || '',
+            ...contactExportCells(readContact(p)),
             hasTime ? formatTime(p.timeMs!) : '',
             hasTime ? p.timeMs! : '',
-            p.extraData?.consentContact ? 'Oui' : '',
             draw ? (draw.status === 'gagnant' ? 'Gagnant' : 'Absent') : ''
           ];
         });
 
+      // Fiches « Devenir bénévole » remplies pendant l'activité : ajoutées à la fin de chaque export,
+      // colonnes propres à l'activité laissées vides
+      const volunteerSurveys = attendees.filter(a => a.extraData?.source === 'sondage_benevole');
+      const surveyRows = (header: string[], contactStart: number) =>
+        volunteerSurveys.map(a => {
+          const row: Array<string | number> = new Array(header.length).fill('');
+          row.splice(contactStart, CONTACT_EXPORT_HEADER.length, ...contactExportCells(readContact(a)));
+          return row;
+        });
+      contestRows.push(...surveyRows(contestHeader, 1));
+
       // Install Fest : une ligne par ordinateur, champs lisibles (distribution, OS précédent, double démarrage)
       const installHeader = INSTALL_FEST_EXPORT_HEADER;
-      const installRows = installFestExportRows(tickets);
+      const installRows: Array<Array<string | number>> = [...installFestExportRows(tickets), ...surveyRows(INSTALL_FEST_EXPORT_HEADER, 0)];
 
       // Map technicien ID → numéro de table (pour l'export des tickets)
       const techTableMap = new Map(technicians.map(t => [t.id, t.tableNumber ?? '']));
+
+      // Réparothon et autres activités (CSV et xlsx) : colonnes du formulaire de contact commun en tête
+      const repairHeader = [...CONTACT_EXPORT_HEADER, "Nom de l'appareil", 'Catégorie', "Système d'exploitation", 'Diagnostic', 'Technicien', 'Table Technicien', 'Statut', 'Remarques de résolution', 'Poids (kg)'];
+      const repairRows: Array<Array<string | number>> = tickets.map(t => [
+        ...contactExportCells(readContact(t)),
+        t.objectName,
+        t.objectCategory,
+        t.operatingSystem,
+        t.initialDiagnosis || '',
+        t.assignedTechName || '',
+        t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : '',
+        t.status,
+        t.resultRemarks || '',
+        t.weightKg || ''
+      ]);
+      repairRows.push(...surveyRows(repairHeader, 0));
+      const attendeeHeader = [...CONTACT_EXPORT_HEADER, 'Présent', 'Notes', 'Note de satisfaction', 'Commentaire'];
+      const attendeeRows: Array<Array<string | number>> = attendees.map(a => [
+        ...contactExportCells(readContact(a)),
+        a.presenceConfirmed ? 'Oui' : 'Non',
+        a.notes || '',
+        a.feedbackScore || '',
+        a.feedbackText || ''
+      ]);
 
       let content = '';
       let mimeType = 'text/plain';
@@ -708,20 +744,8 @@ export default function App() {
       } else if (format === 'csv') {
         mimeType = 'text/csv;charset=utf-8;';
         if (activeEvent.type === 'reparothon') {
-          content = "Nom visiteur;Courriel visiteur;Nom de l'appareil;Catégorie;Système d'exploitation;Diagnostic;Technicien;Table Technicien;Statut;Remarques de résolution;Poids (kg)\n";
-          content += tickets.map(t => [
-            escapeCsvCell(t.visitorName),
-            escapeCsvCell(t.visitorEmail || ''),
-            escapeCsvCell(t.objectName),
-            escapeCsvCell(t.objectCategory),
-            escapeCsvCell(t.operatingSystem),
-            escapeCsvCell(t.initialDiagnosis || ''),
-            escapeCsvCell(t.assignedTechName || ''),
-            escapeCsvCell(t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''),
-            escapeCsvCell(t.status),
-            escapeCsvCell(t.resultRemarks || ''),
-            escapeCsvCell(t.weightKg || '')
-          ].join(';')).join('\n');
+          content = repairHeader.join(';') + "\n";
+          content += repairRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         } else if (activeEvent.type === 'install_fest_linux') {
           content = installHeader.join(';') + "\n";
           content += installRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
@@ -729,15 +753,8 @@ export default function App() {
           content = contestHeader.join(';') + "\n";
           content += contestRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         } else {
-          content = "Nom;Courriel;Présent;Notes;Note de satisfaction;Commentaire\n";
-          content += attendees.map(a => [
-            escapeCsvCell(a.name),
-            escapeCsvCell(a.email || ''),
-            escapeCsvCell(a.presenceConfirmed ? 'Oui' : 'Non'),
-            escapeCsvCell(a.notes || ''),
-            escapeCsvCell(a.feedbackScore || ''),
-            escapeCsvCell(a.feedbackText || '')
-          ].join(';')).join('\n');
+          content = attendeeHeader.join(';') + "\n";
+          content += attendeeRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         }
       } else if (format === 'md') {
         mimeType = 'text/markdown';
@@ -790,7 +807,7 @@ export default function App() {
           content += installRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else if (activeEvent.type === 'kiosque_concours') {
-          content += "\\begin{tabular}{l l l l l l l l}\n";
+          content += `\\begin{tabular}{${contestHeader.map(() => 'l').join(' ')}}\n`;
           content += contestRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else {
@@ -808,30 +825,11 @@ export default function App() {
         content += "\n\\end{document}\n";
       } else if (format === 'xlsx') {
         try {
-          const protectFormula = (val: any) => {
-            if (typeof val === 'string' && ['=', '+', '-', '@'].some(c => val.startsWith(c))) {
-              return "'" + val;
-            }
-            return val;
-          };
-
           let ws_data: any[][] = [];
           if (activeEvent.type === 'reparothon') {
             ws_data = [
-              ["Nom visiteur", "Courriel visiteur", "Nom de l'appareil", "Catégorie", "Système d'exploitation", "Diagnostic", "Technicien", "Table Technicien", "Statut", "Remarques de résolution", "Poids (kg)"],
-              ...tickets.map(t => [
-                protectFormula(t.visitorName),
-                protectFormula(t.visitorEmail || ''),
-                protectFormula(t.objectName),
-                protectFormula(t.objectCategory),
-                protectFormula(t.operatingSystem),
-                protectFormula(t.initialDiagnosis || ''),
-                protectFormula(t.assignedTechName || ''),
-                protectFormula(t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''),
-                protectFormula(t.status),
-                protectFormula(t.resultRemarks || ''),
-                t.weightKg || ''
-              ])
+              repairHeader,
+              ...repairRows.map(row => row.map(cell => protectFormula(cell)))
             ];
           } else if (activeEvent.type === 'install_fest_linux') {
             ws_data = [
@@ -845,15 +843,8 @@ export default function App() {
             ];
           } else {
             ws_data = [
-              ["Nom", "Courriel", "Présent", "Notes", "Note de satisfaction", "Commentaire"],
-              ...attendees.map(a => [
-                protectFormula(a.name),
-                protectFormula(a.email || ''),
-                a.presenceConfirmed ? 'Oui' : 'Non',
-                protectFormula(a.notes || ''),
-                a.feedbackScore || '',
-                protectFormula(a.feedbackText || '')
-              ])
+              attendeeHeader,
+              ...attendeeRows.map(row => row.map(cell => protectFormula(cell)))
             ];
           }
 
@@ -861,6 +852,8 @@ export default function App() {
           const XLSX = await import('xlsx');
           const wb = XLSX.utils.book_new();
           const ws = XLSX.utils.aoa_to_sheet(ws_data);
+          // Filtre automatique : « Technique = Oui » en deux clics dans Excel
+          if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
           XLSX.utils.book_append_sheet(wb, ws, "Export");
           const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
 
@@ -1131,6 +1124,11 @@ export default function App() {
       let idxResultRemarks = -1;
       let idxWeight = -1;
 
+      let idxFirstName = -1;
+      let idxLastName = -1;
+      const contactName = (cols: string[]) =>
+        idxFirstName !== -1 && idxLastName !== -1 ? `${cols[idxFirstName] || ''} ${cols[idxLastName] || ''}`.trim() : '';
+
       let idxPartName = 0;
       let idxPartEmail = 1;
       let idxPartPostal = 2;
@@ -1147,7 +1145,8 @@ export default function App() {
         const headersRaw = rawRows[0].map(h => h.toLowerCase().trim());
         
         const hasReparothon = headersRaw.some(h => h.includes('diagnostic') || h.includes('visiteur') || h.includes('panne') || h.includes('appareil'));
-        const hasKiosque = headersRaw.some(h => h.includes('temps') || h.includes('chrono') || h.includes('postal') || h.includes('participant'));
+        const hasContactColumns = headersRaw.includes('prénom');
+        const hasKiosque = headersRaw.some(h => h.includes('temps') || h.includes('chrono') || (h.includes('postal') && !hasContactColumns) || h.includes('participant'));
         
         if (hasReparothon) {
           type = 'reparothon';
@@ -1158,6 +1157,10 @@ export default function App() {
         }
 
         headersRaw.forEach((h, index) => {
+          // Colonnes du formulaire de contact commun : prénom et nom sont recombinés, les autres ignorées
+          if (h === 'prénom') { idxFirstName = index; return; }
+          if (h === 'nom') { idxLastName = index; return; }
+          if (CONTACT_IMPORT_IGNORED.has(h)) return;
           if (h.includes('nom') && (h.includes('visiteur') || h.includes('client') || h.includes('personne'))) idxVisitorName = index;
           else if (h.includes('courriel') || h.includes('email') || h.includes('mail')) {
             idxVisitorEmail = index;
@@ -1229,7 +1232,7 @@ export default function App() {
 
       for (let i = startIdx; i < rawRows.length; i++) {
         const cols = rawRows[i];
-        if (cols.length === 0 || !cols[0]) {
+        if (cols.length === 0 || cols.every(c => !String(c ?? '').trim())) {
           conflicts.push({
             row: i + 1,
             cell: "Ligne",
@@ -1241,7 +1244,7 @@ export default function App() {
         }
 
         if (type === 'reparothon') {
-          const visitorName = cols[idxVisitorName];
+          const visitorName = contactName(cols) || cols[idxVisitorName];
           const visitorEmail = idxVisitorEmail !== -1 ? cols[idxVisitorEmail] || undefined : undefined;
           let objectName = cols[idxObjectName];
           let category = cols[idxCategory];
@@ -1368,7 +1371,7 @@ export default function App() {
             });
           }
         } else if (type === 'kiosque_concours') {
-          const name = cols[idxPartName];
+          const name = contactName(cols) || cols[idxPartName];
           const email = idxPartEmail !== -1 ? cols[idxPartEmail] || '' : '';
           const postalCode = idxPartPostal !== -1 ? cols[idxPartPostal] || '' : '';
           const timeStr = idxPartTime !== -1 ? cols[idxPartTime] : null;
@@ -1419,7 +1422,7 @@ export default function App() {
             registeredAt: Date.now()
           });
         } else {
-          const name = cols[idxAttName];
+          const name = contactName(cols) || cols[idxAttName];
           const email = idxAttEmail !== -1 ? cols[idxAttEmail] : undefined;
           const presenceStr = idxAttPresence !== -1 ? cols[idxAttPresence] : '';
           const notes = idxAttNotes !== -1 ? cols[idxAttNotes] : undefined;
@@ -1890,6 +1893,27 @@ export default function App() {
                 <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
               </span>
             ))}
+
+            {/* Fiche bénévole remplie hors activité : elle va au registre des bénévoles */}
+            <VolunteerSurveyButton />
+
+            {/* Tous les contacts de toutes les activités dans un seul onglet xlsx */}
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  const count = await downloadAllContactsXlsx();
+                  showToast(`${count} contact${count > 1 ? 's' : ''} exporté${count > 1 ? 's' : ''} (xlsx).`, 'success');
+                } catch (err) {
+                  console.error(err);
+                  showToast("Erreur lors de l'export des contacts.", 'error');
+                }
+              }}
+              title="Exporter tous les contacts de toutes les activités dans un seul fichier Excel"
+            >
+              <Download size={14} className="text-primary" aria-hidden="true" />
+              <span>Exporter tous les contacts (xlsx)</span>
+            </Button>
 
             {/* Bouton Thème */}
             <ThemeToggle isLightTheme={isLightTheme} onToggle={() => setIsLightTheme(!isLightTheme)} />
