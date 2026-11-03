@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 const URL = pathToFileURL(path.resolve('dist/index.html')).href;
 
@@ -147,4 +148,43 @@ test('Devenir bénévole : sondage autonome et registre des bénévoles', async 
 
   await expect(page.getByText('Registre des bénévoles').first()).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+// Export global : un seul onglet « Contacts », une colonne Oui par rôle pour filtrer dans Excel
+test('Exporter tous les contacts : un onglet, colonnes de ciblage', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(URL);
+  await page.getByRole('button', { name: 'Devenir bénévole' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Devenir bénévole' });
+  await dialog.locator('#vol-firstName').fill('Nadia');
+  await dialog.locator('#vol-lastName').fill('Pelletier');
+  await dialog.locator('#vol-phone').fill('5145551234');
+  await dialog.getByLabel('Technique', { exact: true }).check();
+  await dialog.getByLabel('Linux', { exact: true }).check();
+  await dialog.locator('#vol-consentVolunteer').check();
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByText('Merci ! Fiche bénévole enregistrée.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Exporter tous les contacts (xlsx)' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^contacts_insertech_\d{4}-\d{2}-\d{2}\.xlsx$/);
+
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.read(readFileSync(await download.path()));
+  expect(workbook.SheetNames).toEqual(['Contacts']);
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets.Contacts, { defval: '' });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    Activité: 'Registre des bénévoles',
+    Source: 'Sondage bénévole',
+    Prénom: 'Nadia',
+    Nom: 'Pelletier',
+    Téléphone: '514 555-1234',
+    Bénévole: 'Oui',
+    Technique: 'Oui',
+    Linux: 'Oui',
+    Accueil: ''
+  });
 });

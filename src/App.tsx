@@ -30,6 +30,8 @@ import SessionQrPanel from './components/shared/SessionQrPanel';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
 import VolunteerSurveyButton from './components/shared/VolunteerSurveyButton';
+import Button from './components/shared/Button';
+import { downloadAllContactsXlsx } from './utils/contactExport';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -850,6 +852,8 @@ export default function App() {
           const XLSX = await import('xlsx');
           const wb = XLSX.utils.book_new();
           const ws = XLSX.utils.aoa_to_sheet(ws_data);
+          // Filtre automatique : « Technique = Oui » en deux clics dans Excel
+          if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
           XLSX.utils.book_append_sheet(wb, ws, "Export");
           const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
 
@@ -1892,6 +1896,24 @@ export default function App() {
 
             {/* Fiche bénévole remplie hors activité : elle va au registre des bénévoles */}
             <VolunteerSurveyButton />
+
+            {/* Tous les contacts de toutes les activités dans un seul onglet xlsx */}
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  const count = await downloadAllContactsXlsx();
+                  showToast(`${count} contact${count > 1 ? 's' : ''} exporté${count > 1 ? 's' : ''} (xlsx).`, 'success');
+                } catch (err) {
+                  console.error(err);
+                  showToast("Erreur lors de l'export des contacts.", 'error');
+                }
+              }}
+              title="Exporter tous les contacts de toutes les activités dans un seul fichier Excel"
+            >
+              <Download size={14} className="text-primary" aria-hidden="true" />
+              <span>Exporter tous les contacts (xlsx)</span>
+            </Button>
 
             {/* Bouton Thème */}
             <ThemeToggle isLightTheme={isLightTheme} onToggle={() => setIsLightTheme(!isLightTheme)} />
