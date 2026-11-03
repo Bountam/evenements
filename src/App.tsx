@@ -36,7 +36,7 @@ import {
 import logoImage from './assets/logo.png';
 import { formatTime } from './components/shared/Stopwatch';
 import { getRaffleDraws } from './utils/raffle';
-import { CONTACT_EXPORT_HEADER, CONTACT_IMPORT_IGNORED, contactExportCells, readContact } from './utils/contact';
+import { CONTACT_EXPORT_HEADER, CONTACT_IMPORT_IGNORED, contactExportCells, protectFormula, readContact } from './utils/contact';
 
 // Fenêtre dédiée à l'écran public (ouverte avec ?vue=public) : toujours verrouillée sur l'onglet public
 const IS_PUBLIC_WINDOW =
@@ -696,6 +696,29 @@ export default function App() {
       // Map technicien ID → numéro de table (pour l'export des tickets)
       const techTableMap = new Map(technicians.map(t => [t.id, t.tableNumber ?? '']));
 
+      // Réparothon et autres activités (CSV et xlsx) : colonnes du formulaire de contact commun en tête
+      const repairHeader = [...CONTACT_EXPORT_HEADER, "Nom de l'appareil", 'Catégorie', "Système d'exploitation", 'Diagnostic', 'Technicien', 'Table Technicien', 'Statut', 'Remarques de résolution', 'Poids (kg)'];
+      const repairRows: Array<Array<string | number>> = tickets.map(t => [
+        ...contactExportCells(readContact(t)),
+        t.objectName,
+        t.objectCategory,
+        t.operatingSystem,
+        t.initialDiagnosis || '',
+        t.assignedTechName || '',
+        t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : '',
+        t.status,
+        t.resultRemarks || '',
+        t.weightKg || ''
+      ]);
+      const attendeeHeader = [...CONTACT_EXPORT_HEADER, 'Présent', 'Notes', 'Note de satisfaction', 'Commentaire'];
+      const attendeeRows: Array<Array<string | number>> = attendees.map(a => [
+        ...contactExportCells(readContact(a)),
+        a.presenceConfirmed ? 'Oui' : 'Non',
+        a.notes || '',
+        a.feedbackScore || '',
+        a.feedbackText || ''
+      ]);
+
       let content = '';
       let mimeType = 'text/plain';
       let fileName = `insertech_export_${activeEvent.type}_${activeEvent.date}.${format}`;
@@ -706,20 +729,8 @@ export default function App() {
       } else if (format === 'csv') {
         mimeType = 'text/csv;charset=utf-8;';
         if (activeEvent.type === 'reparothon') {
-          content = "Nom visiteur;Courriel visiteur;Nom de l'appareil;Catégorie;Système d'exploitation;Diagnostic;Technicien;Table Technicien;Statut;Remarques de résolution;Poids (kg)\n";
-          content += tickets.map(t => [
-            escapeCsvCell(t.visitorName),
-            escapeCsvCell(t.visitorEmail || ''),
-            escapeCsvCell(t.objectName),
-            escapeCsvCell(t.objectCategory),
-            escapeCsvCell(t.operatingSystem),
-            escapeCsvCell(t.initialDiagnosis || ''),
-            escapeCsvCell(t.assignedTechName || ''),
-            escapeCsvCell(t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''),
-            escapeCsvCell(t.status),
-            escapeCsvCell(t.resultRemarks || ''),
-            escapeCsvCell(t.weightKg || '')
-          ].join(';')).join('\n');
+          content = repairHeader.join(';') + "\n";
+          content += repairRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         } else if (activeEvent.type === 'install_fest_linux') {
           content = installHeader.join(';') + "\n";
           content += installRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
@@ -727,15 +738,8 @@ export default function App() {
           content = contestHeader.join(';') + "\n";
           content += contestRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         } else {
-          content = "Nom;Courriel;Présent;Notes;Note de satisfaction;Commentaire\n";
-          content += attendees.map(a => [
-            escapeCsvCell(a.name),
-            escapeCsvCell(a.email || ''),
-            escapeCsvCell(a.presenceConfirmed ? 'Oui' : 'Non'),
-            escapeCsvCell(a.notes || ''),
-            escapeCsvCell(a.feedbackScore || ''),
-            escapeCsvCell(a.feedbackText || '')
-          ].join(';')).join('\n');
+          content = attendeeHeader.join(';') + "\n";
+          content += attendeeRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
         }
       } else if (format === 'md') {
         mimeType = 'text/markdown';
@@ -788,7 +792,7 @@ export default function App() {
           content += installRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else if (activeEvent.type === 'kiosque_concours') {
-          content += "\\begin{tabular}{l l l l l l l l}\n";
+          content += `\\begin{tabular}{${contestHeader.map(() => 'l').join(' ')}}\n`;
           content += contestRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
           content += "\n\\end{tabular}\n";
         } else {
@@ -806,30 +810,11 @@ export default function App() {
         content += "\n\\end{document}\n";
       } else if (format === 'xlsx') {
         try {
-          const protectFormula = (val: any) => {
-            if (typeof val === 'string' && ['=', '+', '-', '@'].some(c => val.startsWith(c))) {
-              return "'" + val;
-            }
-            return val;
-          };
-
           let ws_data: any[][] = [];
           if (activeEvent.type === 'reparothon') {
             ws_data = [
-              ["Nom visiteur", "Courriel visiteur", "Nom de l'appareil", "Catégorie", "Système d'exploitation", "Diagnostic", "Technicien", "Table Technicien", "Statut", "Remarques de résolution", "Poids (kg)"],
-              ...tickets.map(t => [
-                protectFormula(t.visitorName),
-                protectFormula(t.visitorEmail || ''),
-                protectFormula(t.objectName),
-                protectFormula(t.objectCategory),
-                protectFormula(t.operatingSystem),
-                protectFormula(t.initialDiagnosis || ''),
-                protectFormula(t.assignedTechName || ''),
-                protectFormula(t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''),
-                protectFormula(t.status),
-                protectFormula(t.resultRemarks || ''),
-                t.weightKg || ''
-              ])
+              repairHeader,
+              ...repairRows.map(row => row.map(cell => protectFormula(cell)))
             ];
           } else if (activeEvent.type === 'install_fest_linux') {
             ws_data = [
@@ -843,15 +828,8 @@ export default function App() {
             ];
           } else {
             ws_data = [
-              ["Nom", "Courriel", "Présent", "Notes", "Note de satisfaction", "Commentaire"],
-              ...attendees.map(a => [
-                protectFormula(a.name),
-                protectFormula(a.email || ''),
-                a.presenceConfirmed ? 'Oui' : 'Non',
-                protectFormula(a.notes || ''),
-                a.feedbackScore || '',
-                protectFormula(a.feedbackText || '')
-              ])
+              attendeeHeader,
+              ...attendeeRows.map(row => row.map(cell => protectFormula(cell)))
             ];
           }
 

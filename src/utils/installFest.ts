@@ -1,8 +1,9 @@
 import { EventSettings, RepairTicket, OperatingSystem, TicketStatus } from '../types';
+import { CONTACT_EXPORT_HEADER, contactExportCells, readContact } from './contact';
 
 // Install Fest Linux : les fiches réutilisent la table « tickets » du réparothon.
 // Champs propres à l'Install Fest rangés dans ticket.extraData :
-// distro, previousOS, dualBoot, dataBackup, consentContact, consentAt.
+// distro, previousOS, dualBoot, dataBackup, contact, consentContact, consentAt.
 
 export const DEFAULT_DISTROS = ['Linux Mint', 'Ubuntu', 'Kubuntu', 'Zorin OS', 'Fedora', 'Debian', 'elementary OS'];
 
@@ -59,17 +60,15 @@ export const isInstallDone = (t: RepairTicket) => t.status === 'repare' || t.sta
 export const isInstallFailed = (t: RepairTicket) => t.status === 'non_reparable' || t.status === 'abandonne';
 
 export const INSTALL_FEST_EXPORT_HEADER = [
-  'Nom', 'Courriel', 'Consentement', 'Appareil', 'Marque et modèle', 'OS précédent', 'Distribution',
-  'Double démarrage', 'Données sauvegardées', 'Bénévole', 'Statut', 'Notes', 'Remarques'
+  ...CONTACT_EXPORT_HEADER, 'Appareil', 'Marque et modèle', 'OS précédent', 'Distribution',
+  'Double démarrage', 'Données sauvegardées', 'Installé par', 'Statut', 'Notes', 'Remarques'
 ];
 
 export const installFestExportRows = (tickets: RepairTicket[]): string[][] =>
   [...tickets]
     .sort((a, b) => a.createdAt - b.createdAt)
     .map(t => [
-      t.visitorName,
-      t.visitorEmail || '',
-      t.extraData?.consentContact ? 'Oui' : '',
+      ...contactExportCells(readContact(t)),
       deviceLabel(t.objectCategory),
       t.objectName,
       previousOSLabel(t.extraData?.previousOS),

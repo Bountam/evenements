@@ -8,6 +8,8 @@ import confetti from 'canvas-confetti';
 import { showToast } from '../shared/Toast';
 import { confirmDialog } from '../shared/ConfirmDialog';
 import { fieldLabelClass, fieldInputClass } from '../shared/TextField';
+import ContactForm from '../shared/ContactForm';
+import { ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
 import {
   DEFAULT_DISTROS, PREVIOUS_OS_OPTIONS, DEVICE_OPTIONS, INSTALL_STATUS_LABELS, MAX_COMPUTERS_PER_VOLUNTEER,
   getEventDistros, previousOSLabel, deviceLabel, toOperatingSystem, isInstallActive, isInstallDone, isInstallFailed
@@ -74,9 +76,8 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
   const [statusFilter, setStatusFilter] = useState<'all' | 'attente' | 'cours' | 'termine' | 'echec'>('all');
 
   // Formulaire d'inscription
-  const [visitorName, setVisitorName] = useState('');
-  const [visitorEmail, setVisitorEmail] = useState('');
-  const [consent, setConsent] = useState(false);
+  const [contactDraft, setContactDraft] = useState(() => emptyContactDraft('activity'));
+  const [contactErrors, setContactErrors] = useState<ContactErrors>({});
   const [category, setCategory] = useState<DeviceCategory>('laptop');
   const [brandModel, setBrandModel] = useState('');
   const [previousOS, setPreviousOS] = useState('windows_10');
@@ -171,13 +172,12 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
   // INSCRIPTION
   const handleAddTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!visitorName.trim()) {
-      setFormError('Entrez le nom de la personne.');
-      return;
-    }
-    // Loi 25 : pas de courriel sans consentement explicite
-    if (visitorEmail.trim() && !consent) {
-      setFormError('Cochez le consentement ou retirez le courriel.');
+    // Loi 25 : pas de coordonnées sans consentement explicite
+    const errors = validateContact(contactDraft, 'activity');
+    setContactErrors(errors);
+    const firstError = firstContactError(errors);
+    if (firstError) {
+      document.getElementById(`if-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
       return;
     }
     const chosenDistro = distro === OTHER_DISTRO ? otherDistro.trim() : distro;
@@ -188,11 +188,12 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
     setFormError(null);
 
     const now = Date.now();
+    const contact = buildContactInfo(contactDraft, 'activity', 'install_fest_linux', now);
     const ticket: RepairTicket = {
       id: 'tkt-' + Math.random().toString(36).substring(2, 11),
       eventId: event.id,
-      visitorName: visitorName.trim(),
-      visitorEmail: visitorEmail.trim() || undefined,
+      visitorName: fullName(contact),
+      visitorEmail: contact.email || undefined,
       objectName: brandModel.trim() || deviceLabel(category),
       objectCategory: category,
       operatingSystem: toOperatingSystem(previousOS),
@@ -209,15 +210,15 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
         previousOS,
         dualBoot,
         dataBackup: false,
-        ...(visitorEmail.trim() ? { consentContact: true, consentAt: now } : {})
+        contact,
+        ...(contact.consent.activity ? { consentContact: true, consentAt: contact.consent.activity } : {})
       }
     };
 
     try {
       await networkManager.writeToDatabase('tickets', 'put', ticket);
-      setVisitorName('');
-      setVisitorEmail('');
-      setConsent(false);
+      setContactDraft(emptyContactDraft('activity'));
+      setContactErrors({});
       setBrandModel('');
       setOtherDistro('');
       setDualBoot(false);
@@ -571,21 +572,16 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
           </h3>
 
           <form onSubmit={handleAddTicket} className="space-y-3" noValidate>
-            <div className="space-y-0.5">
-              <label htmlFor="if-name" className={fieldLabelClass}>Nom de la personne</label>
-              <input id="if-name" type="text" value={visitorName} onChange={e => setVisitorName(e.target.value)} placeholder="Ex. Martine Bouchard" className={`${fieldInputClass} min-h-9`} />
-            </div>
-
-            <div className="space-y-0.5">
-              <label htmlFor="if-email" className={fieldLabelClass}>Courriel (facultatif)</label>
-              <input id="if-email" type="email" value={visitorEmail} onChange={e => setVisitorEmail(e.target.value)} placeholder="martine@email.com" className={`${fieldInputClass} min-h-9`} />
-            </div>
-            {visitorEmail.trim() && (
-              <label className="flex items-start gap-2 text-xs text-app-text cursor-pointer">
-                <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-0.5 accent-primary" />
-                <span>La personne accepte qu'on conserve son courriel pour la recontacter (Loi 25).</span>
-              </label>
-            )}
+            <ContactForm
+              idPrefix="if"
+              mode="activity"
+              value={contactDraft}
+              onChange={(next) => {
+                setContactDraft(next);
+                setContactErrors({});
+              }}
+              errors={contactErrors}
+            />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-0.5">

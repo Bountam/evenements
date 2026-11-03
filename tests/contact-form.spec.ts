@@ -80,3 +80,38 @@ test('Formulaire de contact : validation, formats canadiens et questionnaire bé
 
   expect(errors).toEqual([]);
 });
+
+// Même formulaire au réparothon et dans les autres activités : consentement requis dès qu'une coordonnée est saisie
+test('Formulaire de contact : réparothon et activité générique', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(URL);
+
+  await page.getByRole('radio', { name: /^Réparothon/ }).click();
+  await page.locator('#eventName').fill('Réparothon CI');
+  await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
+  await page.getByRole('button', { name: "Créer l'activité" }).click();
+  await page.locator('#rp-firstName').fill('Sophie');
+  await page.locator('#rp-lastName').fill('Côté');
+  await page.locator('#rp-phone').fill('438 555 9876');
+  await page.getByPlaceholder('Ex. Asus ZenBook 14 ou Samsung S21').fill('Samsung S20');
+  await page.getByPlaceholder("Ex. L'ordinateur surchauffe et s'éteint après 5 minutes de jeu.").fill('Écran fissuré');
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page.getByText('Cochez ce consentement ou retirez les coordonnées.')).toBeVisible();
+  await page.locator('#rp-consentActivity').check();
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page.getByRole('heading', { name: 'Sophie Côté' }).first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Menu principal' }).click();
+  await page.getByRole('radio', { name: /Fresque du Numérique/ }).click();
+  await page.locator('#eventName').fill('Fresque CI');
+  await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
+  await page.getByRole('button', { name: "Créer l'activité" }).click();
+  await page.locator('#att-firstName').fill('Jean');
+  await page.locator('#att-lastName').fill('Tremblay');
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page.getByText('Jean Tremblay').first()).toBeVisible();
+
+  expect(errors).toEqual([]);
+});

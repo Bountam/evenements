@@ -10,6 +10,8 @@ import confetti from 'canvas-confetti';
 import { showToast } from '../shared/Toast';
 import { confirmDialog } from '../shared/ConfirmDialog';
 import { clampNumber } from '../../utils/security';
+import ContactForm from '../shared/ContactForm';
+import { CONTACT_IMPORT_IGNORED, ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
 
 interface ReparothonMatrixProps {
   event: EventSettings;
@@ -51,8 +53,8 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   const [statusFilter, setStatusFilter] = useState<string>('all');
   
   // États Formulaires
-  const [newVisitorName, setNewVisitorName] = useState('');
-  const [newVisitorEmail, setNewVisitorEmail] = useState('');
+  const [contactDraft, setContactDraft] = useState(() => emptyContactDraft('activity'));
+  const [contactErrors, setContactErrors] = useState<ContactErrors>({});
   const [newObjectName, setNewObjectName] = useState('');
   const [newCategory, setNewCategory] = useState<DeviceCategory>('laptop');
   const [newOS, setNewOS] = useState<OperatingSystem>('windows');
@@ -195,13 +197,22 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   // ACTIONS TICKETS
   const handleAddTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVisitorName.trim() || !newObjectName.trim()) return;
+    if (!newObjectName.trim()) return;
+    // Loi 25 : pas de coordonnées sans consentement explicite
+    const errors = validateContact(contactDraft, 'activity');
+    setContactErrors(errors);
+    const firstError = firstContactError(errors);
+    if (firstError) {
+      document.getElementById(`rp-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+      return;
+    }
+    const contact = buildContactInfo(contactDraft, 'activity', 'reparothon', Date.now());
 
     const newTicket: RepairTicket = {
       id: 'tkt-' + Math.random().toString(36).substring(2, 11),
       eventId: event.id,
-      visitorName: newVisitorName.trim(),
-      visitorEmail: newVisitorEmail.trim() || undefined,
+      visitorName: fullName(contact),
+      visitorEmail: contact.email || undefined,
       objectName: newObjectName.trim(),
       objectCategory: newCategory,
       operatingSystem: newOS,
@@ -212,13 +223,17 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
       resultRemarks: '',
       weightKg: Number(newWeight) || 0,
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      extraData: {
+        contact,
+        ...(contact.consent.activity ? { consentContact: true, consentAt: contact.consent.activity } : {})
+      }
     };
 
     try {
       await networkManager.writeToDatabase('tickets', 'put', newTicket);
-      setNewVisitorName('');
-      setNewVisitorEmail('');
+      setContactDraft(emptyContactDraft('activity'));
+      setContactErrors({});
       setNewObjectName('');
       setNewDiagnosis('');
       setNewWeight(1.5);
@@ -447,18 +462,24 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
       // Parser les en-têtes
       const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
       
-      // Index des colonnes
-      let idxVisitor = headers.findIndex(h => h.includes('visiteur') || h.includes('nom') || h.includes('client') || h.includes('visitor') || h.includes('name'));
-      let idxVisitorEmail = headers.findIndex(h => h.includes('courriel') || h.includes('email') || h.includes('mail'));
-      let idxObject = headers.findIndex(h => h.includes('appareil') || h.includes('objet') || h.includes('modèle') || h.includes('device') || h.includes('object') || h.includes('modele'));
-      let idxCategory = headers.findIndex(h => h.includes('catégorie') || h.includes('type') || h.includes('category') || h.includes('categorie'));
-      let idxOS = headers.findIndex(h => h.includes('os') || h.includes('système') || h.includes('system') || h.includes('operating'));
-      let idxDiagnosis = headers.findIndex(h => h.includes('diagnostic') || h.includes('panne') || h.includes('symptome') || h.includes('symptôme') || h.includes('description') || h.includes('diagnosis'));
-      let idxTech = headers.findIndex(h => h.includes('technicien') || h.includes('bénévole') || h.includes('tech') || h.includes('assigné') || h.includes('assigned') || h.includes('volunteer') || h.includes('benevole'));
-      let idxTableNumber = headers.findIndex(h => h.includes('table'));
-      let idxWeight = headers.findIndex(h => h.includes('poids') || h.includes('masse') || h.includes('kg') || h.includes('weight'));
-      let idxStatus = headers.findIndex(h => h.includes('statut') || h.includes('status') || h.includes('résultat') || h.includes('result') || h.includes('resultat'));
-      let idxRemarks = headers.findIndex(h => h.includes('remarque') || h.includes('note') || h.includes('remarks') || h.includes('resolution'));
+      // Index des colonnes. Les colonnes du formulaire de contact commun (export de l'application) sont écartées,
+      // et prénom et nom sont recombinés
+      const idxFirstName = headers.indexOf('prénom');
+      const idxLastName = headers.indexOf('nom');
+      const hasContactColumns = idxFirstName !== -1 && idxLastName !== -1;
+      const findHeader = (match: (h: string) => boolean) =>
+        headers.findIndex(h => !CONTACT_IMPORT_IGNORED.has(h) && h !== 'prénom' && h !== 'code postal' && match(h));
+      let idxVisitor = hasContactColumns ? idxLastName : findHeader(h => h.includes('visiteur') || h.includes('nom') || h.includes('client') || h.includes('visitor') || h.includes('name'));
+      let idxVisitorEmail = findHeader(h => h.includes('courriel') || h.includes('email') || h.includes('mail'));
+      let idxObject = findHeader(h => h.includes('appareil') || h.includes('objet') || h.includes('modèle') || h.includes('device') || h.includes('object') || h.includes('modele'));
+      let idxCategory = findHeader(h => h.includes('catégorie') || h.includes('type') || h.includes('category') || h.includes('categorie'));
+      let idxOS = findHeader(h => h.includes('os') || h.includes('système') || h.includes('system') || h.includes('operating'));
+      let idxDiagnosis = findHeader(h => h.includes('diagnostic') || h.includes('panne') || h.includes('symptome') || h.includes('symptôme') || h.includes('description') || h.includes('diagnosis'));
+      let idxTech = findHeader(h => h.includes('technicien') || h.includes('bénévole') || h.includes('tech') || h.includes('assigné') || h.includes('assigned') || h.includes('volunteer') || h.includes('benevole'));
+      let idxTableNumber = findHeader(h => h.includes('table'));
+      let idxWeight = findHeader(h => h.includes('poids') || h.includes('masse') || h.includes('kg') || h.includes('weight'));
+      let idxStatus = findHeader(h => h.includes('statut') || h.includes('status') || h.includes('résultat') || h.includes('result') || h.includes('resultat'));
+      let idxRemarks = findHeader(h => h.includes('remarque') || h.includes('note') || h.includes('remarks') || h.includes('resolution'));
 
       if (idxVisitor === -1 || idxObject === -1) {
         alert("Les en-têtes de colonnes obligatoires (Nom du visiteur, Nom de l'appareil) sont introuvables dans le fichier CSV.");
@@ -475,7 +496,7 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
         const cols = parseCSVLine(lines[i], delimiter);
         if (cols.length < headers.length) continue; // Ligne tronquée
 
-        const visitorName = cols[idxVisitor];
+        const visitorName = hasContactColumns ? `${cols[idxFirstName] || ''} ${cols[idxLastName] || ''}`.trim() : cols[idxVisitor];
         const objectName = cols[idxObject];
         if (!visitorName || !objectName) continue;
 
@@ -781,28 +802,16 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
           </h3>
 
           <form onSubmit={handleAddTicket} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-300 block">Nom du Visiteur</label>
-              <input
-                type="text"
-                required
-                value={newVisitorName}
-                onChange={(e) => setNewVisitorName(e.target.value)}
-                placeholder="Ex. Martine Bouchard"
-                className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-300 block">Courriel</label>
-              <input
-                type="email"
-                value={newVisitorEmail}
-                onChange={(e) => setNewVisitorEmail(e.target.value)}
-                placeholder="martine@email.com"
-                className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
-              />
-            </div>
+            <ContactForm
+              idPrefix="rp"
+              mode="activity"
+              value={contactDraft}
+              onChange={(next) => {
+                setContactDraft(next);
+                setContactErrors({});
+              }}
+              errors={contactErrors}
+            />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
