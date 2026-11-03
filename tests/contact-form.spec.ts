@@ -115,3 +115,36 @@ test('Formulaire de contact : réparothon et activité générique', async ({ pa
 
   expect(errors).toEqual([]);
 });
+
+// Bouton permanent « Devenir bénévole » : depuis le menu principal, la fiche va au registre des bénévoles
+test('Devenir bénévole : sondage autonome et registre des bénévoles', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(URL);
+
+  await page.getByRole('button', { name: 'Devenir bénévole' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Devenir bénévole' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Je souhaite donner des heures de bénévolat')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(dialog.getByText('Choisissez au moins un rôle.')).toBeVisible();
+
+  await dialog.locator('#vol-firstName').fill('Gabriel');
+  await dialog.locator('#vol-lastName').fill('Roy');
+  await dialog.locator('#vol-email').fill('gabriel@exemple.com');
+  await dialog.getByLabel('Accueil', { exact: true }).check();
+  await dialog.locator('#vol-birthDay').selectOption('31');
+  await dialog.locator('#vol-birthMonth').selectOption('2');
+  await dialog.locator('#vol-consentVolunteer').check();
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(dialog.getByText("Date d'anniversaire invalide.")).toBeVisible();
+  await dialog.locator('#vol-birthDay').selectOption('29');
+  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByText('Merci ! Fiche bénévole enregistrée.')).toBeVisible();
+  await expect(dialog.locator('#vol-firstName')).toHaveValue('');
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+
+  await expect(page.getByText('Registre des bénévoles').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});

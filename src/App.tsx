@@ -29,6 +29,7 @@ import Modal from './components/shared/Modal';
 import SessionQrPanel from './components/shared/SessionQrPanel';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
+import VolunteerSurveyButton from './components/shared/VolunteerSurveyButton';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -689,9 +690,20 @@ export default function App() {
           ];
         });
 
+      // Fiches « Devenir bénévole » remplies pendant l'activité : ajoutées à la fin de chaque export,
+      // colonnes propres à l'activité laissées vides
+      const volunteerSurveys = attendees.filter(a => a.extraData?.source === 'sondage_benevole');
+      const surveyRows = (header: string[], contactStart: number) =>
+        volunteerSurveys.map(a => {
+          const row: Array<string | number> = new Array(header.length).fill('');
+          row.splice(contactStart, CONTACT_EXPORT_HEADER.length, ...contactExportCells(readContact(a)));
+          return row;
+        });
+      contestRows.push(...surveyRows(contestHeader, 1));
+
       // Install Fest : une ligne par ordinateur, champs lisibles (distribution, OS précédent, double démarrage)
       const installHeader = INSTALL_FEST_EXPORT_HEADER;
-      const installRows = installFestExportRows(tickets);
+      const installRows: Array<Array<string | number>> = [...installFestExportRows(tickets), ...surveyRows(INSTALL_FEST_EXPORT_HEADER, 0)];
 
       // Map technicien ID → numéro de table (pour l'export des tickets)
       const techTableMap = new Map(technicians.map(t => [t.id, t.tableNumber ?? '']));
@@ -710,6 +722,7 @@ export default function App() {
         t.resultRemarks || '',
         t.weightKg || ''
       ]);
+      repairRows.push(...surveyRows(repairHeader, 0));
       const attendeeHeader = [...CONTACT_EXPORT_HEADER, 'Présent', 'Notes', 'Note de satisfaction', 'Commentaire'];
       const attendeeRows: Array<Array<string | number>> = attendees.map(a => [
         ...contactExportCells(readContact(a)),
@@ -1876,6 +1889,9 @@ export default function App() {
                 <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
               </span>
             ))}
+
+            {/* Fiche bénévole remplie hors activité : elle va au registre des bénévoles */}
+            <VolunteerSurveyButton />
 
             {/* Bouton Thème */}
             <ThemeToggle isLightTheme={isLightTheme} onToggle={() => setIsLightTheme(!isLightTheme)} />
