@@ -11,7 +11,7 @@
 3. [Démarrage développeur](#3-démarrage-développeur)
 4. [Types TypeScript (types.ts)](#4-types-typescript-typests)
 5. [Base de données IndexedDB (db.ts)](#5-base-de-données-indexeddb-dbts)
-6. [Réseau P2P (network.ts)](#6-réseau-p2p-networkts)
+6. [Réseau local (network.ts et src/net/)](#6-réseau-local-networkts-et-srcnet)
 7. [App.tsx — Application principale](#7-apptsx--application-principale)
 8. [MatrixSelector.tsx — Création d'événement](#8-matrixselectortsx--création-dévénement)
 9. [DashboardShell.tsx — Coquille du tableau de bord](#9-dashboardshelltsx--coquille-du-tableau-de-bord)
@@ -54,7 +54,7 @@ Imagine que tu organises une journée de réparation d'ordinateurs dans un gymna
 
 Les événements d'Insertech se déroulent souvent dans des lieux où le Wi-Fi est mauvais (gymnases, sous-sols, salles communautaires). L'application **n'a pas besoin d'Internet** pour fonctionner ! Toutes les données sont sauvegardées directement dans le navigateur grâce à **IndexedDB** (une mini-base de données intégrée dans Chrome et Firefox).
 
-Quand il y a une connexion, plusieurs tablettes ou ordinateurs peuvent se connecter ensemble en réseau local via **WebRTC** (technologie qui permet aux navigateurs de se parler directement, comme deux téléphones qui s'appellent).
+Plusieurs tablettes Android se connectent au PC hôte **par le réseau local seulement** (le hotspot d'un cellulaire, données mobiles coupées) : jamais d'internet, jamais de service Google, et aucune permission administrateur ni fenêtre du pare-feu sur le PC. Voir la [section 6](#6-réseau-local-networkts-et-srcnet) et la [section 22](#22-application-android).
 
 ### 👥 Pour qui ?
 
@@ -71,35 +71,37 @@ Quand il y a une connexion, plusieurs tablettes ou ordinateurs peuvent se connec
 ```
 Insertech - Tableau de bords événementiel/
 │
-├── index.html                    → Page HTML principale (point d'entrée)
-├── package.json                  → Liste des dépendances et scripts npm
-├── tsconfig.json                 → Configuration TypeScript
+├── index.html                    → Page HTML principale (point d'entrée, message si le navigateur est trop ancien)
+├── package.json                  → Dépendances, scripts npm et version unique de l'application
 ├── vite.config.ts                → Configuration du bundler Vite
+├── capacitor.config.ts           → Application Android (Capacitor)
 │
-├── dist/                         → Dossier généré par npm run build (NE PAS MODIFIER)
+├── dist/                         → Généré par npm run build (NE PAS MODIFIER)
+├── launcher/                     → Lanceur .NET (exe Windows, binaire Linux) : sert dist/, sauvegarde SQLite,
+│                                   liste des tablettes du réseau local (TabletDiscovery.cs)
+├── android/                      → Projet Android : plugins Java InsertechNatif et ServeurLocal, tests
+├── packaging/                    → Installeurs .deb et Windows (NSIS)
+├── docs/                         → Écran public sur téléviseur, vérification des tablettes avant un événement
+├── tests/                        → Tests Playwright (interface, réseau local avec tablette simulée)
 │
-└── src/                          → Code source de l'application
-    ├── main.tsx                  → Point d'entrée React (monte <App /> dans le DOM)
+└── src/
+    ├── main.tsx                  → Point d'entrée React
     ├── index.css                 → Styles globaux + variables CSS thème clair/foncé
-    ├── types.ts                  → Tous les types TypeScript du projet
+    ├── types.ts                  → Types TypeScript du projet
     ├── db.ts                     → Base de données IndexedDB (Dexie.js)
-    ├── network.ts                → Gestionnaire réseau P2P (PeerJS + MQTT)
+    ├── network.ts                → networkManager : session hôte ou tablette, file d'envoi, synchronisation
     ├── App.tsx                   → Composant racine : navigation, import/export, événements
+    ├── net/                      → Réseau local : appel des tablettes, poignée de main, chiffrement, mises à jour
+    ├── native/android.ts         → Appels aux plugins Android (plein écran, épinglage, liens, mise à jour)
+    ├── utils/                    → Exports (saveFile.ts), verrouillage des modes (modeLock.ts), lien du QR…
     │
     └── components/
         ├── DashboardShell.tsx    → Coquille du tableau de bord (en-tête + onglets)
         ├── MatrixSelector.tsx    → Écran de création/sélection d'un événement
-        │
-        ├── matrices/             → Modules spécialisés par type d'événement
-        │   ├── ReparothonMatrix.tsx  → Module Réparothon (tickets + techniciens)
-        │   ├── TeardownMatrix.tsx    → Module Kiosque-Concours (chronos + tirage)
-        │   └── GenericMatrix.tsx     → Module générique (présences + feedback)
-        │
-        └── shared/               → Composants réutilisables
-            ├── Charts.tsx        → Graphiques DoughnutChart et BarChart
-            ├── Stopwatch.tsx     → Chronomètre avec rendu temps réel
-            ├── Leaderboard.tsx   → Classement animé avec médailles
-            └── RaffleSpinner.tsx → Roue de tirage au sort animée
+        ├── matrices/             → Modules par type d'événement (Réparothon, Kiosque-Concours, Install Fest, générique)
+        ├── reseau/               → Fenêtres Réseau local du PC et de la tablette, mise à jour des tablettes
+        ├── tablette/             → Rejoindre un événement, choix et verrouillage du mode de la tablette
+        └── shared/               → Composants réutilisables (graphiques, chrono, classement, tirage, QR…)
 ```
 
 ### 📝 Description de chaque fichier
@@ -120,7 +122,7 @@ Le "dictionnaire" du projet. Il définit la forme exacte de toutes les données 
 Le "cerveau de stockage". Il définit les 5 tables de la base de données locale et expose les fonctions pour les manipuler. Utilise **Dexie.js**, une bibliothèque qui simplifie l'utilisation d'IndexedDB.
 
 #### `src/network.ts`
-Le "cerveau réseau". Gère la communication entre le PC hôte et les tablettes clientes via WebRTC (PeerJS). Gère aussi la découverte automatique des sessions via MQTT.
+Le "cerveau réseau". Gère la communication entre le PC hôte et les tablettes, uniquement sur le réseau local : le PC appelle les tablettes, qui écoutent (voir la section 6).
 
 #### `src/App.tsx`
 Le composant principal qui orchestre tout : quel événement est actif, quel onglet est affiché, les imports/exports de données, la navigation entre les écrans.
@@ -497,7 +499,7 @@ export interface RaffleState {
 
 ### 4.13 `SyncMessage` — Les 10 types de messages de synchronisation
 
-Ce type union regroupe tous les messages qui peuvent être échangés entre onglets (BroadcastChannel) ou entre appareils en réseau (WebRTC).
+Ce type union regroupe tous les messages qui peuvent être échangés entre onglets (BroadcastChannel) ou entre appareils sur le réseau local (liaison chiffrée, section 6).
 
 ```typescript
 export type SyncMessage =
@@ -688,215 +690,94 @@ export async function seedDemoData(eventId: string, type: string): Promise<void>
 
 ---
 
-## 6. Réseau P2P (network.ts)
+## 6. Réseau local (network.ts et src/net/)
 
-### 🌐 C'est quoi le P2P ?
+### 🌐 Le principe
 
-P2P signifie "Peer-to-Peer" (de pair à pair). Au lieu d'envoyer tes données vers un serveur sur Internet qui les redistribue, les appareils se parlent **directement** entre eux, comme deux téléphones qui s'appellent sans passer par une centrale téléphonique.
+Le PC hôte et les tablettes se parlent **seulement sur le réseau local** (en événement : le hotspot du cellulaire,
+données mobiles coupées). Aucun serveur sur internet, aucun service Google, aucune fenêtre du pare-feu Windows :
 
-L'application utilise **PeerJS** (qui s'appuie sur la technologie WebRTC intégrée dans Chrome/Firefox) pour établir ces connexions directes.
+- la **tablette** (application Android) **écoute** sur le port **47630** du réseau local (plugin Java `ServeurLocal`) ;
+- le **PC** **appelle** les tablettes. Il n'écoute jamais sur le réseau, ce qui évite le pare-feu et les droits administrateur ;
+- le **lanceur** (`InsertechEvenements.exe` ou le binaire Linux) balaie le réseau local par des connexions sortantes
+  et donne la liste des tablettes à la page sur `127.0.0.1` (`/tablettes`, `launcher/TabletDiscovery.cs`). Sans le
+  lanceur, on peut ajouter une tablette à la main par son adresse IP (fenêtre Réseau local du PC).
 
-### 6.1 PeerJS / WebRTC vs MQTT
+Une tablette ne peut donc se synchroniser qu'avec l'**APK** installé : dans un simple navigateur, elle n'a pas de
+serveur local.
 
-| Technologie | Rôle dans le projet |
+### 6.1 Les fichiers
+
+| Fichier | Rôle |
 |---|---|
-| **PeerJS / WebRTC** | Transfert réel des données entre les appareils (tickets, techniciens, chronos) |
-| **MQTT (Paho)** | Découverte automatique : permet aux tablettes de trouver la session sans taper de code |
+| `src/network.ts` | `networkManager` : session hôte ou tablette, file d'envoi, synchronisation des tables et des chronos |
+| `src/net/hoteLocal.ts` | PC : liste des tablettes (lanceur ou adresses à la main), appel de chaque tablette de la session |
+| `src/net/tabletteLocale.ts` | Tablette : démarre le serveur local (`ServeurLocal`) et sa fiche `/decouverte` |
+| `src/net/poignee.ts` | Poignée de main DEFI / PREUVE, puis liaison chiffrée |
+| `src/net/chiffrement.ts` | HMAC-SHA256, HKDF, AES-GCM (Web Crypto) |
+| `src/net/lien.ts` | Interface `Lien` commune aux deux côtés (envoyer, recevoir, fermer) |
+| `src/net/miseAJour.ts` | Envoi de l'APK du PC aux tablettes (messages `MAJ_*`) |
+| `src/utils/joinLink.ts` | Lien du QR `insertech://rejoindre?code=…&cle=…&nom=…` |
 
-**Comment MQTT aide à la découverte ?** L'hôte publie régulièrement son code de session sur un canal MQTT public. Les tablettes qui cherchent des sessions écoutent ce canal et voient automatiquement les sessions disponibles. C'est comme un "GPS" qui dit "il y a une session INS-1234 par ici !".
+### 6.2 Code et clé de session
 
-### 6.2 Les 3 rôles réseau
+Le PC crée un **code de session** lisible (ex. `INS-4287-A3F2`) et une **clé** de 12 caractères (ex.
+`ABCD-EFGH-JKLM`). La fenêtre Réseau local du PC montre les deux et un QR qui les contient. La clé ne voyage
+jamais : chaque côté prouve qu'il la connaît, puis une clé AES propre à la liaison est dérivée :
 
-```typescript
-role: 'host' | 'client' | 'standalone'
-```
+1. tablette → PC : `DEFI` (nonce de la tablette) ;
+2. PC → tablette : `PREUVE` = HMAC(clé, nonce tablette | code | « pc »), plus le nonce du PC ;
+3. tablette → PC : `PREUVE` = HMAC(clé, nonce PC | code | « tablette »).
 
-| Rôle | Description | Qui ? |
-|---|---|---|
-| `standalone` | Mode par défaut. Pas de réseau. Données uniquement locales. | Tout le monde au départ |
-| `host` | PC principal. Source de vérité. Reçoit toutes les modifications et les redistribue. | Le PC de l'animateur |
-| `client` | Tablette connectée. Envoie ses modifications à l'hôte. Reçoit les mises à jour de l'hôte. | Les tablettes d'accueil |
+Ensuite, chaque message est du JSON chiffré en AES-GCM 256 bits. Une tablette avec une mauvaise clé n'est jamais
+connectée (le PC l'affiche « Clé refusée »). **Nouvelle clé** sur le PC déconnecte toutes les tablettes : il faut
+rescanner le QR.
 
-### 6.3 `startHost(eventId, existingCode?)` — Démarrer la session hôte
+### 6.3 `startHost(eventId, existingCode?)` — PC hôte
 
-```typescript
-async startHost(eventId: string, existingCode?: string): Promise<string> {
-  this.role = 'host';
+Crée ou reprend le code, garde la clé tant que la session dure, puis démarre `HoteLocal` : toutes les 2 secondes,
+il lit la liste des tablettes, appelle celles de la session qui ne sont pas encore reliées, et ferme les liaisons
+muettes depuis trop longtemps (veille, hors de portée) pour les rappeler au tour suivant.
 
-  // Générer un code unique et lisible, ex: "INS-4287-A3F2"
-  const randomCode = Math.floor(1000 + Math.random() * 9000);
-  this.sessionId = `INS-${randomCode}-${eventId.substring(4, 8).toUpperCase()}`;
+### 6.4 `joinSession(code, eventId, { cle, nom, evenement })` — tablette
 
-  // Sauvegarder pour la reconnexion automatique si la page se recharge
-  localStorage.setItem('insertech_net_role', 'host');
-  localStorage.setItem('insertech_net_session_code', this.sessionId);
-  localStorage.setItem('insertech_net_event_id', eventId);
+Mémorise le code, la clé et le nom de la tablette, démarre le serveur local et **attend l'appel du PC**. On y
+arrive en scannant le QR du PC (scanner de l'application ou appareil photo Samsung, qui ouvre le lien
+`insertech://rejoindre`), ou en tapant le code et la clé (`RejoindreEvenement.tsx`).
 
-  // Créer le "Peer" PeerJS avec l'ID = le code de session
-  this.peer = new Peer(this.sessionId, {
-    host: '0.peerjs.com', // Serveur de signalement PeerJS gratuit
-    port: 443,
-    secure: true
-  });
+### 6.5 `writeToDatabase(table, action, data)` — qui écrit où
 
-  // Quand connecté : commencer à annoncer la session via MQTT
-  this.peer.on('open', () => {
-    this.startMqttDiscoveryAnnounce(eventId);
-  });
+- **PC hôte** ou **autonome** : écrit dans IndexedDB, puis diffuse le changement (`DB_DELTA`) aux tablettes.
+- **Tablette** : écrit chez elle, puis envoie `DB_WRITE` au PC. Le message reste dans une **file d'envoi**
+  (`insertech_net_outbox`, gardée dans le `localStorage`) jusqu'à l'accusé `ACK` du PC. Une saisie faite pendant
+  une coupure part donc dès que le PC rappelle la tablette.
 
-  // Quand une tablette se connecte : l'ajouter à la liste
-  this.peer.on('connection', (conn) => {
-    this.connections.push(conn);
-    conn.on('data', (data) => this.handleIncomingData(conn, data, eventId));
-  });
-}
-```
+À chaque liaison, la tablette demande `REQUEST_INITIAL_SYNC` et reçoit `INITIAL_SYNC` : toutes les données de
+l'activité. Le PC refuse les mises à jour d'application pendant qu'une session est ouverte avec des tablettes
+d'une autre version (bandeau dans l'en-tête).
 
-### 6.4 `joinSession(code, eventId)` — Rejoindre une session
+### 6.6 `leaveSession()` — quitter
 
-```typescript
-async joinSession(code: string, eventId: string): Promise<void> {
-  this.role = 'client';
+Ferme les liaisons, arrête le serveur local (tablette) ou les appels (PC), et oublie la session. Sur une tablette,
+quitter demande confirmation et est refusé tant que le mode est verrouillé.
 
-  // Sauvegarder pour la reconnexion automatique
-  localStorage.setItem('insertech_net_role', 'client');
-  localStorage.setItem('insertech_net_session_code', code);
+### 6.7 `sendChronoAction(action)` et l'horloge
 
-  // Créer notre propre Peer sans ID fixe (ID généré automatiquement)
-  this.peer = new Peer({ host: '0.peerjs.com', port: 443, secure: true });
+Les chronos et le tirage passent par `CHRONO_ACTION`. Le PC est l'horloge de référence : chaque tablette mesure
+son décalage (`CLOCK_PING` / `CLOCK_PONG`) pour que les chronos affichent le même temps partout.
 
-  this.peer.on('open', () => {
-    // Se connecter à l'hôte en utilisant son code de session comme ID
-    const conn = this.peer!.connect(code);
+### 6.8 Mise à jour des tablettes par le PC
 
-    conn.on('open', () => {
-      this.connections = [conn];
-      // Demander immédiatement une copie complète de la base de données
-      conn.send({ type: 'REQUEST_INITIAL_SYNC' });
-    });
-  });
-}
-```
+Dans la fenêtre Réseau local du PC, **Mettre à jour les tablettes** : choisir un `.apk` (ou le télécharger depuis
+GitHub, le seul bouton qui utilise internet, sur le PC). Le PC l'envoie en morceaux de 64 Ko, un à la fois, avec
+reprise. La tablette vérifie le SHA-256, le nom du paquet, la version et le certificat de signature, puis Android
+demande confirmation avant d'installer. Une tablette verrouillée refuse tant que le code n'est pas saisi.
 
-### 6.5 `writeToDatabase(table, action, data)` — Logique de routage selon le rôle
+### 6.9 Reprise après un rechargement ou un redémarrage
 
-C'est la fonction centrale que tous les composants appellent pour modifier des données. Elle s'adapte automatiquement selon le rôle de l'appareil :
-
-```typescript
-async writeToDatabase(table: string, action: 'put' | 'delete', data: any) {
-
-  if (this.role === 'client') {
-    // Mode CLIENT : envoyer la modification à l'hôte via WebRTC
-    const conn = this.connections[0];
-    if (conn && conn.open) {
-      conn.send({ type: 'DB_WRITE', table, action, data });
-    }
-    // Note: le client n'écrit PAS localement ! Il attend que l'hôte
-    // lui renvoie la mise à jour via DB_SYNC.
-
-  } else {
-    // Mode HÔTE ou STANDALONE : écrire directement dans IndexedDB local
-    const t = db.table(table);
-    if (action === 'put') await t.put(data);
-    else if (action === 'delete') await t.delete(data);
-
-    notifySync(); // Alerter les onglets locaux
-
-    // Mode HÔTE seulement : diffuser la mise à jour à tous les clients
-    if (this.role === 'host') {
-      const allData = await t.where('eventId').equals(data.eventId).toArray();
-      this.broadcast({ type: 'DB_SYNC', table, data: allData });
-    }
-  }
-}
-```
-
-**Flux complet quand une tablette cliente ajoute un ticket :**
-```
-Tablette Cliente                    PC Hôte                    Autre Tablette
-      |                                 |                              |
-      |-- DB_WRITE (nouveau ticket) --->|                              |
-      |                                 |-- écrit dans IndexedDB       |
-      |                                 |-- DB_SYNC (tous les tickets) -->|
-      |                            <-- DB_SYNC (tous les tickets) -----|
-      |  (reçoit la mise à jour)        |                (reçoit aussi)|
-```
-
-### 6.6 `leaveSession()` — Quitter la session
-
-```typescript
-leaveSession() {
-  // Fermer toutes les connexions
-  this.connections.forEach(conn => conn.close());
-  this.connections = [];
-
-  // Détruire le Peer PeerJS
-  if (this.peer) { this.peer.destroy(); this.peer = null; }
-
-  // Retourner au mode autonome
-  this.role = 'standalone';
-  this.sessionId = '';
-
-  // Supprimer les infos de reconnexion
-  localStorage.removeItem('insertech_net_role');
-  localStorage.removeItem('insertech_net_session_code');
-  localStorage.removeItem('insertech_net_event_id');
-
-  // Arrêter les annonces MQTT
-  this.stopMqttDiscovery();
-}
-```
-
-### 6.7 `startSessionsSearch()` / `stopSessionsSearch()` — Découverte de sessions
-
-Ces fonctions utilisent MQTT pour trouver automatiquement les sessions actives sur le réseau. La tablette s'abonne à un topic MQTT et écoute les annonces de l'hôte.
-
-```typescript
-// L'hôte publie toutes les 5 secondes :
-{
-  "code": "INS-4287-A3F2",
-  "name": "Réparothon Rosemont 2025",
-  "type": "reparothon",
-  "lastSeen": 1728950400000
-}
-
-// La tablette reçoit ces annonces et les affiche dans une liste
-// cliquable pour rejoindre sans taper le code manuellement.
-```
-
-### 6.8 `sendChronoAction(action)` — Synchroniser les chronos
-
-```typescript
-sendChronoAction(action: SyncMessage) {
-  if (this.role === 'standalone') {
-    // En autonome : appliquer seulement en local
-    this.applyChronoAction(action);
-  } else {
-    // En réseau : appliquer localement ET diffuser à tous
-    this.applyChronoAction(action);
-    this.broadcast({ type: 'CHRONO_ACTION', message: action });
-  }
-}
-```
-
-### 6.9 Auto-reconnexion au rechargement
-
-Si la page se recharge accidentellement (F5 ou crash de navigateur), l'application relit le `localStorage` pour savoir si elle était en session réseau :
-
-```typescript
-// Dans App.tsx, lors du démarrage (initApp) :
-const savedRole = localStorage.getItem('insertech_net_role');
-const savedCode = localStorage.getItem('insertech_net_session_code');
-const savedEventId = localStorage.getItem('insertech_net_event_id');
-
-if (savedRole === 'host' && savedCode && savedEventId) {
-  // Relancer la session hôte avec le même code
-  await networkManager.startHost(savedEventId, savedCode);
-} else if (savedRole === 'client' && savedCode && savedEventId) {
-  // Se reconnecter automatiquement à la session
-  await networkManager.joinSession(savedCode, savedEventId);
-}
-```
+Le rôle, le code, la clé et l'activité sont gardés dans le `localStorage` (`insertech_net_role`,
+`insertech_net_session_code`, `insertech_net_event_id`). Au démarrage, le PC relance sa session avec le même
+code et la même clé ; la tablette relance son serveur local et attend l'appel du PC, sans rien retaper.
 
 ---
 
@@ -1065,30 +946,13 @@ async function handleExportData(format: 'json' | 'csv' | 'md' | 'latex' | 'excel
 }
 ```
 
-### 7.9 `handleStartHost()` / `handleJoinSession()` / `handleLeaveSession()`
+### 7.9 Session hôte et tablettes
 
-Ces fonctions font le pont entre l'interface utilisateur et le `networkManager` :
-
-```typescript
-async function handleStartHost() {
-  if (!activeEvent) return;
-  const code = await networkManager.startHost(activeEvent.id);
-  setSessionCode(code);
-  setNetworkStatus('En ligne (Hôte)');
-}
-
-async function handleJoinSession(code: string) {
-  if (!activeEvent) return;
-  await networkManager.joinSession(code, activeEvent.id);
-  setNetworkStatus('Connecté au PC Principal');
-}
-
-function handleLeaveSession() {
-  networkManager.leaveSession();
-  setSessionCode('');
-  setNetworkStatus('Local uniquement');
-}
-```
+- **PC** : **Créer la session hôte** dans la fenêtre Réseau local (bouton **Réseau LAN** de l'en-tête) appelle
+  `networkManager.startHost(activeEvent.id)`. La session suit l'activité ouverte.
+- **Tablette** : l'accueil propose **Scanner le QR du PC** ou la saisie du code et de la clé
+  (`RejoindreEvenement.tsx`), qui appellent `networkManager.joinSession(code, eventId, { cle, nom, evenement })`.
+- **Quitter** : `networkManager.leaveSession()` (sur une tablette : confirmation, refusé si le mode est verrouillé).
 
 ### 7.10 `renderImportValidationModal()` — Résolveur de conflits
 
@@ -1135,7 +999,7 @@ L'écran d'accueil est divisé en 3 zones verticales :
 
 1. **Créer un nouvel événement** : formulaire de création avec choix du type, nom, date, lieu, partenaire, logos
 2. **Événements récents** : liste des événements passés stockés localement (cliquables pour rouvrir)
-3. **Connexion réseau** : boutons pour rejoindre une session existante ou en créer une nouvelle
+3. **Sur une tablette Android** : rejoindre l'événement du PC (scanner le QR, ou taper le code et la clé)
 
 ### 8.2 `MATRICES_LIST` — Les 8 types avec couleurs
 
@@ -1576,7 +1440,8 @@ Affiché sur un grand écran pour les visiteurs :
 
 ### 11.2.1 Utilisation en événement (un portable + projecteur)
 
-- **Fenêtre projecteur** : le bouton « Projecteur » de la console ouvre l'écran public dans une fenêtre séparée (`index.html?vue=public`), à glisser sur le projecteur puis passer en plein écran. Cette fenêtre reste verrouillée sur l'écran public, même après un rechargement, et suit la console du même ordinateur sans connexion Internet.
+- **Fenêtre projecteur** : **Plus** > **Ouvrir le projecteur** ouvre l'écran public dans une fenêtre séparée (`index.html?vue=public`), à glisser sur le projecteur puis passer en plein écran. Cette fenêtre reste verrouillée sur l'écran public, même après un rechargement, et suit la console du même ordinateur sans connexion Internet.
+- **Tablette en écran public** : une tablette en mode Écran public passe d'elle-même en plein écran, en paysage, sans mise en veille, et peut envoyer son écran au téléviseur avec Smart View ([docs/ecran-public-chromecast.md](docs/ecran-public-chromecast.md)).
 - **Prix configurables** : « Modifier les prix » (bloc Tirage au sort) définit le prix du meilleur chrono et celui du tirage (nom, titre court, valeur, description, image). Ils sont enregistrés dans `event.extraData.contestPrizes`, propres à chaque événement.
 - **Pistes par événement** : une piste assignée dans un autre événement s'affiche comme libre.
 - **Doublons** : une confirmation est demandée si le nom ou le courriel est déjà inscrit.
@@ -2344,43 +2209,44 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 
 > [!TIP]
 > Sur smartphone ou tablette (Android / iOS), l'application peut également être installée directement depuis le navigateur via le bouton **« App Mobile (PWA & APK) »** et le QR Code interactif généré sur l'écran d'accueil !
+> La version PWA ne se synchronise pas avec le PC : pour les tablettes de l'événement, installer l'APK ([section 22](#22-application-android)).
 
 
 ### Étape 2 : PC Hôte — Créer la session
 
-1. Ouvrir `dist/index.html` dans **Google Chrome** sur le PC principal de l'animateur
-2. Créer un nouvel événement (choisir le type, entrer le nom, la date, le lieu)
-3. Cliquer sur **"Réseau"** dans l'en-tête
-4. Cliquer sur **"Créer la session"**
-5. Un code s'affiche (ex: `INS-4287-A3F2`). Le noter ou le montrer aux tablettes.
+1. Lancer **InsertechEvenements** (installeur ou exe portable) sur le PC de l'animateur. C'est le lanceur qui
+   trouve les tablettes ; il n'écoute pas sur le réseau et ne demande aucun droit administrateur.
+2. Brancher le PC sur le hotspot du cellulaire (données mobiles coupées).
+3. Créer ou ouvrir l'activité.
+4. Cliquer sur **Réseau LAN** dans l'en-tête, puis **Créer la session hôte**.
+5. La fenêtre affiche le code, la clé et un QR. Régler au besoin le code à 4 chiffres des tablettes.
 
 > [!IMPORTANT]
-> Le PC hôte doit rester **allumé et le navigateur ouvert** pendant tout l'événement. Il est la source de vérité. Si le PC hôte se ferme, les données sont préservées localement, mais les tablettes clientes ne peuvent plus synchroniser.
+> Le PC hôte doit rester **allumé et l'application ouverte** pendant tout l'événement. Il est la source de vérité. Si le PC se ferme, les tablettes gardent leurs saisies dans leur file d'envoi et les transmettent quand le PC revient.
 
-### Étape 3 : Tablettes clientes — Rejoindre la session
+### Étape 3 : Tablettes — Rejoindre l'événement
 
-1. Ouvrir `dist/index.html` dans **Google Chrome** sur chaque tablette
-2. Créer le même événement avec les mêmes infos OU utiliser "Rejoindre une session" depuis l'accueil
-3. Cliquer sur **"Réseau"**
-4. Entrer le code de session (ex: `INS-4287-A3F2`) ou cliquer sur la session détectée automatiquement
-5. La tablette télécharge automatiquement toutes les données du PC hôte
+1. Installer l'APK sur chaque tablette (voir la [section 22](#22-application-android)) et la brancher sur le même hotspot.
+2. Ouvrir l'application, puis **Scanner le QR du PC** (ou viser le QR avec l'appareil photo Samsung).
+3. La tablette apparaît dans la liste du PC, qui l'appelle ; elle reçoit toutes les données de l'activité.
+4. Choisir le mode de la tablette (**Animateur**, **Écran public** ou **Kiosque formulaire**), puis **Verrouiller ce mode**.
 
 > [!NOTE]
-> Toutes les tablettes et le PC hôte doivent être sur le **même réseau Wi-Fi**. Ils n'ont pas besoin d'accès à Internet, mais ils ont besoin de se voir entre eux.
+> Tablettes et PC doivent être sur le **même Wi-Fi**, et le hotspot ne doit pas isoler les appareils. Aucun accès à internet n'est nécessaire. Liste à cocher la veille : [docs/android-verification-tablette.md](docs/android-verification-tablette.md).
 
 ### Étape 4 : Pendant l'événement
 
-- Les **tablettes d'accueil** ajoutent les tickets au fur et à mesure que les visiteurs arrivent
-- Le **PC hôte** peut ouvrir l'onglet "Écran Public" sur un deuxième moniteur pour l'afficher aux visiteurs
-- Les **techniciens** peuvent voir leur tableau de bord sur leur propre tablette
-- Toutes les modifications sont synchronisées en temps réel sur tous les appareils
+- Les **tablettes en kiosque formulaire** inscrivent les visiteurs ; les inscriptions arrivent sur le PC en moins d'une seconde
+- L'**écran public** passe sur un téléviseur par câble HDMI depuis le PC (**Plus** > **Ouvrir le projecteur**), ou par une tablette en mode Écran public et Smart View : voir [docs/ecran-public-chromecast.md](docs/ecran-public-chromecast.md)
+- Une tablette qui perd le Wi-Fi est rappelée seule par le PC, et ses saisies en attente arrivent
+- Les nouvelles versions de l'APK passent par le PC : **Mettre à jour les tablettes** dans la fenêtre Réseau local
 
 ### Étape 5 : Export final
 
 À la fin de l'événement :
 1. Sur le **PC hôte**, cliquer sur **"Exporter"** dans l'en-tête
 2. Choisir le format : **Excel** pour un tableau, **JSON** pour une sauvegarde complète
-3. Télécharger et conserver le fichier
+3. Conserver le fichier : sur le PC il est téléchargé comme d'habitude ; sur une tablette il arrive dans **Documents/Insertech**, avec un bouton **Partager**
 
 ---
 
@@ -2447,15 +2313,19 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 | `react` | ^19.0.1 | Framework UI principal |
 | `react-dom` | ^19.0.1 | Rendu React dans le DOM du navigateur |
 | `dexie` | ^4.0.10 | ORM pour IndexedDB (base de données locale) |
-| `peerjs` | ^1.5.5 | Connexions WebRTC P2P entre appareils |
+| `@capacitor/core`, `@capacitor/android` | ^8.6.0 | Application Android (Capacitor) |
+| `@capacitor/app` | ^8.1.2 | Bouton Retour et liens `insertech://` sur Android |
+| `@capacitor/filesystem`, `@capacitor/share` | ^8.1.5, ^8.0.3 | Exports dans Documents/Insertech et partage sur Android |
+| `@capacitor/screen-orientation` | ^8.0.2 | Paysage verrouillé en mode écran public |
+| `@capacitor-community/keep-awake` | ^8.0.1 | Écran toujours allumé en kiosque et en écran public |
+| `qrcode` | ^1.5.4 | QR de la session affiché par le PC |
+| `jsqr` | ^1.4.0 | Lecture du QR par l'appareil photo de la tablette |
 | `chart.js` | ^4.4.1 | Moteur de graphiques (Doughnut, Bar) |
 | `react-chartjs-2` | ^5.3.0 | Composants React pour Chart.js |
 | `canvas-confetti` | ^1.9.4 | Animation de confettis lors des célébrations |
 | `lucide-react` | ^0.546.0 | Bibliothèque d'icônes SVG |
 | `motion` | ^12.23.24 | Animations fluides (Framer Motion v12) |
 | `xlsx` | ^0.18.5 | Lecture et écriture de fichiers Excel (.xlsx) |
-| `vite` | ^6.2.3 | Bundler et serveur de développement |
-| `@tailwindcss/vite` | ^4.1.14 | Plugin Tailwind CSS pour Vite |
 
 ### 20.2 Dépendances de développement
 
@@ -2466,8 +2336,12 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 | `@types/react-dom` | ^19.0.4 | Types TypeScript pour ReactDOM |
 | `@types/canvas-confetti` | ^1.9.0 | Types TypeScript pour canvas-confetti |
 | `@types/node` | ^22.14.0 | Types TypeScript pour les APIs Node.js |
-| `@vitejs/plugin-react` | ^5.0.4 | Plugin Vite pour le JSX React (Fast Refresh) |
-| `autoprefixer` | ^10.4.21 | Ajoute les préfixes CSS cross-navigateurs automatiquement |
+| `@vitejs/plugin-react` | ^5.2.0 | Plugin Vite pour le JSX React (Fast Refresh) |
+| `vite` | ^6.4.4 | Bundler et serveur de développement |
+| `@tailwindcss/vite` | ^4.3.3 | Plugin Tailwind CSS pour Vite |
+| `@capacitor/cli` | ^8.6.0 | `npx cap sync android` |
+| `@playwright/test` | ^1.56.1 | Tests de l'interface et du réseau local |
+| `ws`, `@types/ws` | ^8.18.3 | Tablette simulée en Node dans les tests |
 | `tailwindcss` | ^4.1.14 | Framework CSS utilitaire |
 | `vite-plugin-singlefile` | ^2.3.3 | **Clé** : compile tout en un seul fichier HTML autonome |
 
@@ -2477,10 +2351,10 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 
 ### ❓ L'application fonctionne-t-elle sans Internet ?
 
-**Oui, totalement.** Une fois le fichier `dist/index.html` ouvert dans Chrome, aucune connexion Internet n'est requise pour utiliser les fonctionnalités de base (créer des tickets, gérer des techniciens, voir les statistiques). Seule la fonctionnalité réseau P2P (synchronisation entre appareils) nécessite une connexion réseau **locale** (Wi-Fi entre les appareils), mais pas Internet.
+**Oui, totalement.** Une fois le fichier `dist/index.html` ouvert dans Chrome, aucune connexion Internet n'est requise pour utiliser les fonctionnalités de base (créer des tickets, gérer des techniciens, voir les statistiques). La synchronisation entre le PC et les tablettes passe **uniquement par le réseau local** (le hotspot du cellulaire, données mobiles coupées), jamais par internet.
 
 > [!NOTE]
-> La découverte automatique de sessions via MQTT utilise un serveur public gratuit. Si vous êtes totalement hors ligne (pas de Wi-Fi du tout), entrez le code de session manuellement. Les deux PC doivent quand même se voir sur le réseau local.
+> Les seuls boutons qui utilisent internet sont sur le PC : chercher une nouvelle version sur GitHub et « Télécharger depuis GitHub » l'APK des tablettes. On peut s'en passer en apportant les fichiers sur une clé USB.
 
 ---
 
@@ -2489,9 +2363,10 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 Pas de panique ! L'application mémorise dans le `localStorage` :
 - L'ID de l'événement actif (`insertech_active_event_id`)
 - Le rôle réseau (`insertech_net_role`)
-- Le code de session (`insertech_net_session_code`)
+- Le code de session (`insertech_net_session_code`) et sa clé
+- Sur une tablette : les saisies pas encore reçues par le PC (`insertech_net_outbox`)
 
-Au rechargement, l'application restaure automatiquement l'état et se reconnecte à la session si possible.
+Au rechargement, l'application restaure automatiquement l'état : le PC relance sa session et rappelle les tablettes, sans rien retaper.
 
 ---
 
@@ -2506,22 +2381,23 @@ Au rechargement, l'application restaure automatiquement l'état et se reconnecte
 
 ### ❓ Combien de tablettes peut-on connecter simultanément ?
 
-Techniquement, il n'y a pas de limite fixe. PeerJS supporte plusieurs connexions simultanées. En pratique, nous recommandons un maximum de **10 tablettes** pour maintenir de bonnes performances de synchronisation. Plus il y a de tablettes, plus l'hôte doit diffuser de messages.
+Il n'y a pas de limite fixe : le PC appelle chaque tablette de la session. En pratique, nous recommandons un maximum de **10 tablettes** pour maintenir de bonnes performances de synchronisation. Plus il y a de tablettes, plus l'hôte doit diffuser de messages.
 
 ---
 
 ### ❓ Peut-on utiliser l'application sur un iPad ou un téléphone Android ?
 
-**Oui, avec Chrome ou Safari.** L'application est conçue pour les tablettes et les smartphones modernes. Cependant :
-- Chrome est fortement recommandé pour la meilleure compatibilité WebRTC
-- Safari sur iOS supporte aussi WebRTC depuis iOS 15
-- Pour une expérience optimale sur tablette, utiliser l'orientation **paysage**
+**Android : oui, avec l'APK** (Android 10 ou plus, [section 22](#22-application-android)). C'est la seule façon de se synchroniser avec le PC, car la tablette doit écouter sur le réseau local.
+
+**iPad ou navigateur seul : en autonome seulement.** La page s'ouvre dans un navigateur récent (Chrome, Edge, Safari ou Firefox de 2023 ou plus), mais sans synchronisation avec le PC.
+
+Il faut un navigateur interne récent (Chrome 111 ou plus) : sinon l'application affiche « Navigateur interne trop ancien » et dit quoi mettre à jour.
 
 ---
 
 ### ❓ Comment exporter les données à la fin d'un événement ?
 
-1. Dans l'en-tête du tableau de bord, cliquer sur le bouton **"Exporter"**
+1. Dans l'en-tête du tableau de bord, cliquer sur le bouton **"Exporter"** (sur une tablette, le fichier arrive dans **Documents/Insertech**, avec **Partager**)
 2. Choisir le format désiré :
    - **JSON** : sauvegarde complète de toutes les données (pour réimporter plus tard)
    - **Excel** : tableau avec toutes les colonnes (pour analyser dans Excel)
@@ -2576,12 +2452,9 @@ Oui ! Voici les étapes :
 
 ### ❓ Qu'arrive-t-il si le PC hôte perd sa connexion Wi-Fi pendant l'événement ?
 
-Les tablettes clientes continuent de fonctionner en mode **standalone** : elles peuvent afficher les données qu'elles ont reçues, mais ne peuvent plus synchroniser les nouvelles modifications.
+Les tablettes continuent de fonctionner : elles affichent les données reçues et gardent leurs nouvelles saisies dans leur **file d'envoi**. Un bandeau indique que le PC est injoignable.
 
-Quand la connexion est rétablie et que les tablettes se reconnectent au PC hôte, elles reçoivent automatiquement un `INITIAL_SYNC` qui les remet à jour avec les données les plus récentes du PC hôte. **Les modifications faites sur les tablettes pendant la déconnexion seront perdues** (elles ne peuvent pas être envoyées à l'hôte qui n'est plus là).
-
-> [!CAUTION]
-> Pour éviter la perte de données pendant une déconnexion réseau, il est recommandé de **centraliser les saisies sur le PC hôte** si un problème réseau est anticipated. Les tablettes servent principalement à l'affichage des informations dans ce cas.
+Quand le Wi-Fi revient, le PC rappelle chaque tablette : elle envoie ses saisies en attente (le PC confirme chacune), puis reçoit un `INITIAL_SYNC` avec les données les plus récentes. Rien n'est perdu, même si l'application de la tablette a été fermée entre-temps.
 
 ---
 
@@ -2654,4 +2527,4 @@ du navigateur. L'écran allumé et le paysage passent par `@capacitor-community/
 
 ---
 
-*Tableau de bords événementiel — Insertech · Documentation v1.0.0 · Rédigée en juillet 2026*
+*Tableau de bords événementiel — Insertech · Documentation à jour pour la version 1.4.0 et l'application Android native · Novembre 2026*
