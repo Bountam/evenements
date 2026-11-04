@@ -27,6 +27,7 @@
 19. [Référence complète des champs de formulaire](#19-référence-complète-des-champs-de-formulaire)
 20. [Dépendances](#20-dépendances)
 21. [FAQ](#21-faq)
+22. [Application Android](#22-application-android)
 
 ---
 
@@ -2581,6 +2582,75 @@ Quand la connexion est rétablie et que les tablettes se reconnectent au PC hôt
 
 > [!CAUTION]
 > Pour éviter la perte de données pendant une déconnexion réseau, il est recommandé de **centraliser les saisies sur le PC hôte** si un problème réseau est anticipated. Les tablettes servent principalement à l'affichage des informations dans ce cas.
+
+---
+
+## 22. Application Android
+
+L'application Android (Capacitor 8, Android 10 et plus) embarque la même page que le PC. Elle n'utilise
+jamais internet ni les services Google : la tablette écoute sur le réseau local (port 47630) et c'est le PC
+qui l'appelle. Liste à cocher avant un événement : [docs/android-verification-tablette.md](docs/android-verification-tablette.md).
+
+### Installer l'APK
+
+1. Télécharger `InsertechEvenements-Android.apk` depuis la page **Releases** de GitHub (ou l'artefact
+   `InsertechEvenements-Android-APK` d'une exécution de la CI).
+2. Le copier sur la tablette (câble USB, ou carte SD), l'ouvrir depuis **Mes fichiers**, autoriser
+   l'installation d'applications inconnues pour **Mes fichiers**, puis **Installer**.
+3. Ensuite, les nouvelles versions passent par le PC : **Mettre à jour les tablettes** dans la fenêtre
+   Réseau local envoie l'APK par le réseau local, sans internet sur la tablette.
+
+Toutes les versions doivent être signées avec la **même clé** : sinon Android refuse la mise à jour, et il
+faut désinstaller (exporter les données avant).
+
+### Rejoindre un événement
+
+1. Sur le PC : ouvrir l'activité, puis la fenêtre **Réseau local**. Elle affiche un QR (`insertech://rejoindre?code=…&cle=…`).
+2. Sur la tablette : **Scanner le QR du PC** dans l'application, ou viser le QR avec l'appareil photo Samsung.
+   Sans appareil photo, taper le code et la clé à la main.
+3. Choisir le mode de la tablette (kiosque, écran public…) et, si besoin, **Verrouiller ce mode** avec le code
+   à 4 chiffres réglé sur le PC.
+
+### Déboguer
+
+- Compiler un APK debug : `npm run build && npx cap sync android && cd android && ./gradlew assembleDebug`.
+- Brancher la tablette en USB (options de développement > débogage USB), puis ouvrir `chrome://inspect` (ou
+  `edge://inspect`) sur le PC : la page de l'application apparaît sous la tablette, avec sa console et son
+  onglet Réseau. L'APK release ne se laisse pas inspecter.
+- Journaux Java : `adb logcat | grep -i insertech`.
+
+### Tests
+
+| Commande | Où | Ce qu'elle vérifie |
+| --- | --- | --- |
+| `./gradlew :app:testDebugUnitTest` | Dossier `android/`, CI de chaque PR | Vérification des mises à jour en Java pur (`VerificationMaj` : SHA-256, certificats, reprise d'envoi) |
+| `./gradlew :app:connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
+| `npm run test:ui` | PC, CI de chaque PR | Interface, synchro avec une tablette simulée, envoi de mise à jour simulé |
+
+L'émulateur de la CI utilise une image Android 10 **sans services Google** (`target: default`), pour prouver
+que l'application n'en dépend pas.
+
+### Méthodes natives
+
+Plugin `InsertechNatif` (`InsertechNatifPlugin.java`, appelé depuis `src/native/android.ts`) :
+
+| Méthode | Rôle |
+| --- | --- |
+| `pleinEcran({ actif })` | Cache ou montre les barres d'état et de navigation |
+| `epingler()` / `desepingler()` | Épingle l'application (Retour et Accueil ne sortent plus) |
+| `etat()` | Dit si l'application est épinglée |
+| `quitter()` | Ferme l'application |
+| `ouvrirFichierMaj({ sha256, taille })` | Prépare le fichier de la mise à jour reçue du PC, et dit d'où reprendre |
+| `ecrireMorceau({ index, donnees })` | Écrit un morceau de 64 Ko de l'APK (base64) |
+| `verifierMaj({ sha256, versionCode })` | Vérifie l'APK reçu : SHA-256, nom du paquet, version plus récente, même certificat |
+| `installerMaj()` | Lance l'installation (PackageInstaller ; Android demande confirmation) |
+
+Plugin `ServeurLocal` (`ServeurLocalPlugin.java`, appelé depuis `src/net/tabletteLocale.ts`) : `demarrer`,
+`infos`, `majFiche`, `envoyer`, `fermer`, `arreter` (serveur WebSocket local sur le port 47630, que le PC appelle).
+
+Pont `window.InsertechStockage` (`StorageBridge.java`) : `save(json)` et `load()`, la sauvegarde SQLite hors
+du navigateur. L'écran allumé et le paysage passent par `@capacitor-community/keep-awake` et
+`@capacitor/screen-orientation`.
 
 ---
 

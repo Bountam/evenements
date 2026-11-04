@@ -63,7 +63,10 @@ if (typeof window !== 'undefined') {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
+// index.html a déjà affiché quoi faire si le navigateur interne est trop ancien : ne rien monter par-dessus
+const navigateurTropAncien = (window as Window & { __navigateurTropAncien?: boolean }).__navigateurTropAncien === true;
+
+if (!navigateurTropAncien) createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Respecte « Réduire les animations » du système pour les animations JS (motion) */}
     <MotionConfig reducedMotion="user">

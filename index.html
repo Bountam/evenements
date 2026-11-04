@@ -16,6 +16,28 @@
   </head>
   <body class="bg-[#180A2b] text-slate-100 font-sans selection:bg-[#9ecd33] selection:text-[#480A94] min-h-screen overflow-x-hidden">
     <div id="root"></div>
+    <!-- Garde-fou en ES5 : l'interface demande un navigateur récent (Chrome 111+, couleurs oklch de Tailwind 4).
+         Une tablette Android dont le « Android System WebView » n'a jamais été mis à jour afficherait une page
+         blanche : on affiche plutôt quoi faire. src/main.tsx ne monte pas l'appli quand ce drapeau est levé. -->
+    <script>
+      (function () {
+        var ok = window.CSS && CSS.supports && CSS.supports('color', 'oklch(0 0 0)');
+        if (ok) return;
+        window.__navigateurTropAncien = true;
+        var m = /Chrome\/(\d+)/.exec(navigator.userAgent);
+        var version = m ? ' (version ' + m[1] + ')' : '';
+        var racine = document.getElementById('root');
+        // Les classes Tailwind ne s'appliquent pas ici (CSS trop récent) : fond et texte en style direct
+        document.body.style.background = '#180A2b';
+        racine.setAttribute('role', 'alert');
+        racine.innerHTML =
+          '<div id="navigateur-trop-ancien" style="max-width:36rem;margin:15vh auto;padding:1.5rem;font:1.125rem/1.5 sans-serif;color:#f1f5f9">' +
+          '<h1 style="font-size:1.5rem;margin:0 0 1rem">Navigateur interne trop ancien</h1>' +
+          '<p>Cet appareil affiche les pages avec un navigateur interne trop ancien' + version + '.</p>' +
+          '<p>Mettre à jour <strong>Android System WebView</strong> (et Chrome) depuis le Play Store, ' +
+          'puis rouvrir l\'application. Il faut la version 111 ou plus récente.</p></div>';
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,93 @@
+name: Test Android sur émulateur
+
+# Lance l'APK de debug sur des émulateurs sans services Google (image « default ») : l'application doit démarrer,
+# charger sa page et ses plugins sans Google ni internet.
+# - Android 10 (API 29) : la version minimale. Son WebView d'origine (74) est trop ancien pour l'interface :
+#   le test vérifie qu'un message explique quoi faire au lieu d'une page blanche.
+# - Android 15 (API 35) : WebView récent, le test vérifie que l'interface elle-même s'affiche.
+# Long (10 à 15 minutes) : seulement quand le code Android change, ou à la demande.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - 'src/native/**'
+      - 'capacitor.config.ts'
+      - 'package-lock.json'
+      - '.github/workflows/android-emulateur.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emulateur-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulateur:
+    name: "${{ matrix.nom }}, sans services Google"
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 29
+            nom: Android 10 (API 29)
+          - api: 35
+            nom: Android 15 (API 35)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Bundle web (dist/)
+        run: npm run build
+
+      - name: Synchroniser le projet Android (Capacitor)
+        run: npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # L'émulateur x86_64 a besoin de KVM sur les machines Linux de GitHub
+      - name: Activer KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Tests JUnit et tests instrumentés
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: default
+          arch: x86_64
+          profile: pixel_c
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: android
+          # Seulement le module app : les modules générés par Capacitor n'ont pas de tests et leur APK de test
+          # vide échoue sur des classes Kotlin en double.
+          script: ./gradlew :app:testDebugUnitTest :app:connectedDebugAndroidTest --no-daemon
+
+      - name: Rapports des tests (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-tests-android-api${{ matrix.api }}
+          path: |
+            android/app/build/reports/
+            android/app/build/outputs/androidTest-results/
+          retention-days: 7
