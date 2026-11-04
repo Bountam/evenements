@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-24.04 # Playwright 1.56 ne prend pas encore en charge Ubuntu 26.04 (ubuntu-latest)
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -41,14 +41,14 @@ jobs:
 
       - name: Rapport du test de rendu (en cas d'échec)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rapport-test-rendu
           path: playwright-report/
           retention-days: 7
 
       - name: Téléverser le bundle web
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: InsertechEvenements-PWA-Android-Web
           path: dist/
@@ -77,19 +77,19 @@ jobs:
               InsertechEvenements-linux-x64
               InsertechEvenements-linux-x64.tar.gz
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: InsertechEvenements-PWA-Android-Web
           path: dist/
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ matrix.rid }}-${{ hashFiles('launcher/*.csproj') }}
@@ -109,7 +109,7 @@ jobs:
             tar -czf InsertechEvenements-linux-x64.tar.gz InsertechEvenements-linux-x64
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.files }}
@@ -122,15 +122,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: InsertechEvenements-PWA-Android-Web
           path: dist/
 
       # Projet Capacitor : node_modules fournit @capacitor/android (inclus par capacitor.settings.gradle)
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -142,13 +142,13 @@ jobs:
         run: npx cap sync android
 
       # Capacitor 8 / AGP 8.13 : JDK 21
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
       # Gradle vient du wrapper commité ; setup-gradle ne fait que le cache
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Préparer la clé de signature release (si les secrets existent)
         env:
@@ -179,13 +179,13 @@ jobs:
 
       - name: Rapport lint Android (en cas d'échec)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rapport-lint-android
           path: android/app/build/reports/
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: InsertechEvenements-Android-APK
           path: InsertechEvenements-Android.apk
@@ -198,14 +198,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: InsertechEvenements-Windows-x64
           path: bin/
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: InsertechEvenements-Linux-Debian-x64
           path: bin/
@@ -222,7 +222,7 @@ jobs:
             -DOUTFILE="$PWD/installers/InsertechEvenements-Setup-$VERSION.exe" packaging/windows/installer.nsi
           ls -la installers/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: InsertechEvenements-Installeurs
           path: installers/
