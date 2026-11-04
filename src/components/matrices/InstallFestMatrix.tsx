@@ -17,7 +17,7 @@ import {
 
 interface InstallFestMatrixProps {
   event: EventSettings;
-  activeTab: 'accueil' | 'techniciens' | 'public';
+  activeTab: 'accueil' | 'techniciens' | 'public' | 'formulaire';
 }
 
 interface InstallCelebration {
@@ -547,7 +547,9 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
   }
 
   // ACCUEIL : inscription et suivi des installations
-  if (activeTab === 'accueil') {
+  if (activeTab === 'accueil' || activeTab === 'formulaire') {
+    // Mode « Kiosque formulaire » d'une tablette : seul le formulaire reste affiché (voir .kiosk-form-only)
+    const kioskForm = activeTab === 'formulaire';
     const query = searchQuery.trim().toLowerCase();
     const filtered = tickets.filter(t => {
       const matchesSearch = !query || [t.visitorName, t.objectName, t.extraData?.distro, t.assignedTechName, t.initialDiagnosis]
@@ -562,13 +564,13 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
     const availableTechs = technicians.filter(tech => tech.status !== 'en_pause' && activeLoad(tech.id) < MAX_COMPUTERS_PER_VOLUNTEER);
 
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start ${kioskForm ? 'kiosk-form-only' : ''}`}>
         {renderCelebration()}
 
-        <div className={`lg:col-span-4 ${cardClass}`}>
+        <div className={`kiosk-keep lg:col-span-4 ${cardClass}`}>
           <h3 className={`${titleClass} mb-4 flex items-center gap-2`}>
             <Plus size={18} className="text-primary" />
-            <span>Nouvelle inscription</span>
+            <span>{kioskForm ? 'Inscription' : 'Nouvelle inscription'}</span>
           </h3>
 
           <form onSubmit={handleAddTicket} className="space-y-3" noValidate>

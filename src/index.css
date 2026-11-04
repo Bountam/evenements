@@ -689,3 +689,20 @@ button:disabled {
 
 
 
+
+/* Mode « Kiosque formulaire » d'une tablette : l'onglet d'inscription n'affiche que sa carte .kiosk-keep,
+   centrée ; les listes de la régie et les commandes réservées au personnel (.kiosk-hide) sont masquées. */
+.kiosk-form-only {
+  display: block;
+}
+.kiosk-form-only > :not(.kiosk-keep) {
+  display: none;
+}
+.kiosk-form-only > .kiosk-keep {
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+}
+.kiosk-form-only .kiosk-hide {
+  display: none;
+}

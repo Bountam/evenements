@@ -30,6 +30,7 @@ import {
   validateContact
 } from '../../utils/contact';
 import type { TabBadge } from '../shared/TabSwitcher';
+import KioskFormFrame from '../tablette/KioskFormFrame';
 import confetti from 'canvas-confetti';
 import {
   UserPlus,
@@ -57,7 +58,7 @@ import {
 
 interface TeardownMatrixProps {
   event: EventSettings;
-  activeTab: 'pistes' | 'participants' | 'tirage' | 'public';
+  activeTab: 'pistes' | 'participants' | 'tirage' | 'public' | 'formulaire';
   onTabChange?: (tab: string) => void;
   // Pastilles d'état des onglets de régie (chronos en marche, file d'attente, tirage)
   onTabBadgesChange?: (badges: Record<string, TabBadge>) => void;
@@ -1177,6 +1178,34 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
         {/* Ruban Défilant Continu (Ticker de tous les participants et leurs scores) */}
         <PublicParticipantsTicker participants={participants} eventName={event.name} prizes={prizes} />
       </div>
+    );
+  }
+
+  // Mode « Kiosque formulaire » d'une tablette : le formulaire d'inscription seul, sans pistes ni listes
+  if (activeTab === 'formulaire') {
+    return (
+      <KioskFormFrame>
+        <form onSubmit={(e) => addParticipant(e, false)} className="space-y-3" noValidate>
+          <ContactForm
+            idPrefix="participant"
+            mode="contest"
+            value={contactDraft}
+            onChange={(next) => {
+              setContactDraft(next);
+              setContactErrors({});
+            }}
+            errors={contactErrors}
+          />
+          <button
+            type="submit"
+            className="w-full min-h-12 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm transition cursor-pointer shadow-sm"
+            aria-label="Inscrire le participant"
+          >
+            <UserPlus size={16} />
+            <span>M'inscrire</span>
+          </button>
+        </form>
+      </KioskFormFrame>
     );
   }
 

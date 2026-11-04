@@ -41,6 +41,10 @@ interface DashboardShellProps {
   isNetworkClient?: boolean; // Tablette connectée au PC principal
   isLightTheme: boolean;
   onToggleTheme: () => void;
+  // Tablette : commandes de mode (changer, verrouiller, déverrouiller) affichées dans l'en-tête
+  modeControls?: React.ReactNode;
+  // Tablette verrouillée : pas de retour au menu principal ni de fenêtre réseau
+  hideNavigation?: boolean;
   children: React.ReactNode;
 }
 
@@ -68,11 +72,15 @@ export default function DashboardShell({
   isNetworkClient = false,
   isLightTheme,
   onToggleTheme,
+  modeControls = null,
+  hideNavigation = false,
   children
 }: DashboardShellProps) {
   const matrixInfo = MATRICES_LIST.find((m) => m.type === event.type) || MATRICES_LIST[0];
   const Icon = matrixInfo.icon;
   const isPublicView = currentTab === 'public';
+  // Mode « Kiosque formulaire » d'une tablette : en-tête réduit, sans onglets ni menu
+  const isKioskFormView = currentTab === 'formulaire';
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Écran public : commandes et curseur masqués après quelques secondes sans pointeur ni clavier
@@ -169,6 +177,26 @@ export default function DashboardShell({
     ];
   }
 
+  if (isKioskFormView) {
+    return (
+      <div className="min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10">
+        <header className="shrink-0 bg-app-header border-b-4 border-primary px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <BrandLogo size="lg" />
+            <div className="min-w-0">
+              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-xl" title={event.name}>
+                {event.name}
+              </h1>
+              <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">{modeControls}</div>
+        </header>
+        <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-8">{children}</main>
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10 ${
       isPublicView ? `min-h-screen lg:h-screen lg:h-[100dvh] lg:overflow-hidden kiosk-auto-scroll ${isPointerIdle ? 'cursor-none' : ''}` : ''
@@ -233,6 +261,9 @@ export default function DashboardShell({
               </div>
             )}
 
+            {/* Commandes de la tablette, hors du groupe qui s'efface : l'icône verrouillée reste touchable */}
+            {modeControls}
+
             {/* Séparateur vertical discret */}
             <div className={`h-6 w-px bg-app-card-border shrink-0 transition-opacity duration-500 ${isPointerIdle ? 'opacity-0' : ''}`} aria-hidden="true" />
 
@@ -243,7 +274,7 @@ export default function DashboardShell({
               }`}
             >
               {/* Bouton bascule vers l'écran d'administration / chrono (absent de la fenêtre projecteur) */}
-              {!isPublicWindow && (
+              {!isPublicWindow && !hideNavigation && (
               <Button
                 size="sm"
                 onClick={() => onTabChange(tabs[0].id)}
@@ -325,6 +356,9 @@ export default function DashboardShell({
             />
 
             <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {modeControls}
+
+              {!hideNavigation && (
               <Button
                 size="sm"
                 onClick={onOpenNetModal}
@@ -334,6 +368,7 @@ export default function DashboardShell({
                 <Wifi size={13} aria-hidden="true" />
                 <span>{sessionCode ? sessionCode : 'Réseau LAN'}</span>
               </Button>
+              )}
 
               {mismatchedClientVersions.map((clientVer) => (
                 <span
@@ -448,10 +483,12 @@ export default function DashboardShell({
               </MoreMenu>
 
               {/* Les données restent enregistrées : l'activité se rouvre depuis l'historique du menu principal */}
+              {!hideNavigation && (
               <Button size="sm" onClick={onLeaveEvent} title="Retourner au menu principal (l'activité reste enregistrée)">
                 <House size={13} aria-hidden="true" />
                 <span>Menu principal</span>
               </Button>
+              )}
             </div>
           </div>
         </header>
