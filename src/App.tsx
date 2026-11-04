@@ -32,7 +32,7 @@ import Button from './components/shared/Button';
 import { downloadAllContactsXlsx } from './utils/contactExport';
 import { saveFile } from './utils/saveFile';
 import {
-  bloquerPaysage, desepingler, epingler, fileAccept, garderEcranAllume, isAndroidApp, onBoutonRetour, pleinEcran,
+  bloquerPaysage, desepingler, epingler, fileAccept, garderEcranAllume, isAndroidApp, onBoutonRetour, onLienOuvert, pleinEcran,
   quitterApplication
 } from './native/android';
 import { confirmDialog } from './components/shared/ConfirmDialog';
@@ -47,6 +47,8 @@ import PinDialog from './components/tablette/PinDialog';
 import TabletPinSettings from './components/tablette/TabletPinSettings';
 import PanneauHote from './components/reseau/PanneauHote';
 import PanneauTablette, { TEXTE_NAVIGATEUR } from './components/reseau/PanneauTablette';
+import RejoindreEvenement, { rejoindreAvecLien, TEXTE_QR_INCONNU } from './components/tablette/RejoindreEvenement';
+import { parseJoinLink } from './utils/joinLink';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -438,7 +440,21 @@ export default function App() {
     }
   };
 
-  const handleLeaveSession = () => {
+  const handleLeaveSession = async () => {
+    if (IS_TABLET) {
+      // Un mode verrouillé protège aussi la session : sinon n'importe qui pourrait débrancher le kiosque
+      if (isModeLocked) {
+        showToast('Déverrouillez la tablette (code à 4 chiffres) avant de quitter l’événement.', 'warning');
+        return;
+      }
+      const ok = await confirmDialog({
+        title: 'Quitter cet événement ?',
+        message: 'La tablette oublie le code et la clé : il faudra scanner à nouveau le QR du PC pour revenir.',
+        confirmLabel: 'Quitter',
+        tone: 'destructive'
+      });
+      if (!ok) return;
+    }
     networkManager.leaveSession();
     setSessionCode('');
     setShowNetModal(false);
@@ -562,6 +578,44 @@ export default function App() {
         if (quit) quitterApplication();
       } finally {
         asking = false;
+      }
+    });
+  }, []);
+
+  // QR du PC lu par l'appareil photo Samsung : insertech://rejoindre ouvre l'appli et rejoint la session
+  const sessionCodeRef = useRef('');
+  sessionCodeRef.current = sessionCode;
+  useEffect(() => {
+    if (!IS_TABLET) return;
+    let dernier = '';
+    return onLienOuvert(async (url) => {
+      if (url === dernier) return; // getLaunchUrl rend le même lien à chaque rechargement de la page
+      dernier = url;
+      const lien = parseJoinLink(url);
+      if (!lien) {
+        showToast(TEXTE_QR_INCONNU, 'warning');
+        return;
+      }
+      const actuel = sessionCodeRef.current;
+      if (actuel === lien.code && networkManager.getSessionKey() === lien.cle) return;
+      if (backStateRef.current.isModeLocked) {
+        showToast('Déverrouillez la tablette (code à 4 chiffres) avant de changer d’événement.', 'warning');
+        return;
+      }
+      if (actuel) {
+        const ok = await confirmDialog({
+          title: 'Changer d’événement ?',
+          message: `Cette tablette quitte la session ${actuel} pour rejoindre ${lien.code}${lien.nom ? ` (${lien.nom})` : ''}.`,
+          confirmLabel: 'Rejoindre'
+        });
+        if (!ok) return;
+      }
+      try {
+        await rejoindreAvecLien(lien);
+        setSessionCode(lien.code);
+        showToast('Tablette prête : en attente du PC hôte.', 'success');
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Impossible de rejoindre la session.', 'error');
       }
     });
   }, []);
@@ -1589,7 +1643,7 @@ export default function App() {
               onLeave={handleLeaveSession}
             />
           ) : sessionCode ? (
-            <PanneauHote sessionCode={sessionCode} onLeave={handleLeaveSession} />
+            <PanneauHote sessionCode={sessionCode} evenementNom={activeEvent?.name ?? ''} onLeave={handleLeaveSession} />
           ) : (
             // Pas de session active : le PC crée la session, les tablettes la rejoignent depuis l'appli Android
             <div className="space-y-6 pt-2">
@@ -1878,19 +1932,23 @@ export default function App() {
             <p className="text-sm text-app-text-muted">
               Cette tablette se connecte à une activité créée sur le PC hôte. Les activités se créent et se règlent sur le PC.
             </p>
-            {sessionCode && (
-              <p role="status" className="text-sm font-bold text-primary">
-                Connectée à la session {sessionCode}. En attente de l'activité du PC hôte…
-              </p>
+            {sessionCode ? (
+              <>
+                <p role="status" className="text-sm font-bold text-primary">
+                  Connectée à la session {sessionCode}. En attente de l'activité du PC hôte…
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowNetModal(true)}
+                  className="w-full min-h-12 flex items-center justify-center gap-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm cursor-pointer"
+                >
+                  <Wifi size={16} aria-hidden="true" />
+                  <span>Voir la connexion</span>
+                </button>
+              </>
+            ) : (
+              <RejoindreEvenement codePropose={proposedJoinCode} onJoined={(code) => setSessionCode(code)} />
             )}
-            <button
-              type="button"
-              onClick={() => setShowNetModal(true)}
-              className="w-full min-h-12 flex items-center justify-center gap-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm cursor-pointer"
-            >
-              <Wifi size={16} aria-hidden="true" />
-              <span>{sessionCode ? 'Voir la connexion' : 'Se connecter au PC hôte'}</span>
-            </button>
           </section>
           <p className="text-center text-[10px] text-app-text-muted">v{currentVersion}</p>
         </main>

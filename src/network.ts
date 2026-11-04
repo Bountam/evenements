@@ -3,7 +3,7 @@ import { SyncMessage, TrackState } from './types';
 import { getAppVersion, normalizeVersion } from './utils/updateCheck';
 import type { Lien } from './net/lien';
 import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
-import { arreterServeurTablette, demarrerServeurTablette } from './net/tabletteLocale';
+import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } from './net/tabletteLocale';
 import { nouvelleCle } from './net/chiffrement';
 
 // Types de messages réseau local
@@ -27,6 +27,7 @@ const HOST_SILENCE_MS = 12000;
 const CLIENT_SILENCE_MS = 20000;
 const SESSION_KEY_KEY = 'insertech_net_session_key';
 const TABLET_NAME_KEY = 'insertech_net_tablet_name';
+const EVENT_NAME_KEY = 'insertech_net_event_nom';
 
 class P2PNetworkManager {
   connections: Lien[] = [];
@@ -273,6 +274,23 @@ class P2PNetworkManager {
     return this.role === 'standalone' ? null : localStorage.getItem(SESSION_KEY_KEY);
   }
 
+  // PC hôte : nouvelle clé de session. Toutes les tablettes sont déconnectées et devront scanner le
+  // nouveau QR (ou saisir la nouvelle clé) ; le code de session ne change pas.
+  async renouvelerCle(): Promise<string> {
+    if (this.role !== 'host' || !this.sessionId || !this.hostEventId) throw new Error('Aucune session hôte ouverte');
+    const cle = nouvelleCle();
+    localStorage.setItem(SESSION_KEY_KEY, cle);
+    for (const conn of [...this.connections]) {
+      try {
+        conn.close();
+      } catch {
+        // Déjà fermée
+      }
+    }
+    await this.startHost(this.hostEventId, this.sessionId, true);
+    return cle;
+  }
+
   getHoteLocal(): HoteLocal | null {
     return this.hoteLocal;
   }
@@ -345,8 +363,12 @@ class P2PNetworkManager {
   // REJOINDRE UNE SESSION (tablette)
   // La tablette mémorise le code et la clé, démarre son serveur local et attend l'appel du PC hôte.
   // options.cle et options.nom : sinon ceux déjà mémorisés (reprise après un redémarrage)
-  async joinSession(code: string, eventId: string, options: boolean | { cle?: string; nom?: string } = {}): Promise<void> {
+  async joinSession(code: string, eventId: string, options: boolean | { cle?: string; nom?: string; evenement?: string } = {}): Promise<void> {
     const opts = typeof options === 'object' ? options : {};
+    if (opts.evenement !== undefined) {
+      if (opts.evenement) localStorage.setItem(EVENT_NAME_KEY, opts.evenement);
+      else localStorage.removeItem(EVENT_NAME_KEY);
+    }
     const key = opts.cle || localStorage.getItem(SESSION_KEY_KEY);
     const name = opts.nom || localStorage.getItem(TABLET_NAME_KEY) || 'Tablette';
     if (!key) throw new Error('Clé de session manquante');
@@ -374,6 +396,19 @@ class P2PNetworkManager {
 
   getTabletName(): string {
     return localStorage.getItem(TABLET_NAME_KEY) || '';
+  }
+
+  // Tablette : nouveau nom affiché dans la liste du PC hôte (fiche /decouverte)
+  async renommerTablette(nom: string): Promise<void> {
+    const propre = nom.trim().slice(0, 40);
+    if (!propre) throw new Error('Nom vide');
+    localStorage.setItem(TABLET_NAME_KEY, propre);
+    if (this.role === 'client') await majFicheTablette(propre, this.joinCode);
+  }
+
+  // Tablette : nom de l'événement lu dans le QR du PC (affichage seulement)
+  getEventNom(): string {
+    return localStorage.getItem(EVENT_NAME_KEY) || '';
   }
 
   // Tablette : depuis quand aucun lien avec le PC (ms), ou null si liée ou hors session
@@ -497,6 +532,7 @@ class P2PNetworkManager {
     localStorage.removeItem('insertech_net_session_code');
     localStorage.removeItem('insertech_net_event_id');
     localStorage.removeItem(SESSION_KEY_KEY);
+    localStorage.removeItem(EVENT_NAME_KEY);
 
     this.updateStatus('Local uniquement');
   }
