@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Copy, Plus, Tablet, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Copy, KeyRound, Plus, Tablet, Trash2, X } from 'lucide-react';
 import { networkManager } from '../../network';
 import type { EtatHoteLocal, EtatTablette, TabletteVue } from '../../net/hoteLocal';
 import { adresseValide } from '../../net/hoteLocal';
 import { formaterCle } from '../../net/chiffrement';
 import { showToast } from '../shared/Toast';
 import Button from '../shared/Button';
+import { confirmDialog } from '../shared/ConfirmDialog';
 import SessionQrPanel from '../shared/SessionQrPanel';
 import { formatDuree, prefixe24 } from './duree';
 
@@ -53,11 +54,12 @@ function Avertissement({ children, onClose }: { children: React.ReactNode; onClo
 
 interface PanneauHoteProps {
   sessionCode: string;
+  evenementNom?: string;
   onLeave: () => void;
 }
 
 // Fenêtre Réseau local du PC hôte : code et clé de session, tablettes trouvées, ajout par adresse IP
-export default function PanneauHote({ sessionCode, onLeave }: PanneauHoteProps) {
+export default function PanneauHote({ sessionCode, evenementNom = '', onLeave }: PanneauHoteProps) {
   const [etat, setEtat] = useState<EtatHoteLocal | null>(null);
   const [maintenant, setMaintenant] = useState(Date.now());
   const [ip, setIp] = useState('');
@@ -70,7 +72,7 @@ export default function PanneauHote({ sessionCode, onLeave }: PanneauHoteProps) 
       return false;
     }
   });
-  const cle = networkManager.getSessionKey();
+  const [cle, setCle] = useState(() => networkManager.getSessionKey());
 
   useEffect(() => networkManager.onHoteLocalChange(setEtat), []);
   useEffect(() => {
@@ -92,6 +94,22 @@ export default function PanneauHote({ sessionCode, onLeave }: PanneauHoteProps) 
       () => showToast(`${quoi} copié dans le presse-papier.`, 'success'),
       () => showToast(`Copie impossible : notez ${quoi.toLowerCase()} à la main.`, 'warning')
     );
+  };
+
+  const changerCle = async () => {
+    const ok = await confirmDialog({
+      title: 'Nouvelle clé ?',
+      message: "Toutes les tablettes sont déconnectées et devront scanner le nouveau QR, ou saisir la nouvelle clé. À faire si la clé a été vue par quelqu'un d'autre.",
+      confirmLabel: 'Changer la clé',
+      tone: 'destructive'
+    });
+    if (!ok) return;
+    try {
+      setCle(await networkManager.renouvelerCle());
+      showToast('Nouvelle clé créée : scannez le nouveau QR sur chaque tablette.', 'success');
+    } catch {
+      showToast('Impossible de changer la clé.', 'error');
+    }
   };
 
   const ajouter = async (e: React.FormEvent) => {
@@ -136,11 +154,11 @@ export default function PanneauHote({ sessionCode, onLeave }: PanneauHoteProps) 
         <div className="grid grid-cols-2 gap-3 text-center">
           <div>
             <span className="text-[10px] uppercase font-black text-primary tracking-widest block">Code de session</span>
-            <span className="text-lg font-display font-bold text-app-text tracking-wider block" data-testid="code-session">{sessionCode}</span>
+            <span className="text-2xl font-display font-bold text-app-text tracking-wider block" data-testid="code-session">{sessionCode}</span>
           </div>
           <div>
             <span className="text-[10px] uppercase font-black text-primary tracking-widest block">Clé</span>
-            <span className="text-lg font-mono font-bold text-app-text tracking-wider block" data-testid="cle-session">{cle ? formaterCle(cle) : '—'}</span>
+            <span className="text-2xl font-mono font-bold text-app-text tracking-wider block" data-testid="cle-session">{cle ? formaterCle(cle) : '—'}</span>
           </div>
         </div>
         <div className="flex gap-2 justify-center">
@@ -154,11 +172,17 @@ export default function PanneauHote({ sessionCode, onLeave }: PanneauHoteProps) 
               <span>Copier la clé</span>
             </Button>
           )}
+          <Button size="sm" onClick={changerCle}>
+            <KeyRound size={13} aria-hidden="true" />
+            <span>Nouvelle clé</span>
+          </Button>
         </div>
         <p className="text-[10px] text-app-text-muted text-center">
-          Sur chaque tablette : Rejoindre un événement, puis saisir ce code et cette clé. Rien ne passe par internet.
+          Sur chaque tablette : Scanner le QR du PC, ou saisir ce code et cette clé. Rien ne passe par internet.
         </p>
       </div>
+
+      {cle && <SessionQrPanel sessionCode={sessionCode} cle={cle} evenementNom={evenementNom} />}
 
       {reseaux.length > 1 && (
         <Avertissement>
@@ -243,8 +267,6 @@ export default function PanneauHote({ sessionCode, onLeave }: PanneauHoteProps) 
           <p className="text-[10px] text-app-text-muted">L'adresse s'affiche sur l'écran d'attente de la tablette.</p>
         </form>
       </section>
-
-      <SessionQrPanel sessionCode={sessionCode} />
 
       <button
         type="button"

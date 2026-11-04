@@ -95,3 +95,28 @@ export function onBoutonRetour(handler: () => void): () => void {
     remove?.();
   };
 }
+
+// --- Lien profond insertech://rejoindre (lot 6) ---
+// L'appareil photo Samsung lit le QR du PC et ouvre l'appli avec ce lien : au lancement (getLaunchUrl)
+// ou pendant qu'elle tourne déjà (appUrlOpen, l'activité est en singleTask).
+export function onLienOuvert(handler: (url: string) => void): () => void {
+  if (!isAndroidApp()) return () => {};
+  let remove: (() => void) | null = null;
+  let cancelled = false;
+  import('@capacitor/app')
+    .then(async ({ App }) => {
+      const listener = await App.addListener('appUrlOpen', ({ url }) => handler(url));
+      if (cancelled) {
+        listener.remove();
+        return;
+      }
+      remove = () => listener.remove();
+      const lancement = await App.getLaunchUrl();
+      if (!cancelled && lancement?.url) handler(lancement.url);
+    })
+    .catch((e) => console.warn('Lien profond :', e));
+  return () => {
+    cancelled = true;
+    remove?.();
+  };
+}

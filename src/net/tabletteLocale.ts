@@ -17,6 +17,7 @@ interface ServeurLocalPlugin {
   envoyer(options: { id: string; texte: string }): Promise<void>;
   fermer(options: { id: string }): Promise<void>;
   arreter(): Promise<void>;
+  infos(): Promise<{ modele: string }>;
   addListener(event: 'connexion', cb: (e: { id: string; ip?: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'message', cb: (e: { id: string; texte: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'deconnexion', cb: (e: { id: string }) => void): Promise<PluginListenerHandle>;
@@ -162,4 +163,25 @@ export async function arreterServeurTablette(): Promise<void> {
     }
   }
   changerEtat({ actif: false, ip: null, port: null });
+}
+
+// Nouveau nom (ou nouvelle session) dans la fiche publique, sans couper les liaisons
+export async function majFicheTablette(nom: string, session: string | null): Promise<void> {
+  if (!isAndroidApp() || !etat.actif) return;
+  try {
+    await getPlugin().majFiche({ nom, session });
+  } catch (e) {
+    console.warn('Fiche de la tablette :', e);
+  }
+}
+
+// Modèle de l'appareil (ex. « samsung SM-X200 »), nom proposé par défaut ; '' hors de l'appli Android
+export async function lireModeleTablette(): Promise<string> {
+  if (!isAndroidApp()) return '';
+  try {
+    const { modele } = await getPlugin().infos();
+    return typeof modele === 'string' ? modele : '';
+  } catch {
+    return '';
+  }
 }

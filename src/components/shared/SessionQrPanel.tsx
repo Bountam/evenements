@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { Wifi, Smartphone, Maximize2, Minimize2, Copy, Eye, EyeOff } from 'lucide-react';
+import { Wifi, Tablet, Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
 import Button from './Button';
 import TextField from './TextField';
-import { showToast } from './Toast';
-import { buildJoinUrl, buildWifiQrPayload, PUBLIC_APP_URL, getShareableAppUrl } from '../../utils/joinLink';
+import { buildNativeJoinLink, buildWifiQrPayload } from '../../utils/joinLink';
 
 const WIFI_SSID_KEY = 'insertech_wifi_ssid';
 const WIFI_PASSWORD_KEY = 'insertech_wifi_password';
@@ -83,11 +82,13 @@ function QrTile({ step, title, icon: Icon, dataUrl, alt, large, children }: QrTi
 
 interface SessionQrPanelProps {
   sessionCode: string;
+  cle: string;
+  evenementNom?: string;
 }
 
-// Codes QR affichés par le PC principal : 1) rejoindre le Wi-Fi (optionnel), 2) ouvrir l'application
-// et se connecter automatiquement à la session.
-export default function SessionQrPanel({ sessionCode }: SessionQrPanelProps) {
+// Codes QR affichés par le PC hôte : 1) rejoindre le Wi-Fi (optionnel), 2) rejoindre l'événement depuis
+// l'appli Android (code et clé de session dans un lien insertech://, jamais d'adresse internet).
+export default function SessionQrPanel({ sessionCode, cle, evenementNom = '' }: SessionQrPanelProps) {
   const [ssid, setSsid] = useState(() => readStored(WIFI_SSID_KEY));
   const [password, setPassword] = useState(() => readStored(WIFI_PASSWORD_KEY));
   const [showPassword, setShowPassword] = useState(false);
@@ -96,8 +97,7 @@ export default function SessionQrPanel({ sessionCode }: SessionQrPanelProps) {
   useEffect(() => writeStored(WIFI_SSID_KEY, ssid.trim()), [ssid]);
   useEffect(() => writeStored(WIFI_PASSWORD_KEY, password), [password]);
 
-  const joinUrl = buildJoinUrl(sessionCode);
-  const usesPublicUrl = getShareableAppUrl() === PUBLIC_APP_URL;
+  const joinUrl = buildNativeJoinLink(sessionCode, cle, evenementNom);
   const wifiPayload = ssid.trim() ? buildWifiQrPayload(ssid.trim(), password) : null;
 
   const joinQr = useQrDataUrl(joinUrl);
@@ -133,31 +133,19 @@ export default function SessionQrPanel({ sessionCode }: SessionQrPanelProps) {
         )}
         <QrTile
           step={wifiPayload ? 2 : 1}
-          title="Ouvrir l'application"
-          icon={Smartphone}
+          title="Rejoindre l'événement"
+          icon={Tablet}
           dataUrl={joinQr}
-          alt={`Code QR pour ouvrir l'application et rejoindre la session ${sessionCode}`}
+          alt={`Code QR pour rejoindre la session ${sessionCode} depuis l'appli Android`}
           large={large}
         >
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              navigator.clipboard
-                .writeText(joinUrl)
-                .then(() => showToast("Lien d'invitation copié !", 'success'))
-                .catch(() => showToast('Copie impossible sur cet appareil.', 'error'));
-            }}
-          >
-            <Copy size={14} aria-hidden="true" />
-            <span>Copier le lien</span>
-          </Button>
+          <span className="text-micro text-app-text-muted">Contient le code et la clé de la session</span>
         </QrTile>
       </div>
 
       <p className="text-micro text-app-text-muted leading-relaxed">
-        Scannez avec l'appareil photo du téléphone ou de la tablette : l'application s'ouvre et se connecte toute seule à cette session.
-        {usesPublicUrl && ' Le lien ouvre la version en ligne de l’application ; le réseau doit donner accès à Internet.'}
+        Sur la tablette : « Scanner le QR du PC » dans l'appli, ou l'appareil photo Samsung, qui ouvre l'appli. La tablette se reconnecte ensuite toute seule.
+        Ce QR contient la clé : ne le montrez qu'aux tablettes de l'événement.
       </p>
 
       <details className="rounded-xl bg-app-input border border-app-card-border p-3">

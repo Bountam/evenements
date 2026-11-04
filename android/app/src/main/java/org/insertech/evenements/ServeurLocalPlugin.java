@@ -198,6 +198,14 @@ public class ServeurLocalPlugin extends Plugin {
             + (derniere != null ? " : " + derniere.getMessage() : ""));
     }
 
+    // Modèle de l'appareil, proposé comme nom de la tablette
+    @PluginMethod
+    public void infos(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("modele", (Build.MANUFACTURER + " " + Build.MODEL).trim());
+        call.resolve(r);
+    }
+
     @PluginMethod
     public void majFiche(PluginCall call) {
         nom = call.getString("nom", nom);

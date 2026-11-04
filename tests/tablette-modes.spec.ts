@@ -113,7 +113,8 @@ test('Tablette : mode kiosque formulaire verrouillé par le code du PC, délai a
   await expect(page.getByRole('heading', { name: 'Rejoindre un événement' })).toBeVisible();
   await expect(page.getByRole('button', { name: "Créer l'activité" })).toHaveCount(0);
   await expect(page.getByText('Restaurer une sauvegarde JSON')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Se connecter au PC hôte' }).click();
+  await expect(page.getByRole('button', { name: 'Scanner le QR du PC' })).toBeVisible();
+  await expect(page.locator('#rejoindre-cle')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Créer la session hôte' })).toHaveCount(0);
 
   expect(errors).toEqual([]);
