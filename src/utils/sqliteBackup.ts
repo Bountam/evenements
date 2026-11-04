@@ -86,6 +86,17 @@ function detectBackend(): Backend | null {
 }
 
 const backend = detectBackend();
+
+// Adresse et clé du compagnon du lanceur (PC), aussi utilisées pour la liste des tablettes du réseau local
+export function getCompanionEndpoint(): { base: string; key: string } | null {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(PARAMS_KEY) || 'null');
+    if (saved?.port && saved?.key) return { base: `http://127.0.0.1:${encodeURIComponent(saved.port)}`, key: saved.key };
+  } catch {
+    // Pas de compagnon
+  }
+  return null;
+}
 let status: SqliteBackupStatus = backend ? 'pending' : 'unavailable';
 let lastSavedAt: number | null = null;
 const statusListeners = new Set<(s: SqliteBackupStatus, at: number | null) => void>();

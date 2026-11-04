@@ -5,7 +5,6 @@ export const GITHUB_LATEST_RELEASE_URL = 'https://api.github.com/repos/Bountam/e
 export const ALLOWED_RELEASE_PAGE_PREFIX = 'https://github.com/Bountam/evenements/releases/';
 export const ALLOWED_DOWNLOAD_PREFIX = 'https://github.com/Bountam/evenements/releases/download/';
 
-export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 heures
 export const POSTPONE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 heures
 
 const POSTPONED_STORAGE_KEY = 'insertech_update_postponed';

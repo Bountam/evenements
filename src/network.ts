@@ -1,18 +1,12 @@
-import { Peer } from 'peerjs';
-import type { Lien } from './net/lien';
-import { LienPeerjs } from './net/lienPeerjs';
 import { db, notifySync } from './db';
 import { SyncMessage, TrackState } from './types';
 import { getAppVersion, normalizeVersion } from './utils/updateCheck';
+import type { Lien } from './net/lien';
+import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
+import { arreterServeurTablette, demarrerServeurTablette } from './net/tabletteLocale';
+import { nouvelleCle } from './net/chiffrement';
 
-function getPeerClass(): typeof Peer {
-  if (typeof window !== 'undefined' && typeof (window as any).__INSERTECH_PEER_CLASS__ === 'function') {
-    return (window as any).__INSERTECH_PEER_CLASS__;
-  }
-  return Peer;
-}
-
-// Types de messages réseau P2P
+// Types de messages réseau local
 export type NetworkMessage =
   | { type: 'DB_WRITE'; table: string; action: 'put' | 'delete'; data: any; opId?: string }
   | { type: 'DB_DELTA'; table: string; action: 'put' | 'delete'; data: any }
@@ -27,29 +21,14 @@ export type NetworkMessage =
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
   | { type: 'INITIAL_SYNC'; payload: { event: any; tickets: any[]; technicians: any[]; participants: any[]; attendees: any[] } };
 
-// Chargement dynamique du script MQTT Paho pour l'auto-découverte sans clé d'API
-function loadPahoMqtt(): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if ((window as any).Paho) {
-      resolve((window as any).Paho);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js';
-    script.onload = () => resolve((window as any).Paho);
-    script.onerror = (err) => reject(err);
-    document.head.appendChild(script);
-  });
-}
-
 const OUTBOX_KEY = 'insertech_net_outbox';
 const HEARTBEAT_MS = 4000;
 const HOST_SILENCE_MS = 12000;
 const CLIENT_SILENCE_MS = 20000;
-const CONNECT_TIMEOUT_MS = 10000;
+const SESSION_KEY_KEY = 'insertech_net_session_key';
+const TABLET_NAME_KEY = 'insertech_net_tablet_name';
 
 class P2PNetworkManager {
-  peer: Peer | null = null;
   connections: Lien[] = [];
   role: 'host' | 'client' | 'standalone' = 'standalone';
   // Activité partagée par l'hôte : suit l'activité ouverte sur le PC principal (voir setHostEvent)
@@ -66,11 +45,11 @@ class P2PNetworkManager {
   // Versions des tablettes connectées au PC principal (connectionId -> version X.Y.Z)
   private clientVersions = new Map<string, string>();
 
-  // Découverte réseau MQTT
-  mqttClient: any = null;
-  discoveredSessions: Record<string, { code: string; name: string; type: string; lastSeen: number }> = {};
-  onSessionsDiscovered: ((sessions: any[]) => void) | null = null;
-  discoveryInterval: any = null;
+  // PC hôte : appel des tablettes du réseau local (voir src/net/hoteLocal.ts)
+  private hoteLocal: HoteLocal | null = null;
+  private etatHoteLocal: EtatHoteLocal | null = null;
+  private abonnesHoteLocal = new Set<(etat: EtatHoteLocal | null) => void>();
+  private arretHoteLocal: (() => void) | null = null;
 
   // Variables locales temporaires pour l'état des chronos (si hôte, on maintient l'état des 5 pistes)
   tracksState: Record<number, TrackState> = {
@@ -93,14 +72,13 @@ class P2PNetworkManager {
   // rechargement, et sont renvoyés à la reconnexion jusqu'à confirmation (ACK).
   private outbox: (NetworkMessage & { opId: string })[] = [];
 
-  // Reconnexion automatique d'une tablette au PC principal
+  // Tablette : session mémorisée ; elle attend que le PC hôte l'appelle (elle n'appelle personne)
   private joinCode: string | null = null;
   private joinEventId = 'temp';
-  private reconnectTimer: any = null;
-  private reconnectAttempts = 0;
-  private connectTimeout: any = null;
+  // Depuis quand la tablette est sans lien avec le PC (null : liée, ou hors session)
+  private hostLostSince: number | null = null;
 
-  // Battement de cœur : une liaison WebRTC peut mourir sans événement « close » (veille, Wi-Fi)
+  // Battement de cœur : une liaison peut mourir sans événement « close » (veille, Wi-Fi)
   private heartbeatInterval: any = null;
   private lastHostMessageAt = 0;
   private hostAnswersPing = false;
@@ -109,7 +87,6 @@ class P2PNetworkManager {
   // Messages traités un à un par liaison : une écriture reçue avant une demande de synchro
   // complète est enregistrée avant que la synchro soit lue dans la base
   private incomingChains = new Map<string, Promise<void>>();
-  private hostReconnectTimer: any = null;
 
   // Canal de synchronisation inter-onglets / multi-fenêtres (HDMI Écran Public local)
   chronoChannel: BroadcastChannel | null = null;
@@ -134,15 +111,6 @@ class P2PNetworkManager {
       } catch (e) {
         this.outbox = [];
       }
-
-      // Une tablette reprend la liaison dès qu'elle se réveille ou retrouve le réseau
-      const wake = () => {
-        if (this.role === 'client' && this.joinCode && !this.isLinkedToHost()) this.reconnectNow();
-      };
-      window.addEventListener('online', wake);
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') wake();
-      });
 
       // Les autres fenêtres du même ordinateur (écran public) reprennent le décalage de la console
       if (localStorage.getItem('insertech_net_role') === 'client') {
@@ -251,122 +219,94 @@ class P2PNetworkManager {
   }
 
   // DÉMARRER LA SESSION HÔTE (PC Principal)
-  // keepTrying : reprise automatique après un rechargement, où le serveur de signalement peut encore
-  // réserver le code de la session précédente quelques secondes
-  async startHost(eventId: string, existingCode?: string, keepTrying = false): Promise<string> {
+  // Le PC n'écoute pas : il appelle les tablettes qui attendent cette session (code + clé). Rien ne passe
+  // par internet, et Windows ne demande ni pare-feu ni droits administrateur pour des connexions sortantes.
+  async startHost(eventId: string, existingCode?: string, _keepTrying = false): Promise<string> {
+    this.stopHoteLocal();
     this.role = 'host';
     this.hostEventId = eventId;
-    this.isConnecting = true;
+    this.isConnecting = false;
     this.stopClockSync();
     this.setClockOffset(0); // Le PC Principal est l'horloge de référence
-    this.updateStatus('Connexion au serveur de signalement...');
 
     if (existingCode) {
       this.sessionId = existingCode;
     } else {
-      // Créer un identifiant de session court et lisible (ex: INS-XXXX)
+      // Identifiant de session court et lisible (ex: INS-4821-AB12)
       const randomCode = Math.floor(1000 + Math.random() * 9000);
       this.sessionId = `INS-${randomCode}-${eventId.substring(4, 8).toUpperCase()}`;
     }
+    // La clé est gardée tant que la session dure : les tablettes déjà réglées restent reconnues
+    const savedKey = existingCode ? localStorage.getItem(SESSION_KEY_KEY) : null;
+    const key = savedKey || nouvelleCle();
 
-    // Sauvegarder les paramètres réseau pour la reconnexion automatique (rechargement)
+    // Sauvegarder les paramètres réseau pour la reprise automatique (rechargement)
     localStorage.setItem('insertech_net_role', 'host');
     localStorage.setItem('insertech_net_session_code', this.sessionId);
     localStorage.setItem('insertech_net_event_id', eventId);
+    localStorage.setItem(SESSION_KEY_KEY, key);
 
     this.startHostWatchdog();
 
-    return new Promise((resolve, reject) => {
-      if (this.peer) this.peer.destroy();
-      const PeerClass = getPeerClass();
-      const peer = new PeerClass(this.sessionId, {
-        host: '0.peerjs.com',
-        port: 443,
-        secure: true,
-        debug: 1
-      });
-      this.peer = peer;
-      let opened = false;
+    const hote = new HoteLocal(this.sessionId, key, (lien) => this.attachClientLien(lien));
+    this.hoteLocal = hote;
+    this.arretHoteLocal = hote.onChange((etat) => {
+      this.etatHoteLocal = etat;
+      this.abonnesHoteLocal.forEach((cb) => cb(etat));
+    });
+    hote.demarrer();
+    this.updateStatus('En ligne (Hôte, aucune tablette)');
+    return this.sessionId;
+  }
 
-      peer.on('open', (id) => {
-        opened = true;
-        this.isConnecting = false;
-        this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte)');
-        // Démarrer la publication d'annonces MQTT pour l'auto-découverte
-        this.startMqttDiscoveryAnnounce(this.hostEventId ?? eventId);
-        resolve(id);
-      });
+  private stopHoteLocal() {
+    this.arretHoteLocal?.();
+    this.arretHoteLocal = null;
+    this.hoteLocal?.arreter();
+    this.hoteLocal = null;
+    this.etatHoteLocal = null;
+    this.abonnesHoteLocal.forEach((cb) => cb(null));
+  }
 
-      // Liaison au serveur de signalement perdue (Wi-Fi, veille) : les tablettes déjà connectées
-      // continuent de fonctionner, mais aucune ne pourrait (re)joindre la session sans cette reprise
-      peer.on('disconnected', () => {
-        if (this.peer !== peer || this.role !== 'host') return;
-        this.updateStatus('Reconnexion au serveur de signalement...');
-        this.scheduleHostSignalingReconnect(peer);
-      });
+  // Clé de la session ouverte (PC hôte ou tablette), à saisir ou scanner sur les tablettes
+  getSessionKey(): string | null {
+    return this.role === 'standalone' ? null : localStorage.getItem(SESSION_KEY_KEY);
+  }
 
-      peer.on('error', (err) => {
-        if (this.peer !== peer) return;
-        this.isConnecting = false;
-        if (!opened && keepTrying && err.type === 'unavailable-id') {
-          setTimeout(() => {
-            if (this.peer !== peer || this.role !== 'host') return;
-            this.startHost(this.hostEventId ?? eventId, this.sessionId, true).then(resolve, reject);
-          }, 3000);
-          return;
-        }
-        this.updateStatus(`Erreur : ${err.type}`);
-        if (!opened) reject(err);
-      });
+  getHoteLocal(): HoteLocal | null {
+    return this.hoteLocal;
+  }
 
-      // Écouter les connexions des tablettes clientes
-      peer.on('connection', (dataConn) => {
-        const conn: Lien = new LienPeerjs(dataConn);
-        this.connections.push(conn);
-        this.updateStatus(`Connecté (${this.connections.length} appareils)`);
+  onHoteLocalChange(cb: (etat: EtatHoteLocal | null) => void): () => void {
+    this.abonnesHoteLocal.add(cb);
+    cb(this.etatHoteLocal);
+    return () => this.abonnesHoteLocal.delete(cb);
+  }
 
-        conn.on('data', (data) => {
-          this.enqueueIncoming(conn, data as NetworkMessage, () => this.hostEventId ?? eventId);
-        });
+  // Une tablette authentifiée vient d'être reliée au PC hôte
+  private attachClientLien(conn: Lien) {
+    this.connections.push(conn);
+    this.updateStatus(`Connecté (${this.connections.length} appareils)`);
 
-        conn.on('close', () => {
-          this.connections = this.connections.filter(c => c.connectionId !== conn.connectionId);
-          this.lastClientPingAt.delete(conn.connectionId);
-          this.incomingChains.delete(conn.connectionId);
-          if (this.clientVersions.delete(conn.connectionId)) {
-            this.notifyClientVersions();
-          }
-          if (this.role === 'host') {
-            this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte, aucun client)');
-          }
-        });
-      });
+    conn.on('data', (data) => {
+      this.enqueueIncoming(conn, data as NetworkMessage, () => this.hostEventId ?? '');
+    });
+
+    conn.on('close', () => {
+      this.connections = this.connections.filter(c => c.connectionId !== conn.connectionId);
+      this.lastClientPingAt.delete(conn.connectionId);
+      this.incomingChains.delete(conn.connectionId);
+      if (this.clientVersions.delete(conn.connectionId)) {
+        this.notifyClientVersions();
+      }
+      if (this.role === 'host') {
+        this.updateStatus(this.connections.length > 0 ? `Connecté (${this.connections.length} appareils)` : 'En ligne (Hôte, aucune tablette)');
+      }
     });
   }
 
-  private scheduleHostSignalingReconnect(peer: Peer) {
-    if (this.hostReconnectTimer) return;
-    this.hostReconnectTimer = setTimeout(() => {
-      this.hostReconnectTimer = null;
-      if (this.peer !== peer || this.role !== 'host' || !peer.disconnected) return;
-      if (peer.destroyed) {
-        this.startHost(this.hostEventId ?? '', this.sessionId, true).catch(() => {});
-        return;
-      }
-      try {
-        peer.reconnect();
-      } catch (e) {
-        // Réessayer au prochain passage
-      }
-      // Si la reprise échoue, l'événement « disconnected » n'est pas toujours réémis
-      setTimeout(() => {
-        if (this.peer === peer && this.role === 'host' && peer.disconnected) this.scheduleHostSignalingReconnect(peer);
-      }, 5000);
-    }, 2000);
-  }
-
   // L'hôte ferme les liaisons des tablettes muettes depuis trop longtemps (veille, hors de portée) :
-  // elles se reconnecteront d'elles-mêmes et le nombre d'appareils affiché reste juste
+  // il les rappellera au tour suivant et le nombre d'appareils affiché reste juste
   private startHostWatchdog() {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
@@ -402,9 +342,14 @@ class P2PNetworkManager {
     this.incomingChains.set(key, next);
   }
 
-  // REJOINDRE UNE SESSION EXISTANTE (Tablettes Clients)
-  // keepTrying : reprise automatique après un rechargement, réessaie tant que le PC principal est absent
-  async joinSession(code: string, eventId: string, keepTrying = false): Promise<void> {
+  // REJOINDRE UNE SESSION (tablette)
+  // La tablette mémorise le code et la clé, démarre son serveur local et attend l'appel du PC hôte.
+  // options.cle et options.nom : sinon ceux déjà mémorisés (reprise après un redémarrage)
+  async joinSession(code: string, eventId: string, options: boolean | { cle?: string; nom?: string } = {}): Promise<void> {
+    const opts = typeof options === 'object' ? options : {};
+    const key = opts.cle || localStorage.getItem(SESSION_KEY_KEY);
+    const name = opts.nom || localStorage.getItem(TABLET_NAME_KEY) || 'Tablette';
+    if (!key) throw new Error('Clé de session manquante');
     if (this.joinCode && this.joinCode !== code) {
       // Nouvelle session : les envois en attente visaient l'ancien PC principal
       this.outbox = [];
@@ -412,126 +357,83 @@ class P2PNetworkManager {
     }
     this.role = 'client';
     this.joinCode = code;
+    this.sessionId = code;
     this.joinEventId = eventId;
-    this.reconnectAttempts = 0;
-    this.clearReconnectTimer();
+    this.hostLostSince = Date.now();
 
-    // Sauvegarder les paramètres réseau pour la reconnexion automatique (rechargement)
+    // Sauvegarder les paramètres réseau pour la reprise automatique (rechargement)
     localStorage.setItem('insertech_net_role', 'client');
     localStorage.setItem('insertech_net_session_code', code);
     localStorage.setItem('insertech_net_event_id', eventId);
+    localStorage.setItem(SESSION_KEY_KEY, key);
+    localStorage.setItem(TABLET_NAME_KEY, name);
 
-    try {
-      await this.connectToHost();
-    } catch (e) {
-      if (keepTrying) {
-        this.scheduleReconnect();
-        return;
-      }
-      throw e;
-    }
+    this.updateStatus('En attente du PC hôte');
+    await demarrerServeurTablette({ code, cle: key, nom: name }, (lien) => this.attachHostLien(lien));
+  }
+
+  getTabletName(): string {
+    return localStorage.getItem(TABLET_NAME_KEY) || '';
+  }
+
+  // Tablette : depuis quand aucun lien avec le PC (ms), ou null si liée ou hors session
+  getHostLostSince(): number | null {
+    return this.role === 'client' ? this.hostLostSince : null;
+  }
+
+  getPendingCount(): number {
+    return this.outbox.length;
   }
 
   private isLinkedToHost(): boolean {
     return this.connections.length > 0 && this.connections[0].open;
   }
 
-  // Une tentative de liaison au PC principal ; résolue quand la liaison de données est ouverte
-  private connectToHost(): Promise<void> {
-    const code = this.joinCode;
-    if (!code) return Promise.reject(new Error('Aucune session'));
-    this.isConnecting = true;
-    this.updateStatus(this.reconnectAttempts > 0 ? 'Reconnexion au PC Principal...' : 'Recherche de la session...');
+  // Le PC hôte vient d'appeler la tablette et l'authentification a réussi
+  private attachHostLien(conn: Lien) {
+    if (this.role !== 'client') {
+      conn.close();
+      return;
+    }
+    const previous = this.connections[0];
+    if (previous && previous !== conn) {
+      this.connections = [];
+      try {
+        previous.close();
+      } catch (e) {
+        // Déjà fermée
+      }
+    }
+    this.connections = [conn];
+    this.lastHostMessageAt = Date.now();
+    this.hostAnswersPing = false;
+    this.hostLostSince = null;
+    this.updateStatus('Connecté au PC Principal');
 
-    if (this.peer) this.peer.destroy();
-    this.connections = [];
-
-    return new Promise((resolve, reject) => {
-      const PeerClass = getPeerClass();
-      const peer = new PeerClass({
-        host: '0.peerjs.com',
-        port: 443,
-        secure: true,
-        debug: 1
-      });
-      this.peer = peer;
-      let settled = false;
-      const fail = (err: any) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(this.connectTimeout);
-        this.isConnecting = false;
-        if (this.peer === peer) {
-          peer.destroy();
-          this.peer = null;
-        }
-        reject(err);
-      };
-
-      clearTimeout(this.connectTimeout);
-      this.connectTimeout = setTimeout(() => fail(new Error('Délai de connexion dépassé')), CONNECT_TIMEOUT_MS);
-
-      peer.on('open', () => {
-        const conn: Lien = new LienPeerjs(peer.connect(code, { reliable: true }));
-
-        conn.on('open', () => {
-          if (this.peer !== peer || this.role !== 'client') return;
-          settled = true;
-          clearTimeout(this.connectTimeout);
-          this.isConnecting = false;
-          this.reconnectAttempts = 0;
-          this.connections = [conn];
-          this.lastHostMessageAt = Date.now();
-          this.hostAnswersPing = false;
-          this.updateStatus('Connecté au PC Principal');
-
-          // Renvoyer d'abord tout ce que le PC principal n'a pas confirmé (coupure, veille, rechargement),
-          // puis demander sa base : il traite les messages dans l'ordre, la synchro les inclura
-          for (const pendingMsg of this.outbox) {
-            try {
-              conn.send(pendingMsg);
-            } catch (e) {
-              console.error('Erreur de renvoi en attente :', e);
-            }
-          }
-          conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion() });
-
-          // Se caler sur l'horloge du Master
-          this.startClockSync();
-          this.startClientHeartbeat(conn);
-          resolve();
-        });
-
-        conn.on('data', (data) => {
-          if (this.connections[0] === conn) this.lastHostMessageAt = Date.now();
-          this.enqueueIncoming(conn, data as NetworkMessage, () => this.joinEventId);
-        });
-
-        conn.on('error', (err) => {
-          if (!settled) {
-            this.updateStatus('Erreur de liaison client');
-            fail(err);
-          } else {
-            this.handleLostHost(conn);
-          }
-        });
-
-        conn.on('close', () => {
-          if (!settled) fail(new Error('Liaison fermée'));
-          else this.handleLostHost(conn);
-        });
-      });
-
-      peer.on('error', (err) => {
-        if (!settled) {
-          this.updateStatus(`Erreur d'initialisation`);
-          fail(err);
-        }
-      });
+    conn.on('data', (data) => {
+      if (this.connections[0] === conn) this.lastHostMessageAt = Date.now();
+      this.enqueueIncoming(conn, data as NetworkMessage, () => this.joinEventId);
     });
+    conn.on('error', () => this.handleLostHost(conn));
+    conn.on('close', () => this.handleLostHost(conn));
+
+    // Renvoyer d'abord tout ce que le PC principal n'a pas confirmé (coupure, veille, rechargement),
+    // puis demander sa base : il traite les messages dans l'ordre, la synchro les inclura
+    for (const pendingMsg of this.outbox) {
+      try {
+        conn.send(pendingMsg);
+      } catch (e) {
+        console.error('Erreur de renvoi en attente :', e);
+      }
+    }
+    conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion() });
+
+    // Se caler sur l'horloge du Master
+    this.startClockSync();
+    this.startClientHeartbeat(conn);
   }
 
-  // La liaison au PC principal est perdue : les écritures restent en attente et la tablette se reconnecte
+  // La liaison au PC principal est perdue : les écritures restent en attente et le PC rappellera
   private handleLostHost(conn: Lien) {
     if (this.connections[0] !== conn) return;
     this.connections = [];
@@ -544,8 +446,8 @@ class P2PNetworkManager {
       // Déjà fermée
     }
     if (this.role !== 'client') return;
-    this.updateStatus('Déconnecté du PC Principal (reconnexion...)');
-    this.scheduleReconnect();
+    this.hostLostSince = Date.now();
+    this.updateStatus('En attente du PC hôte');
   }
 
   private startClientHeartbeat(conn: Lien) {
@@ -567,52 +469,21 @@ class P2PNetworkManager {
     }, HEARTBEAT_MS);
   }
 
-  private clearReconnectTimer() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-  }
-
-  private scheduleReconnect() {
-    if (this.role !== 'client' || !this.joinCode || this.reconnectTimer) return;
-    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 10000);
-    this.reconnectAttempts++;
-    this.updateStatus('Déconnecté du PC Principal (reconnexion...)');
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connectToHost().catch(() => this.scheduleReconnect());
-    }, delay);
-  }
-
-  private reconnectNow() {
-    if (this.isConnecting) return;
-    this.clearReconnectTimer();
-    this.reconnectAttempts = 0;
-    this.connectToHost().catch(() => this.scheduleReconnect());
-  }
-
   // QUITTER LA SESSION RÉSEAU (Retour au mode standalone)
   leaveSession() {
+    const wasClient = this.role === 'client';
     this.role = 'standalone';
     this.joinCode = null;
-    this.clearReconnectTimer();
-    clearTimeout(this.connectTimeout);
-    if (this.hostReconnectTimer) {
-      clearTimeout(this.hostReconnectTimer);
-      this.hostReconnectTimer = null;
-    }
+    this.hostLostSince = null;
     this.stopHeartbeat();
+    this.stopHoteLocal();
     this.connections.forEach(conn => conn.close());
     this.connections = [];
     this.incomingChains.clear();
     this.lastClientPingAt.clear();
     this.clientVersions.clear();
     this.notifyClientVersions();
-    if (this.peer) {
-      this.peer.destroy();
-      this.peer = null;
-    }
+    if (wasClient) arreterServeurTablette().catch(() => {});
     this.isConnecting = false;
     this.sessionId = '';
     this.stopClockSync();
@@ -620,14 +491,12 @@ class P2PNetworkManager {
     // Les données restent sur cet appareil ; elles ne sont plus destinées à une session
     this.outbox = [];
     this.persistOutbox();
-    
+
     // Nettoyer les paramètres de reconnexion
     localStorage.removeItem('insertech_net_role');
     localStorage.removeItem('insertech_net_session_code');
     localStorage.removeItem('insertech_net_event_id');
-
-    // Arrêter le service MQTT d'auto-découverte
-    this.stopMqttDiscovery();
+    localStorage.removeItem(SESSION_KEY_KEY);
 
     this.updateStatus('Local uniquement');
   }
@@ -713,7 +582,6 @@ class P2PNetworkManager {
         }
       }
     }
-    if (this.peer && !this.peer.disconnected) this.startMqttDiscoveryAnnounce(eventId);
   }
 
   // TRAITER LES MESSAGES ENTRANTS (Master & Clients)
@@ -1039,164 +907,6 @@ class P2PNetworkManager {
     });
   }
 
-  // --- AUTO-DÉCOUVERTE SESSIONS RÉSEAU (MQTT PUBLIC) ---
-  
-  private async startMqttDiscoveryAnnounce(eventId: string) {
-    this.stopMqttDiscovery();
-
-    try {
-      const Paho = await loadPahoMqtt();
-      const clientId = 'ins-host-' + Math.random().toString(36).substring(2, 9);
-      // EMQX Broker public gratuit avec support WebSocket TLS
-      const client = new Paho.MQTT.Client('broker.emqx.io', 8084, '/mqtt', clientId);
-
-      client.onConnectionLost = (responseObject: any) => {
-        if (responseObject.errorCode !== 0) {
-          console.warn('MQTT Host Discovery perdu. Reconnexion automatique dans 8s...');
-          setTimeout(() => this.startMqttDiscoveryAnnounce(eventId), 8000);
-        }
-      };
-
-      client.connect({
-        useSSL: true,
-        timeout: 5,
-        onSuccess: () => {
-          this.mqttClient = client;
-          // Première annonce
-          this.sendDiscoveryAnnounce(eventId);
-
-          // Annonce périodique toutes les 8 secondes
-          if (this.discoveryInterval) clearInterval(this.discoveryInterval);
-          this.discoveryInterval = setInterval(() => {
-            this.sendDiscoveryAnnounce(eventId);
-          }, 8000);
-        },
-        onFailure: (err: any) => {
-          console.warn('Échec connexion MQTT discovery (Host) :', err);
-        }
-      });
-    } catch (e) {
-      console.warn('Impossible de charger la découverte MQTT (Host) :', e);
-    }
-  }
-
-  private async sendDiscoveryAnnounce(eventId: string) {
-    if (!this.mqttClient || !this.mqttClient.isConnected()) return;
-    try {
-      const eventSettings = await db.events.get(eventId);
-      const payload = JSON.stringify({
-        type: 'ANNOUNCE',
-        code: this.sessionId,
-        name: eventSettings ? eventSettings.name : 'Console Insertech',
-        eventType: eventSettings ? eventSettings.type : 'générique',
-        timestamp: Date.now()
-      });
-      const message = new (window as any).Paho.MQTT.Message(payload);
-      message.destinationName = 'insertech/sessions/discovery';
-      message.retained = false;
-      this.mqttClient.send(message);
-    } catch (e) {
-      console.error('Erreur envoi annonce MQTT :', e);
-    }
-  }
-
-  // Lancer la recherche de sessions hôtes actives
-  async startSessionsSearch() {
-    this.stopSessionsSearch();
-    this.discoveredSessions = {};
-    this.notifyDiscoveredSessions();
-
-    try {
-      const Paho = await loadPahoMqtt();
-      const clientId = 'ins-client-' + Math.random().toString(36).substring(2, 9);
-      const client = new Paho.MQTT.Client('broker.emqx.io', 8084, '/mqtt', clientId);
-
-      client.onConnectionLost = (responseObject: any) => {
-        if (responseObject.errorCode !== 0) {
-          console.warn('MQTT Client Discovery perdu. Reconnexion...');
-        }
-      };
-
-      client.onMessageArrived = (message: any) => {
-        try {
-          const payload = JSON.parse(message.payloadString);
-          if (
-            payload &&
-            typeof payload === 'object' &&
-            payload.type === 'ANNOUNCE' &&
-            typeof payload.code === 'string' &&
-            payload.code.startsWith('INS-')
-          ) {
-            const cleanCode = payload.code.replace(/[^A-Za-z0-9-]/g, '').substring(0, 30);
-            this.discoveredSessions[cleanCode] = {
-              code: cleanCode,
-              name: typeof payload.name === 'string' ? payload.name.substring(0, 100) : 'Console Insertech',
-              type: typeof payload.eventType === 'string' ? payload.eventType.substring(0, 50) : 'générique',
-              lastSeen: Date.now()
-            };
-            this.notifyDiscoveredSessions();
-          }
-        } catch (e) {
-          // Ignorer messages corrompus
-        }
-      };
-
-      client.connect({
-        useSSL: true,
-        timeout: 5,
-        onSuccess: () => {
-          this.mqttClient = client;
-          client.subscribe('insertech/sessions/discovery');
-          
-          // Purger périodiquement les sessions inactives de la liste
-          if (this.discoveryInterval) clearInterval(this.discoveryInterval);
-          this.discoveryInterval = setInterval(() => {
-            const now = Date.now();
-            let changed = false;
-            Object.keys(this.discoveredSessions).forEach((code) => {
-              // Si aucune annonce reçue depuis plus de 18 secondes, on supprime de la liste
-              if (now - this.discoveredSessions[code].lastSeen > 18000) {
-                delete this.discoveredSessions[code];
-                changed = true;
-              }
-            });
-            if (changed) this.notifyDiscoveredSessions();
-          }, 4000);
-        },
-        onFailure: (err: any) => {
-          console.warn('Échec connexion MQTT discovery (Client) :', err);
-        }
-      });
-    } catch (e) {
-      console.warn('Impossible de démarrer la découverte MQTT (Client) :', e);
-    }
-  }
-
-  stopSessionsSearch() {
-    this.stopMqttDiscovery();
-    this.discoveredSessions = {};
-  }
-
-  private stopMqttDiscovery() {
-    if (this.discoveryInterval) {
-      clearInterval(this.discoveryInterval);
-      this.discoveryInterval = null;
-    }
-    if (this.mqttClient) {
-      try {
-        if (this.mqttClient.isConnected()) {
-          this.mqttClient.disconnect();
-        }
-      } catch (e) {}
-      this.mqttClient = null;
-    }
-  }
-
-  private notifyDiscoveredSessions() {
-    if (this.onSessionsDiscovered) {
-      this.onSessionsDiscovered(Object.values(this.discoveredSessions));
-    }
-  }
 }
 
 export const networkManager = new P2PNetworkManager();

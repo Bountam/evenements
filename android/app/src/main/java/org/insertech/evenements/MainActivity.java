@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         // Plugins maison : enregistrés avant super.onCreate
         registerPlugin(InsertechNatifPlugin.class);
+        registerPlugin(ServeurLocalPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Sauvegarde SQLite hors du navigateur (window.InsertechStockage), voir src/utils/sqliteBackup.ts
