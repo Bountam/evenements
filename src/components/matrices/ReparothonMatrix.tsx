@@ -16,7 +16,7 @@ import { fileAccept } from '../../native/android';
 
 interface ReparothonMatrixProps {
   event: EventSettings;
-  activeTab: 'accueil' | 'techniciens' | 'public';
+  activeTab: 'accueil' | 'techniciens' | 'public' | 'formulaire';
 }
 
 interface StatKpiCardProps {
@@ -792,14 +792,16 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   });
 
   // Rendu de l'écran Organisateur (Admin / Accueil)
-  if (activeTab === 'accueil') {
+  if (activeTab === 'accueil' || activeTab === 'formulaire') {
+    // Mode « Kiosque formulaire » d'une tablette : seul le formulaire reste affiché (voir .kiosk-form-only)
+    const kioskForm = activeTab === 'formulaire';
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${kioskForm ? 'kiosk-form-only' : ''}`}>
         {/* Formulaire d'inscription ticket */}
-        <div className="lg:col-span-4 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
+        <div className="kiosk-keep lg:col-span-4 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
           <h3 className="text-base font-bold font-display text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <Plus size={18} className="text-primary" />
-            <span>Nouveau Diagnostic</span>
+            <span>{kioskForm ? 'Inscription' : 'Nouveau Diagnostic'}</span>
           </h3>
 
           <form onSubmit={handleAddTicket} className="space-y-4">
@@ -888,11 +890,11 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
             >
               <Plus size={14} />
-              <span>Créer le ticket</span>
+              <span>{kioskForm ? "M'inscrire" : 'Créer le ticket'}</span>
             </button>
           </form>
 
-          <div className="border-t border-purple-950/60 pt-4 mt-4 space-y-3">
+          <div className="kiosk-hide border-t border-purple-950/60 pt-4 mt-4 space-y-3">
             <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 font-sans block text-center">Ou importation en lot</span>
             <label 
               htmlFor="csvImport"

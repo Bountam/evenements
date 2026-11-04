@@ -34,6 +34,14 @@ import Button from './components/shared/Button';
 import { downloadAllContactsXlsx } from './utils/contactExport';
 import { saveFile } from './utils/saveFile';
 import { fileAccept, isAndroidApp } from './native/android';
+import {
+  getDeviceRole, getEffectivePinLock, readEventPinLock, readLocked, readSavedMode, saveLocked, saveMode, storePinCopy,
+  tabForMode, NO_PIN_MESSAGE, type ModeUsage
+} from './utils/modeLock';
+import ModePicker from './components/tablette/ModePicker';
+import ModeControls from './components/tablette/ModeControls';
+import PinDialog from './components/tablette/PinDialog';
+import TabletPinSettings from './components/tablette/TabletPinSettings';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -47,11 +55,16 @@ import { CONTACT_EXPORT_HEADER, CONTACT_IMPORT_IGNORED, contactExportCells, prot
 const IS_PUBLIC_WINDOW =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('vue') === 'public';
 
+// Tablette (application Android) : elle rejoint l'activité du PC hôte et n'en crée jamais
+const IS_TABLET = getDeviceRole() === 'tablette';
+
 // Onglet courant mémorisé par fenêtre, pour survivre à un rechargement
 const TAB_STORAGE_KEY = 'insertech_current_tab';
 
 function readSavedTab(): string {
   if (IS_PUBLIC_WINDOW) return 'public';
+  const modeTab = IS_TABLET ? readSavedMode() : null;
+  if (modeTab && tabForMode(modeTab)) return tabForMode(modeTab) as string;
   try {
     return sessionStorage.getItem(TAB_STORAGE_KEY) || 'accueil';
   } catch (e) {
@@ -69,6 +82,11 @@ export default function App() {
   const [deferredPwaPrompt, setDeferredPwaPrompt] = useState<any>(null);
   const [isStandalonePwa, setIsStandalonePwa] = useState<boolean>(false);
   const [showMobileInstallModal, setShowMobileInstallModal] = useState<boolean>(false);
+
+  // Tablette : mode d'usage choisi et verrouillage, gardés au redémarrage
+  const [tabletMode, setTabletMode] = useState<ModeUsage | null>(() => (IS_TABLET ? readSavedMode() : null));
+  const [isModeLocked, setIsModeLocked] = useState<boolean>(() => IS_TABLET && readLocked());
+  const [showPinDialog, setShowPinDialog] = useState(false);
 
   // Gestion de l'installation PWA Android / Tablette
   useEffect(() => {
@@ -483,8 +501,12 @@ export default function App() {
   // Synchronisation et validation automatique de currentTab selon le type de matrice active
   useEffect(() => {
     if (activeEvent) {
+      const modeTab = IS_TABLET && tabletMode ? tabForMode(tabletMode) : null;
       if (IS_PUBLIC_WINDOW) {
         if (currentTab !== 'public') setCurrentTab('public');
+      } else if (modeTab) {
+        // Écran public ou kiosque formulaire : la tablette reste sur l'onglet de son mode
+        if (currentTab !== modeTab) setCurrentTab(modeTab);
       } else if (activeEvent.type === 'reparothon' || activeEvent.type === 'install_fest_linux') {
         if (!['accueil', 'techniciens', 'public'].includes(currentTab)) {
           setCurrentTab('accueil');
@@ -499,7 +521,52 @@ export default function App() {
         }
       }
     }
-  }, [activeEvent?.id, activeEvent?.type, currentTab]);
+  }, [activeEvent?.id, activeEvent?.type, currentTab, tabletMode]);
+
+  // Tablette : garder une copie du code reçu du PC, pour déverrouiller même hors de portée du PC
+  const eventPinLock = readEventPinLock(activeEvent);
+  useEffect(() => {
+    if (IS_TABLET && eventPinLock) storePinCopy(eventPinLock);
+  }, [eventPinLock?.empreinte]);
+
+  const defaultTabFor = (type: EventSettings['type']) =>
+    type === 'reparothon' || type === 'install_fest_linux' ? 'accueil' : type === 'kiosque_concours' ? 'pistes' : 'enregistrements';
+
+  const handlePickMode = (mode: ModeUsage) => {
+    saveMode(mode);
+    setTabletMode(mode);
+    setCurrentTab(tabForMode(mode) || (activeEvent ? defaultTabFor(activeEvent.type) : 'accueil'));
+  };
+
+  const handleChangeMode = () => {
+    if (isModeLocked) return;
+    saveMode(null);
+    setTabletMode(null);
+  };
+
+  const handleLockMode = () => {
+    if (!getEffectivePinLock(activeEvent)) {
+      showToast(NO_PIN_MESSAGE, 'warning');
+      return;
+    }
+    saveLocked(true);
+    setIsModeLocked(true);
+    showToast('Mode verrouillé. Maintenez le cadenas 2 secondes pour le déverrouiller.', 'info');
+  };
+
+  const handleUnlocked = () => {
+    saveLocked(false);
+    setIsModeLocked(false);
+    setShowPinDialog(false);
+    showToast('Tablette déverrouillée.', 'success');
+  };
+
+  // Réglage du code sur le PC : enregistré dans l'activité et envoyé aux tablettes par la synchro
+  const handleSaveEventSettings = async (updated: EventSettings) => {
+    await networkManager.writeToDatabase('events', 'put', updated);
+    setActiveEvent(updated);
+    await loadPastEvents();
+  };
 
   // Charger l'état depuis localStorage et Dexie au démarrage
   const loadPastEvents = async () => {
@@ -625,6 +692,7 @@ export default function App() {
 
   // QUITTER L'ÉVÉNEMENT (retour au sélecteur)
   const handleLeaveEvent = () => {
+    if (IS_TABLET && isModeLocked) return;
     localStorage.removeItem('insertech_active_event_id');
     setActiveEvent(null);
     notifySync();
@@ -1495,6 +1563,11 @@ export default function App() {
             </div>
           </div>
 
+          {/* PC hôte : code qui protège la sortie d'un mode verrouillé sur les tablettes de cette activité */}
+          {!IS_TABLET && activeEvent && (
+            <TabletPinSettings event={activeEvent} onSave={handleSaveEventSettings} />
+          )}
+
           {sessionCode ? (
             // Session active
             <div className="space-y-4">
@@ -1529,8 +1602,8 @@ export default function App() {
           ) : (
             // Pas de session active
             <div className="space-y-6 pt-2">
-              {/* Créer session (Hôte) */}
-              {activeEvent ? (
+              {/* Créer session (Hôte) : jamais sur une tablette, qui rejoint toujours le PC */}
+              {IS_TABLET ? null : activeEvent ? (
                 <div className="space-y-2">
                   <div className="text-[10px] uppercase font-bold text-app-text-muted">Créer une session</div>
                   <button
@@ -1577,11 +1650,13 @@ export default function App() {
                 </div>
               )}
 
+              {!IS_TABLET && (
               <div className="relative flex py-2 items-center">
                 <div className="flex-grow border-t border-app-card-border"></div>
                 <span className="flex-shrink mx-4 text-app-text-muted font-bold uppercase tracking-widest text-[9px]">OU</span>
                 <div className="flex-grow border-t border-app-card-border"></div>
               </div>
+              )}
 
               {/* Découverte automatique des sessions */}
               <div className="space-y-3">
@@ -1781,6 +1856,16 @@ export default function App() {
     );
   }
 
+  // Tablette : choisir le mode d'usage avant d'afficher l'activité du PC
+  if (activeEvent && IS_TABLET && !tabletMode) {
+    return (
+      <>
+        <ModePicker event={activeEvent} onPick={handlePickMode} onLeaveEvent={handleLeaveEvent} />
+        {renderNetModal()}
+      </>
+    );
+  }
+
   // Rendu de la vue active
   if (activeEvent) {
     return (
@@ -1803,10 +1888,22 @@ export default function App() {
           onFileBackupClick={handleFileBackupClick}
           mismatchedClientVersions={mismatchedClientVersions}
           currentVersion={currentVersion}
-          isPublicWindow={IS_PUBLIC_WINDOW}
+          isPublicWindow={IS_PUBLIC_WINDOW || (IS_TABLET && tabletMode === 'ecran_public')}
           isNetworkClient={networkManager.role === 'client'}
           isLightTheme={isLightTheme}
           onToggleTheme={() => setIsLightTheme(!isLightTheme)}
+          hideNavigation={IS_TABLET && isModeLocked}
+          modeControls={
+            IS_TABLET && tabletMode ? (
+              <ModeControls
+                mode={tabletMode}
+                locked={isModeLocked}
+                onChangeMode={handleChangeMode}
+                onLock={handleLockMode}
+                onRequestUnlock={() => setShowPinDialog(true)}
+              />
+            ) : null
+          }
         >
           {activeEvent.type === 'reparothon' && (
             <ReparothonMatrix event={activeEvent} activeTab={currentTab as any} />
@@ -1829,7 +1926,54 @@ export default function App() {
         </DashboardShell>
         {renderNetModal()}
         {renderImportValidationModal()}
+        {IS_TABLET && (
+          <PinDialog
+            isOpen={showPinDialog}
+            pinLock={getEffectivePinLock(activeEvent)}
+            onClose={() => setShowPinDialog(false)}
+            onUnlocked={handleUnlocked}
+          />
+        )}
       </>
+    );
+  }
+
+  // Tablette : l'accueil sert seulement à rejoindre l'activité du PC hôte (ni création, ni import, ni suppression)
+  if (IS_TABLET) {
+    return (
+      <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
+        <main className="flex-1 w-full max-w-xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-6">
+          <div className="flex items-center gap-3.5 justify-center">
+            <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-[#180A2b]">
+              <img src={logoImage} alt="" className="w-full h-full object-cover" />
+            </div>
+            <h1 className="text-app-text font-bold text-xl tracking-tight uppercase font-display leading-none">
+              Insertech <span className="text-primary font-black">Événements</span>
+            </h1>
+          </div>
+          <section aria-labelledby="join-title" className="bg-app-card border border-app-card-border rounded-3xl p-6 sm:p-8 space-y-4 text-center shadow-lg">
+            <h2 id="join-title" className="font-display font-black uppercase tracking-wider text-lg">Rejoindre un événement</h2>
+            <p className="text-sm text-app-text-muted">
+              Cette tablette se connecte à une activité créée sur le PC hôte. Les activités se créent et se règlent sur le PC.
+            </p>
+            {sessionCode && (
+              <p role="status" className="text-sm font-bold text-primary">
+                Connectée à la session {sessionCode}. En attente de l'activité du PC hôte…
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowNetModal(true)}
+              className="w-full min-h-12 flex items-center justify-center gap-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm cursor-pointer"
+            >
+              <Wifi size={16} aria-hidden="true" />
+              <span>{sessionCode ? 'Voir la connexion' : 'Se connecter au PC hôte'}</span>
+            </button>
+          </section>
+          <p className="text-center text-[10px] text-app-text-muted">v{currentVersion}</p>
+        </main>
+        {renderNetModal()}
+      </div>
     );
   }
 

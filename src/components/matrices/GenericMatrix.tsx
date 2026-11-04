@@ -13,7 +13,7 @@ import { ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, 
 
 interface GenericMatrixProps {
   event: EventSettings;
-  activeTab: 'enregistrements' | 'bilan' | 'public';
+  activeTab: 'enregistrements' | 'bilan' | 'public' | 'formulaire';
 }
 
 export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) {
@@ -315,14 +315,16 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   }
 
   // Rendu de l'onglet Inscriptions & Présences (Organisateur)
-  if (activeTab === 'enregistrements') {
+  if (activeTab === 'enregistrements' || activeTab === 'formulaire') {
+    // Mode « Kiosque formulaire » d'une tablette : seul le formulaire reste affiché (voir .kiosk-form-only)
+    const kioskForm = activeTab === 'formulaire';
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${kioskForm ? 'kiosk-form-only' : ''}`}>
         {/* Ajouter un inscrit */}
-        <div className="lg:col-span-4 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
+        <div className="kiosk-keep lg:col-span-4 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
           <h3 className="text-base font-bold font-display text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <UserPlus size={18} className="text-primary" />
-            <span>Nouvelle inscription</span>
+            <span>{kioskForm ? 'Inscription' : 'Nouvelle inscription'}</span>
           </h3>
 
           <form onSubmit={handleAddAttendee} className="space-y-4" noValidate>
@@ -348,7 +350,7 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
               />
             </div>
 
-            <div className="flex items-center gap-2 py-2">
+            <div className="kiosk-hide flex items-center gap-2 py-2">
               <input
                 type="checkbox"
                 id="presenceCheck"
