@@ -1,4 +1,6 @@
-import { Peer, DataConnection } from 'peerjs';
+import { Peer } from 'peerjs';
+import type { Lien } from './net/lien';
+import { LienPeerjs } from './net/lienPeerjs';
 import { db, notifySync } from './db';
 import { SyncMessage, TrackState } from './types';
 import { getAppVersion, normalizeVersion } from './utils/updateCheck';
@@ -48,7 +50,7 @@ const CONNECT_TIMEOUT_MS = 10000;
 
 class P2PNetworkManager {
   peer: Peer | null = null;
-  connections: DataConnection[] = [];
+  connections: Lien[] = [];
   role: 'host' | 'client' | 'standalone' = 'standalone';
   // Activité partagée par l'hôte : suit l'activité ouverte sur le PC principal (voir setHostEvent)
   private hostEventId: string | null = null;
@@ -318,7 +320,8 @@ class P2PNetworkManager {
       });
 
       // Écouter les connexions des tablettes clientes
-      peer.on('connection', (conn) => {
+      peer.on('connection', (dataConn) => {
+        const conn: Lien = new LienPeerjs(dataConn);
         this.connections.push(conn);
         this.updateStatus(`Connecté (${this.connections.length} appareils)`);
 
@@ -390,7 +393,7 @@ class P2PNetworkManager {
   }
 
   // Traiter les messages d'une liaison dans leur ordre d'arrivée, un à la fois
-  private enqueueIncoming(conn: DataConnection, msg: NetworkMessage, eventId: () => string) {
+  private enqueueIncoming(conn: Lien, msg: NetworkMessage, eventId: () => string) {
     const key = conn.connectionId;
     const previous = this.incomingChains.get(key) ?? Promise.resolve();
     const next = previous
@@ -469,7 +472,7 @@ class P2PNetworkManager {
       this.connectTimeout = setTimeout(() => fail(new Error('Délai de connexion dépassé')), CONNECT_TIMEOUT_MS);
 
       peer.on('open', () => {
-        const conn = peer.connect(code, { reliable: true });
+        const conn: Lien = new LienPeerjs(peer.connect(code, { reliable: true }));
 
         conn.on('open', () => {
           if (this.peer !== peer || this.role !== 'client') return;
@@ -529,7 +532,7 @@ class P2PNetworkManager {
   }
 
   // La liaison au PC principal est perdue : les écritures restent en attente et la tablette se reconnecte
-  private handleLostHost(conn: DataConnection) {
+  private handleLostHost(conn: Lien) {
     if (this.connections[0] !== conn) return;
     this.connections = [];
     this.incomingChains.delete(conn.connectionId);
@@ -545,7 +548,7 @@ class P2PNetworkManager {
     this.scheduleReconnect();
   }
 
-  private startClientHeartbeat(conn: DataConnection) {
+  private startClientHeartbeat(conn: Lien) {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
       if (this.connections[0] !== conn) return;
@@ -677,7 +680,7 @@ class P2PNetworkManager {
   }
 
   // Envoyer à un client toutes les tables de l'activité partagée, puis l'état des chronomètres
-  private async sendInitialSync(conn: DataConnection, eventId: string) {
+  private async sendInitialSync(conn: Lien, eventId: string) {
     const tickets = await db.tickets.where('eventId').equals(eventId).toArray();
     const techs = await db.technicians.where('eventId').equals(eventId).toArray();
     const participants = await db.participants.where('eventId').equals(eventId).toArray();
@@ -714,7 +717,7 @@ class P2PNetworkManager {
   }
 
   // TRAITER LES MESSAGES ENTRANTS (Master & Clients)
-  private async handleIncomingData(conn: DataConnection, msg: NetworkMessage, eventId: string) {
+  private async handleIncomingData(conn: Lien, msg: NetworkMessage, eventId: string) {
     if (this.role === 'host') {
       // --- PARTIE HÔTE / MASTER (Source de vérité) ---
       this.lastClientPingAt.set(conn.connectionId, Date.now());
@@ -883,7 +886,7 @@ class P2PNetworkManager {
     }
   }
 
-  private acknowledge(conn: DataConnection, opId: string | undefined) {
+  private acknowledge(conn: Lien, opId: string | undefined) {
     if (opId && conn.open) conn.send({ type: 'ACK', opId });
   }
 
@@ -1028,7 +1031,7 @@ class P2PNetworkManager {
   }
 
   // DIFFUSER À TOUS LES CLIENTS SAUF L'ÉMETTEUR
-  broadcastExcept(excludeConn: DataConnection | null, msg: NetworkMessage) {
+  broadcastExcept(excludeConn: Lien | null, msg: NetworkMessage) {
     this.connections.forEach((conn) => {
       if (conn.open && (!excludeConn || conn.connectionId !== excludeConn.connectionId)) {
         conn.send(msg);
