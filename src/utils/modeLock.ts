@@ -18,6 +18,7 @@ export const MODE_STORAGE_KEY = 'insertech_mode_usage';
 export const LOCK_STORAGE_KEY = 'insertech_mode_verrouille';
 export const PIN_COPY_STORAGE_KEY = 'insertech_mode_code_copie';
 export const ATTEMPTS_STORAGE_KEY = 'insertech_mode_essais';
+export const LANDSCAPE_STORAGE_KEY = 'insertech_bloquer_paysage';
 
 export const MODES: ModeUsage[] = ['animateur', 'ecran_public', 'kiosque_formulaire'];
 
@@ -65,6 +66,14 @@ export function readLocked(): boolean {
 
 export function saveLocked(locked: boolean) {
   writeStorage(LOCK_STORAGE_KEY, locked ? 'true' : null);
+}
+
+export function readLandscapeLock(): boolean {
+  return readStorage(LANDSCAPE_STORAGE_KEY) === 'true';
+}
+
+export function saveLandscapeLock(locked: boolean) {
+  writeStorage(LANDSCAPE_STORAGE_KEY, locked ? 'true' : null);
 }
 
 // Onglet affiché par chaque mode ; animateur garde les onglets de régie de l'activité

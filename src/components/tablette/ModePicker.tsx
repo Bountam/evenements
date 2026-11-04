@@ -9,6 +9,8 @@ interface ModePickerProps {
   event: EventSettings;
   onPick: (mode: ModeUsage) => void;
   onLeaveEvent: () => void;
+  landscapeLocked: boolean;
+  onLandscapeChange: (locked: boolean) => void;
 }
 
 const TILES: Array<{ mode: ModeUsage; icon: React.ComponentType<{ size?: number; className?: string }>; description: string }> = [
@@ -30,7 +32,7 @@ const TILES: Array<{ mode: ModeUsage; icon: React.ComponentType<{ size?: number;
 ];
 
 // Choix du mode d'usage d'une tablette, après la connexion au PC hôte
-export default function ModePicker({ event, onPick, onLeaveEvent }: ModePickerProps) {
+export default function ModePicker({ event, onPick, onLeaveEvent, landscapeLocked, onLandscapeChange }: ModePickerProps) {
   return (
     <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
       <header className="flex items-center justify-between gap-4 px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b-4 border-primary bg-app-header">
@@ -63,9 +65,22 @@ export default function ModePicker({ event, onPick, onLeaveEvent }: ModePickerPr
             </button>
           ))}
         </div>
-        <p className="text-xs text-app-text-muted text-center">
-          Le choix est gardé au redémarrage. Une fois le mode verrouillé, seul le code défini sur le PC permet d'en sortir.
-        </p>
+        <label className="self-center inline-flex items-center gap-2 min-h-11 px-4 rounded-xl bg-app-card border border-app-card-border text-sm font-bold cursor-pointer">
+          <input
+            type="checkbox"
+            checked={landscapeLocked}
+            onChange={(e) => onLandscapeChange(e.target.checked)}
+            className="w-5 h-5 accent-primary"
+          />
+          <span>Bloquer en paysage</span>
+        </label>
+        <div className="text-xs text-app-text-muted text-center space-y-1">
+          <p>Le choix est gardé au redémarrage. Une fois le mode verrouillé, seul le code défini sur le PC permet d'en sortir.</p>
+          <p>
+            Au verrouillage, Android demande d'épingler l'application : acceptez. Si le code est perdu, maintenez
+            ensemble les boutons Retour et Aperçu (les carrés) pour libérer la tablette.
+          </p>
+        </div>
       </main>
     </div>
   );

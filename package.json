@@ -17,9 +17,12 @@
     "build:all": "npm run build:exe && npm run build:linux && npm run build:mobile"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.0",
     "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/screen-orientation": "^8.0.2",
     "@capacitor/share": "^8.0.3",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.4.1",

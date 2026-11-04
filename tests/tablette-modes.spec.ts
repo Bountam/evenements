@@ -123,6 +123,10 @@ test('Tablette : verrouiller sans code défini sur le PC est refusé', async ({ 
   await createContestOnPc(page);
   await page.addInitScript(SIMULATE_ANDROID);
   await page.reload();
+  // Réglage « Bloquer en paysage » gardé au redémarrage
+  await page.getByLabel('Bloquer en paysage').check();
+  await page.reload();
+  await expect(page.getByLabel('Bloquer en paysage')).toBeChecked();
   await page.getByRole('button', { name: /Écran public/ }).click();
   await page.getByRole('button', { name: 'Verrouiller ce mode' }).click();
   await expect(page.getByText("Définissez un code dans l'administration du PC")).toBeVisible();
