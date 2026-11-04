@@ -192,6 +192,16 @@ function schedule(delay = FLUSH_DELAY_MS) {
   flushTimer = setTimeout(flush, delay);
 }
 
+// Sauvegarde immédiate (avant l'installation d'une mise à jour) ; vrai si elle a réussi ou s'il n'y a rien à faire
+export async function sauvegarderMaintenant(): Promise<boolean> {
+  if (!backend || !started) return true;
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = null;
+  for (let i = 0; i < 50 && flushing; i++) await new Promise((r) => setTimeout(r, 100));
+  await flush();
+  return status === 'ok';
+}
+
 // À appeler une fois la restauration de démarrage faite (jamais dans la fenêtre Projecteur)
 export function startSqliteBackup() {
   if (!backend || started) return;

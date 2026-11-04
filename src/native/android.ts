@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import type { NatifMaj } from '../net/miseAJour';
 
 // Point d'entrée unique du code propre à l'application Android (Capacitor).
 // Règle : tout appel natif commence par `if (!isAndroidApp())` et garde le comportement web comme repli,
@@ -26,6 +27,10 @@ export function fileAccept(webAccept: string): string {
 
 interface InsertechNatifPlugin {
   pleinEcran(options: { actif: boolean }): Promise<void>;
+  ouvrirFichierMaj(options: { sha256: string; taille: number }): Promise<{ octets: number }>;
+  ecrireMorceau(options: { index: number; donnees: string }): Promise<{ attendu: number | null }>;
+  verifierMaj(options: { sha256: string; versionCode: number }): Promise<{ ok: boolean; raison?: string }>;
+  installerMaj(): Promise<{ etat: 'confirmation' | 'autorisation' }>;
   epingler(): Promise<void>;
   desepingler(): Promise<void>;
   etat(): Promise<{ epinglee: boolean }>;
@@ -118,5 +123,25 @@ export function onLienOuvert(handler: (url: string) => void): () => void {
   return () => {
     cancelled = true;
     remove?.();
+  };
+}
+
+// --- Mise à jour envoyée par le PC hôte (lot 8) ---
+// Fichier dans le cache de l'appli, vérifié (SHA-256, signature, version) puis installé par PackageInstaller.
+// null hors de l'application Android : la tablette refuse alors la mise à jour.
+export function getNatifMaj(): NatifMaj | null {
+  if (!isAndroidApp()) return null;
+  const n = getNatif();
+  return {
+    ouvrir: async (sha256, taille) => (await n.ouvrirFichierMaj({ sha256, taille })).octets,
+    ecrire: async (index, donnees) => {
+      const { attendu } = await n.ecrireMorceau({ index, donnees });
+      return typeof attendu === 'number' ? attendu : null;
+    },
+    verifier: async (sha256, versionCode) => {
+      const r = await n.verifierMaj({ sha256, versionCode });
+      return r.ok ? null : r.raison || 'APK refusé par la tablette.';
+    },
+    installer: async () => (await n.installerMaj()).etat
   };
 }

@@ -193,3 +193,17 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     return { status: 'offline', currentVersion };
   }
 }
+
+// Dernière Release publiée, même si elle n'est pas plus récente que ce PC : sert à mettre à jour les tablettes.
+// Seul appel à internet de l'appli pour les tablettes, fait uniquement sur le bouton « Télécharger depuis GitHub ».
+export async function fetchLatestAndroidRelease(): Promise<{ version: string; apkUrl: string; sumsUrl: string } | null> {
+  const response = await fetch(GITHUB_LATEST_RELEASE_URL, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!response.ok) throw new Error(`GitHub a répondu ${response.status}`);
+  const data = await response.json();
+  const version = normalizeVersion(typeof data?.tag_name === 'string' ? data.tag_name : '');
+  const assets: any[] = Array.isArray(data?.assets) ? data.assets : [];
+  const apkUrl = sanitizeDownloadUrl(assets.find((a) => a?.name === 'InsertechEvenements-Android.apk')?.browser_download_url);
+  const sumsUrl = sanitizeDownloadUrl(assets.find((a) => a?.name === 'SHA256SUMS.txt')?.browser_download_url);
+  if (!version || !apkUrl || !sumsUrl) return null;
+  return { version, apkUrl, sumsUrl };
+}

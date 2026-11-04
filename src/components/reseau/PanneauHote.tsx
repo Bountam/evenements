@@ -8,6 +8,7 @@ import { showToast } from '../shared/Toast';
 import Button from '../shared/Button';
 import { confirmDialog } from '../shared/ConfirmDialog';
 import SessionQrPanel from '../shared/SessionQrPanel';
+import PanneauMajTablettes from './PanneauMajTablettes';
 import { formatDuree, prefixe24 } from './duree';
 
 const AVERT_PC_KEY = 'insertech_avert_pc_hote_compris';
@@ -267,6 +268,8 @@ export default function PanneauHote({ sessionCode, evenementNom = '', onLeave }:
           <p className="text-[10px] text-app-text-muted">L'adresse s'affiche sur l'écran d'attente de la tablette.</p>
         </form>
       </section>
+
+      <PanneauMajTablettes />
 
       <button
         type="button"
