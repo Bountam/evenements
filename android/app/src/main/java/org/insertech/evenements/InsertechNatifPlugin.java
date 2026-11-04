@@ -30,10 +30,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.security.MessageDigest;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Verrouillage de la tablette en mode kiosque (lot 4) :
@@ -122,7 +120,7 @@ public class InsertechNatifPlugin extends Plugin {
     public void ouvrirFichierMaj(PluginCall call) {
         String sha = call.getString("sha256", "");
         Long taille = call.getLong("taille");
-        if (sha == null || !sha.matches("[0-9a-f]{64}") || taille == null || taille <= 0) {
+        if (!VerificationMaj.empreinteValide(sha) || taille == null || taille <= 0) {
             call.reject("Proposition invalide");
             return;
         }
@@ -130,11 +128,8 @@ public class InsertechNatifPlugin extends Plugin {
         // Un seul fichier en cours : les restes d'une autre version sont effacés
         File[] autres = dossierMaj().listFiles();
         if (autres != null) for (File a : autres) if (!a.equals(f)) a.delete();
-        long deja = f.exists() ? f.length() : 0;
-        if (deja > taille || (deja % TAILLE_MORCEAU != 0 && deja != taille)) {
-            f.delete();
-            deja = 0;
-        }
+        long deja = VerificationMaj.octetsRepris(f.exists() ? f.length() : 0, taille, TAILLE_MORCEAU);
+        if (deja == 0 && f.exists()) f.delete();
         try {
             if (!f.exists()) f.createNewFile();
         } catch (Exception e) {
@@ -208,15 +203,11 @@ public class InsertechNatifPlugin extends Plugin {
         if (fichierMaj == null || !fichierMaj.exists()) return "Aucun APK reçu.";
         if (fichierMaj.length() != tailleMaj) return "APK incomplet.";
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            String recuSha;
             try (InputStream in = new FileInputStream(fichierMaj)) {
-                byte[] tampon = new byte[64 * 1024];
-                int n;
-                while ((n = in.read(tampon)) > 0) md.update(tampon, 0, n);
+                recuSha = VerificationMaj.sha256Hex(in);
             }
-            StringBuilder hex = new StringBuilder();
-            for (byte b : md.digest()) hex.append(String.format("%02x", b));
-            if (!hex.toString().equals(sha)) return "APK modifié en route : son empreinte SHA-256 ne correspond pas.";
+            if (!recuSha.equals(sha)) return "APK modifié en route : son empreinte SHA-256 ne correspond pas.";
 
             PackageManager pm = getContext().getPackageManager();
             String paquet = getContext().getPackageName();
@@ -228,9 +219,7 @@ public class InsertechNatifPlugin extends Plugin {
             if (versionCodeAnnonce > 0 && recu.getLongVersionCode() != versionCodeAnnonce) {
                 return "Version de l'APK (" + recu.getLongVersionCode() + ") différente de celle annoncée par le PC (" + versionCodeAnnonce + ").";
             }
-            Set<Signature> signeRecu = signataires(recu.signingInfo);
-            Set<Signature> signeInstalle = signataires(installe.signingInfo);
-            if (signeRecu.isEmpty() || !signeRecu.equals(signeInstalle)) {
+            if (!VerificationMaj.memesCertificats(certificats(recu.signingInfo), certificats(installe.signingInfo))) {
                 return "APK signé avec une autre clé que l'appli installée : installation refusée.";
             }
             return null;
@@ -239,12 +228,12 @@ public class InsertechNatifPlugin extends Plugin {
         }
     }
 
-    private static Set<Signature> signataires(SigningInfo info) {
-        Set<Signature> set = new HashSet<>();
-        if (info == null) return set;
-        Signature[] liste = info.hasMultipleSigners() ? info.getApkContentsSigners() : info.getSigningCertificateHistory();
-        if (liste != null) set.addAll(Arrays.asList(liste));
-        return set;
+    private static List<byte[]> certificats(SigningInfo info) {
+        List<byte[]> liste = new ArrayList<>();
+        if (info == null) return liste;
+        Signature[] signatures = info.hasMultipleSigners() ? info.getApkContentsSigners() : info.getSigningCertificateHistory();
+        if (signatures != null) for (Signature sig : signatures) liste.add(sig.toByteArray());
+        return liste;
     }
 
     @PluginMethod
