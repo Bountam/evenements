@@ -78,7 +78,9 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: ./gradlew testDebugUnitTest connectedDebugAndroidTest --no-daemon
+          # Seulement le module app : les modules générés par Capacitor n'ont pas de tests et leur APK de test
+          # vide échoue sur des classes Kotlin en double.
+          script: ./gradlew :app:testDebugUnitTest :app:connectedDebugAndroidTest --no-daemon
 
       - name: Rapports des tests (en cas d'échec)
         if: failure()

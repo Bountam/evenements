@@ -2623,8 +2623,8 @@ faut désinstaller (exporter les données avant).
 
 | Commande | Où | Ce qu'elle vérifie |
 | --- | --- | --- |
-| `./gradlew testDebugUnitTest` | Dossier `android/`, CI de chaque PR | Vérification des mises à jour en Java pur (`VerificationMaj` : SHA-256, certificats, reprise d'envoi) |
-| `./gradlew connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
+| `./gradlew :app:testDebugUnitTest` | Dossier `android/`, CI de chaque PR | Vérification des mises à jour en Java pur (`VerificationMaj` : SHA-256, certificats, reprise d'envoi) |
+| `./gradlew :app:connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
 | `npm run test:ui` | PC, CI de chaque PR | Interface, synchro avec une tablette simulée, envoi de mise à jour simulé |
 
 L'émulateur de la CI utilise une image Android 10 **sans services Google** (`target: default`), pour prouver
