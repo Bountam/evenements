@@ -64,8 +64,21 @@ public class MainActivityTest {
     public void laPageSeChargeDepuisLApk() throws Exception {
         attendre("document.readyState === 'complete' && document.querySelector('#root') && document.querySelector('#root').childElementCount > 0", 60000);
         // Aucune adresse internet : la page vient des fichiers de l'APK (https://localhost de Capacitor).
-        String hote = evaluer("location.hostname");
-        assertEquals("\"localhost\"", hote);
+        assertEquals("\"localhost\"", evaluer("location.hostname"));
+
+        // L'interface demande Chrome 111+ (Tailwind 4). Avec un WebView plus ancien (image Android 10 jamais mise
+        // à jour), index.html doit afficher quoi faire au lieu d'une page blanche ; sinon, l'appli elle-même.
+        String agent = evaluer("navigator.userAgent");
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Chrome/(\\d+)").matcher(agent);
+        assertTrue("Version du WebView introuvable : " + agent, m.find());
+        int version = Integer.parseInt(m.group(1));
+        String message = evaluer("Boolean(document.getElementById('navigateur-trop-ancien'))");
+        if (version >= 111) {
+            assertEquals("WebView " + version + " : l'appli devait s'afficher", "false", message);
+            attendre("document.body.innerText.length > 20", 10000);
+        } else {
+            assertEquals("WebView " + version + " : le message de mise à jour devait s'afficher", "true", message);
+        }
     }
 
     @Test

@@ -79,6 +79,8 @@ Deux listes : la **première fois** qu'on installe une nouvelle version (une seu
 
 ## Si quelque chose ne marche pas
 
+- « Navigateur interne trop ancien » au démarrage : la tablette n'a jamais mis à jour **Android System WebView**.
+  Le mettre à jour depuis le Play Store (une fois, avec internet, avant l'événement), puis rouvrir l'application.
 - La tablette ne trouve pas le PC, ou le PC ne trouve pas la tablette : vérifier que le hotspot n'isole pas
   les appareils, et que tous sont sur le même Wi-Fi.
 - Pour voir les erreurs de l'application : brancher la tablette au PC en USB (débogage USB activé dans les

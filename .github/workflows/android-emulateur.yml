@@ -1,7 +1,10 @@
 name: Test Android sur émulateur
 
-# Lance l'APK de debug sur un émulateur Android 10 (API 29) sans services Google (image « default ») :
-# l'application doit démarrer, charger sa page et ses plugins sans Google ni internet.
+# Lance l'APK de debug sur des émulateurs sans services Google (image « default ») : l'application doit démarrer,
+# charger sa page et ses plugins sans Google ni internet.
+# - Android 10 (API 29) : la version minimale. Son WebView d'origine (74) est trop ancien pour l'interface :
+#   le test vérifie qu'un message explique quoi faire au lieu d'une page blanche.
+# - Android 15 (API 35) : WebView récent, le test vérifie que l'interface elle-même s'affiche.
 # Long (10 à 15 minutes) : seulement quand le code Android change, ou à la demande.
 on:
   pull_request:
@@ -24,9 +27,17 @@ concurrency:
 
 jobs:
   emulateur:
-    name: "Android 10 (API 29), sans services Google"
+    name: "${{ matrix.nom }}, sans services Google"
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 29
+            nom: Android 10 (API 29)
+          - api: 35
+            nom: Android 15 (API 35)
     steps:
       - uses: actions/checkout@v4
 
@@ -60,7 +71,7 @@ jobs:
       - name: Tests JUnit et tests instrumentés
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
+          api-level: ${{ matrix.api }}
           target: default
           arch: x86_64
           profile: pixel_c
@@ -73,7 +84,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: rapport-tests-android
+          name: rapport-tests-android-api${{ matrix.api }}
           path: |
             android/app/build/reports/
             android/app/build/outputs/androidTest-results/
