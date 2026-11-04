@@ -4,6 +4,7 @@ import {MotionConfig} from 'motion/react';
 import App from './App.tsx';
 import { ToastContainer, showToast } from './components/shared/Toast';
 import { ConfirmDialogHost } from './components/shared/ConfirmDialog';
+import NetworkWarnings from './components/shared/NetworkWarnings';
 import './index.css';
 import { isAndroidApp } from './native/android';
 
@@ -66,6 +67,8 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Respecte « Réduire les animations » du système pour les animations JS (motion) */}
     <MotionConfig reducedMotion="user">
+      {/* Avertissements du réseau local (tablette sans PC hôte), en haut de toutes les vues */}
+      <NetworkWarnings />
       <App />
       {/* Montés une seule fois, hors des vues : notifications et confirmations disponibles partout */}
       <ToastContainer />

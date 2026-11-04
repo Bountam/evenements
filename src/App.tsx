@@ -5,7 +5,6 @@ import { SqliteBackupStatus, getSqliteBackupStatus, onSqliteBackupStatus, restor
 import { FileBackupState, buildEventBackup, enableFileBackup, getFileBackupName, getFileBackupState, requestPersistentStorage, writeFileBackup } from './utils/backupFile';
 import {
   ReleaseUpdateInfo,
-  UPDATE_CHECK_INTERVAL_MS,
   checkForUpdates,
   clearReleaseDismissal,
   getAppVersion,
@@ -26,7 +25,6 @@ import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
 import UpdateModal from './components/shared/UpdateModal';
 import Modal from './components/shared/Modal';
-import SessionQrPanel from './components/shared/SessionQrPanel';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
 import VolunteerSurveyButton from './components/shared/VolunteerSurveyButton';
@@ -47,6 +45,8 @@ import ModePicker from './components/tablette/ModePicker';
 import ModeControls from './components/tablette/ModeControls';
 import PinDialog from './components/tablette/PinDialog';
 import TabletPinSettings from './components/tablette/TabletPinSettings';
+import PanneauHote from './components/reseau/PanneauHote';
+import PanneauTablette, { TEXTE_NAVIGATEUR } from './components/reseau/PanneauTablette';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -278,8 +278,8 @@ export default function App() {
   const [netStatus, setNetStatus] = useState<string>('Local uniquement');
   const [sessionCode, setSessionCode] = useState<string>('');
   const [showNetModal, setShowNetModal] = useState(false);
-  const [inputCode, setInputCode] = useState('');
-  const [discoveredSessions, setDiscoveredSessions] = useState<any[]>([]);
+  // Lien ?rejoindre=CODE ouvert sur une tablette : code proposé dans le formulaire « Rejoindre »
+  const [proposedJoinCode, setProposedJoinCode] = useState('');
   const [mismatchedClientVersions, setMismatchedClientVersions] = useState<string[]>(() =>
     networkManager.getMismatchedClientVersions()
   );
@@ -348,23 +348,24 @@ export default function App() {
     const isOwnHostCode = savedRole === 'host' && savedCode === joinCode;
 
     if (joinCode && !isOwnHostCode) {
-      networkManager.joinSession(joinCode, 'temp')
-        .then(() => {
-          setSessionCode(joinCode);
-          showToast(`Connecté à la session ${joinCode}`, 'success');
-        })
-        .catch(() => showToast(`Session ${joinCode} introuvable. Vérifiez que le PC principal est en ligne.`, 'error'));
+      // Une tablette rejoint avec le code et la clé ; un navigateur ne peut pas recevoir l'appel du PC
+      if (IS_TABLET) {
+        setProposedJoinCode(joinCode);
+        setShowNetModal(true);
+      } else {
+        showToast(TEXTE_NAVIGATEUR, 'warning');
+      }
     } else if (savedRole && savedCode) {
       // Reprendre la session sur l'activité ouverte (celle du démarrage a pu être quittée depuis)
       const hostEventId = localStorage.getItem('insertech_active_event_id') || savedEventId;
-      if (savedRole === 'host' && hostEventId) {
+      if (savedRole === 'host' && hostEventId && !IS_TABLET) {
         networkManager.startHost(hostEventId, savedCode, true)
           .then((code) => setSessionCode(code))
-          .catch(() => console.warn("Échec de la reconnexion automatique hôte."));
-      } else if (savedRole === 'client') {
-        networkManager.joinSession(savedCode, savedEventId || 'temp', true)
+          .catch(() => console.warn("Échec de la reprise de la session hôte."));
+      } else if (savedRole === 'client' && IS_TABLET) {
+        networkManager.joinSession(savedCode, savedEventId || 'temp')
           .then(() => setSessionCode(savedCode))
-          .catch(() => console.warn("Échec de la reconnexion automatique client."));
+          .catch(() => console.warn("Échec de la reprise de la session sur la tablette."));
       }
     } else if (networkManager.sessionId) {
       // Si une session est déjà active au montage par un autre moyen
@@ -378,36 +379,8 @@ export default function App() {
     };
   }, []);
 
-  // Vérification automatique des mises à jour au lancement puis toutes les 6 h (jamais sur l'écran public)
-  useEffect(() => {
-    if (IS_PUBLIC_WINDOW || isLoading) return;
-    let cancelled = false;
-
-    const runAutoCheck = async () => {
-      const res = await checkForUpdates();
-      if (cancelled) return;
-      if (res.status === 'update_available') {
-        const dismissed = isReleaseDismissed(res.release.version);
-        setAvailableRelease(res.release);
-        setIsUpdateDismissed(dismissed);
-        // Ouvrir automatiquement la fenêtre uniquement au menu principal et jamais pendant une session hôte
-        const hasSavedEvent = Boolean(localStorage.getItem('insertech_active_event_id'));
-        const isHostActive = networkManager.role === 'host' || localStorage.getItem('insertech_net_role') === 'host';
-        if (!dismissed && !hasSavedEvent && !isHostActive) {
-          setShowUpdateModal(true);
-        }
-      } else if (res.status === 'up_to_date') {
-        setAvailableRelease(null);
-      }
-    };
-
-    runAutoCheck();
-    const interval = setInterval(runAutoCheck, UPDATE_CHECK_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [isLoading]);
+  // Mises à jour : vérification seulement à la demande (bouton « Rechercher une mise à jour ») ; l'appli
+  // n'appelle jamais internet d'elle-même, même quand le hotspot y a accès
 
   const handleManualUpdateCheck = async () => {
     if (isCheckingUpdate) return;
@@ -453,23 +426,6 @@ export default function App() {
     window.open(availableRelease.htmlUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // Découverte automatique des sessions actives (MQTT) lors de l'ouverture du modal
-  useEffect(() => {
-    if (showNetModal && !sessionCode) {
-      networkManager.onSessionsDiscovered = (sessions) => {
-        setDiscoveredSessions(sessions);
-      };
-      networkManager.startSessionsSearch();
-    } else {
-      networkManager.stopSessionsSearch();
-      setDiscoveredSessions([]);
-    }
-
-    return () => {
-      networkManager.stopSessionsSearch();
-    };
-  }, [showNetModal, sessionCode]);
-
   // Depuis le menu principal, l'activité choisie dans la fenêtre Réseau est ouverte puis partagée
   const handleStartHost = async (eventToHost: EventSettings | null = activeEvent) => {
     if (!eventToHost) return;
@@ -478,18 +434,7 @@ export default function App() {
       const code = await networkManager.startHost(eventToHost.id);
       setSessionCode(code);
     } catch (e) {
-      alert("Impossible de démarrer la session hôte. Vérifiez votre connexion Internet.");
-    }
-  };
-
-  const handleJoinSession = async () => {
-    if (!inputCode.trim()) return;
-    try {
-      await networkManager.joinSession(inputCode.trim().toUpperCase(), 'temp');
-      setSessionCode(inputCode.trim().toUpperCase());
-      setShowNetModal(false);
-    } catch (e) {
-      alert("Session introuvable. Vérifiez le code saisi.");
+      showToast("Impossible de démarrer la session hôte.", 'error');
     }
   };
 
@@ -1635,42 +1580,20 @@ export default function App() {
             <TabletPinSettings event={activeEvent} onSave={handleSaveEventSettings} />
           )}
 
-          {sessionCode ? (
-            // Session active
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-center space-y-2">
-                <span className="text-[10px] uppercase font-black text-primary tracking-widest block">Code de session active</span>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-3xl font-display font-bold text-app-text tracking-widest">{sessionCode}</span>
-                  <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(sessionCode);
-                      showToast('Code de session copié dans le presse-papier !', 'success');
-                    }}
-                    title="Copier le code"
-                    aria-label="Copier le code de session"
-                    className="p-1.5 rounded-lg bg-primary/25 text-primary hover:text-white cursor-pointer transition"
-                  >
-                    <Copy size={14} />
-                  </button>
-                </div>
-                <span className="text-[10px] text-app-text-muted block mt-1">Saisissez ce code sur les tablettes d'accueil, ou faites-leur scanner le code QR ci-dessous.</span>
-              </div>
-
-              <SessionQrPanel sessionCode={sessionCode} />
-
-              <button
-                onClick={handleLeaveSession}
-                className="w-full py-2.5 rounded-xl bg-red-950/40 border border-red-900/40 text-red-300 hover:bg-red-900/30 hover:text-white font-bold font-display uppercase tracking-wider text-xs cursor-pointer transition"
-              >
-                Déconnecter / Repasser en local
-              </button>
-            </div>
+          {IS_TABLET ? (
+            <PanneauTablette
+              sessionCode={sessionCode}
+              netStatus={netStatus}
+              codePropose={proposedJoinCode}
+              onJoined={(code) => setSessionCode(code)}
+              onLeave={handleLeaveSession}
+            />
+          ) : sessionCode ? (
+            <PanneauHote sessionCode={sessionCode} onLeave={handleLeaveSession} />
           ) : (
-            // Pas de session active
+            // Pas de session active : le PC crée la session, les tablettes la rejoignent depuis l'appli Android
             <div className="space-y-6 pt-2">
-              {/* Créer session (Hôte) : jamais sur une tablette, qui rejoint toujours le PC */}
-              {IS_TABLET ? null : activeEvent ? (
+              {activeEvent ? (
                 <div className="space-y-2">
                   <div className="text-[10px] uppercase font-bold text-app-text-muted">Créer une session</div>
                   <button
@@ -1680,7 +1603,7 @@ export default function App() {
                     <Share2 size={14} />
                     <span>Créer la session hôte</span>
                   </button>
-                  <span className="text-[10px] text-app-text-muted block">Désignera cet appareil comme le PC principal (Master) et fournira le code de partage.</span>
+                  <span className="text-[10px] text-app-text-muted block">Cet appareil devient le PC principal : il trouve et appelle les tablettes du réseau local, sans internet.</span>
                 </div>
               ) : (
                 // Menu principal : la session partage une activité, il faut donc en choisir une
@@ -1688,7 +1611,7 @@ export default function App() {
                   <div className="text-[10px] uppercase font-bold text-app-text-muted">Créer une session</div>
                   {pastEvents.length > 0 ? (
                     <>
-                      <span className="text-[10px] text-app-text-muted block">Choisissez l'activité à partager : cet appareil devient le PC principal et fournit le code.</span>
+                      <span className="text-[10px] text-app-text-muted block">Choisissez l'activité à partager : cet appareil devient le PC principal.</span>
                       {pastEvents.slice(0, 4).map((evt) => (
                         <button
                           key={evt.id}
@@ -1716,81 +1639,7 @@ export default function App() {
                   )}
                 </div>
               )}
-
-              {!IS_TABLET && (
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-app-card-border"></div>
-                <span className="flex-shrink mx-4 text-app-text-muted font-bold uppercase tracking-widest text-[9px]">OU</span>
-                <div className="flex-grow border-t border-app-card-border"></div>
-              </div>
-              )}
-
-              {/* Découverte automatique des sessions */}
-              <div className="space-y-3">
-                <div className="text-[10px] uppercase font-bold text-app-text-muted">Découverte automatique</div>
-                
-                {discoveredSessions.length === 0 ? (
-                  <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-app-input border border-app-card-border text-app-text-muted">
-                    <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0"></div>
-                    <span className="text-[10.5px] font-sans">Recherche de consoles actives sur le réseau...</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {discoveredSessions.map((session) => (
-                      <button
-                        key={session.code}
-                        onClick={async () => {
-                          try {
-                            await networkManager.joinSession(session.code, 'temp');
-                            setSessionCode(session.code);
-                            setShowNetModal(false);
-                            showToast(`Connecté à la session ${session.code}`, 'success');
-                          } catch (e) {
-                            showToast("Échec de la connexion à cette session.", 'error');
-                          }
-                        }}
-                        className="w-full flex items-center justify-between p-3.5 rounded-xl bg-primary/5 border border-primary/20 hover:bg-primary/10 hover:border-primary text-left transition cursor-pointer"
-                      >
-                        <div className="min-w-0">
-                          <span className="text-[9px] uppercase font-bold text-primary block leading-none">{session.type.replace('_', ' ')}</span>
-                          <span className="font-bold text-app-text text-xs truncate block mt-1">{session.name}</span>
-                        </div>
-                        <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20 shrink-0">
-                          {session.code}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-app-card-border"></div>
-                <span className="flex-shrink mx-4 text-app-text-muted font-bold uppercase tracking-widest text-[9px]">OU</span>
-                <div className="flex-grow border-t border-app-card-border"></div>
-              </div>
-
-              {/* Rejoindre session (Client) */}
-              <div className="space-y-3">
-                <div className="text-[10px] uppercase font-bold text-app-text-muted">Rejoindre par code manuellement</div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={inputCode}
-                    onChange={(e) => setInputCode(e.target.value)}
-                    placeholder="Ex. INS-4821"
-                    className="flex-grow bg-app-input border border-app-input-border rounded-xl px-3 py-2 text-app-text text-xs font-mono focus:outline-none focus:border-primary transition uppercase placeholder:text-app-text-muted/60"
-                  />
-                  <button
-                    onClick={handleJoinSession}
-                    disabled={!inputCode.trim()}
-                    className="px-4 py-2 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
-                  >
-                    Rejoindre
-                  </button>
-                </div>
-                <span className="text-[10px] text-app-text-muted block">Saisissez le code si la détection automatique ne fonctionne pas.</span>
-              </div>
+              <p className="text-[10px] text-app-text-muted leading-relaxed">{TEXTE_NAVIGATEUR}</p>
             </div>
           )}
         </div>

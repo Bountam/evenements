@@ -25,6 +25,8 @@ namespace InsertechEvenements
 
         readonly string dbPath;
         readonly object dbLock = new object();
+        // Tablettes du réseau local trouvées par balayage sortant (voir TabletDiscovery.cs)
+        readonly TabletDiscovery discovery = new TabletDiscovery();
         TcpListener listener;
         public int Port { get; private set; }
         public string Token { get; private set; }
@@ -144,6 +146,11 @@ namespace InsertechEvenements
 
                     if (path == "/ping" && method == "GET")
                         await Write(stream, 200, "{\"ok\":true,\"backend\":\"sqlite\",\"path\":" + JsonSerializer.Serialize(dbPath, AppJson.Default.String) + "}");
+                    else if (path == "/tablettes" && method == "GET")
+                    {
+                        discovery.Touch();
+                        await Write(stream, 200, discovery.ToJson());
+                    }
                     else if (path == "/snapshot" && method == "GET")
                         await Write(stream, 200, LoadSnapshot());
                     else if (path == "/snapshot" && method == "POST")
@@ -346,6 +353,7 @@ namespace InsertechEvenements
         public void Dispose()
         {
             try { listener?.Stop(); } catch { }
+            discovery.Dispose();
         }
     }
 

@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/Bountam/evenements/releases/latest';
 
@@ -41,10 +41,21 @@ test('Mise à jour — nouvelle version détectée, pastille, Plus tard et Ignor
     });
   });
 
+  let apiCalls = 0;
+  page.on('request', (req) => {
+    if (req.url().startsWith(GITHUB_RELEASE_API)) apiCalls++;
+  });
   await page.goto('http://localhost:4173/');
 
-  // Fenêtre ouverte au menu principal avec le titre, les notes et le lien vers la release
+  // Aucun appel à internet au lancement : la vérification se fait seulement à la demande
   const dialog = page.getByRole('dialog', { name: 'Version 1.9.0 disponible' });
+  await expect(page.getByRole('heading', { name: 'Insertech Événements' })).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(apiCalls).toBe(0);
+  await expect(dialog).toBeHidden();
+
+  // Fenêtre ouverte par le bouton, avec le titre, les notes et le lien vers la release
+  await page.getByRole('button', { name: 'Rechercher une mise à jour' }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Ajout de la détection de mises à jour (#35)')).toBeVisible();
   const releaseLink = dialog.getByRole('link', { name: 'Voir la release sur GitHub' });
@@ -81,6 +92,7 @@ test('Mise à jour — nouvelle version détectée, pastille, Plus tard et Ignor
   // Une version suivante (1.9.1) n'est pas ignorée et s'affiche
   currentTag = 'v1.9.1';
   await page.reload();
+  await page.getByRole('button', { name: 'Rechercher une mise à jour' }).click();
   await expect(page.getByRole('dialog', { name: 'Version 1.9.1 disponible' })).toBeVisible();
 });
 
@@ -159,177 +171,9 @@ test('Mise à jour — bloquée pendant un chrono en cours ou une session active
   });
 
   await page.goto('http://localhost:4173/');
+  await page.getByRole('button', { name: 'Rechercher une mise à jour' }).click();
   const dialog = page.getByRole('dialog', { name: 'Version 1.9.0 disponible' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Termine la session pour mettre à jour')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Mettre à jour' })).toBeDisabled();
-});
-
-// Pont PeerJS en mémoire entre deux pages Playwright pour tester le réseau PC ↔ Tablette sans Internet
-async function wireInMemoryPeerBridge(hostPage: Page, clientPage: Page) {
-  await hostPage.exposeFunction('__peerBridgeFromHost', (payload: any) => {
-    setTimeout(() => {
-      clientPage.evaluate((p) => (window as any).__peerReceiveFromHost?.(p), payload).catch(() => {});
-    }, 0);
-  });
-
-  await clientPage.exposeFunction('__peerBridgeFromClient', (payload: any) => {
-    setTimeout(() => {
-      hostPage.evaluate((p) => (window as any).__peerReceiveFromClient?.(p), payload).catch(() => {});
-    }, 0);
-  });
-
-  const initScript = (side: 'host' | 'client') => {
-    class FakeConnection {
-      connectionId = 'conn-tablet-1';
-      open = false;
-      private handlers: Record<string, Array<(...args: any[]) => void>> = {};
-      constructor(private sendFn: (msg: any) => void) {}
-      on(event: string, cb: (...args: any[]) => void) {
-        (this.handlers[event] ||= []).push(cb);
-      }
-      emit(event: string, ...args: any[]) {
-        for (const cb of this.handlers[event] || []) cb(...args);
-      }
-      send(data: any) {
-        this.sendFn({ type: 'data', data });
-      }
-      close() {
-        if (!this.open) return;
-        this.open = false;
-        this.emit('close');
-        this.sendFn({ type: 'close' });
-      }
-    }
-
-    class FakePeer {
-      id: string;
-      disconnected = false;
-      destroyed = false;
-      private handlers: Record<string, Array<(...args: any[]) => void>> = {};
-      private conn: FakeConnection | null = null;
-
-      constructor(idOrOpts?: any) {
-        this.id = typeof idOrOpts === 'string' ? idOrOpts : 'client-peer-1';
-        setTimeout(() => {
-          if (this.destroyed) return;
-          this.emit('open', this.id);
-        }, 5);
-
-        if (side === 'host') {
-          (window as any).__peerReceiveFromClient = (payload: any) => {
-            if (payload.type === 'connect') {
-              const conn = new FakeConnection((msg) => (window as any).__peerBridgeFromHost(msg));
-              conn.open = true;
-              this.conn = conn;
-              this.emit('connection', conn);
-              (window as any).__peerBridgeFromHost({ type: 'connected' });
-            } else if (payload.type === 'data' && this.conn) {
-              this.conn.emit('data', payload.data);
-            } else if (payload.type === 'close' && this.conn) {
-              this.conn.open = false;
-              this.conn.emit('close');
-            }
-          };
-        } else {
-          (window as any).__peerReceiveFromHost = (payload: any) => {
-            if (payload.type === 'connected' && this.conn) {
-              this.conn.open = true;
-              this.conn.emit('open');
-            } else if (payload.type === 'data' && this.conn) {
-              this.conn.emit('data', payload.data);
-            } else if (payload.type === 'close' && this.conn) {
-              this.conn.open = false;
-              this.conn.emit('close');
-            }
-          };
-        }
-      }
-
-      on(event: string, cb: (...args: any[]) => void) {
-        (this.handlers[event] ||= []).push(cb);
-      }
-      emit(event: string, ...args: any[]) {
-        for (const cb of this.handlers[event] || []) cb(...args);
-      }
-      connect(_code: string) {
-        const conn = new FakeConnection((msg) => (window as any).__peerBridgeFromClient(msg));
-        this.conn = conn;
-        setTimeout(() => {
-          (window as any).__peerBridgeFromClient({ type: 'connect' });
-        }, 10);
-        return conn;
-      }
-      reconnect() {}
-      destroy() {
-        this.destroyed = true;
-      }
-    }
-
-    (window as any).__INSERTECH_PEER_CLASS__ = FakePeer;
-  };
-
-  await hostPage.addInitScript(initScript, 'host');
-  await clientPage.addInitScript(initScript, 'client');
-}
-
-test('Réseau PC et tablette avec deux versions — avertissement sur le PC sans bloquer la synchro', async ({ browser }) => {
-  const hostContext = await browser.newContext();
-  const tabletContext = await browser.newContext();
-
-  try {
-    const hostPage = await hostContext.newPage();
-    const tabletPage = await tabletContext.newPage();
-
-    await wireInMemoryPeerBridge(hostPage, tabletPage);
-
-    // Le PC est en 1.2.7, la tablette est en 1.2.5
-    await hostPage.addInitScript(() => {
-      (window as any).__INSERTECH_APP_VERSION__ = '1.2.7';
-    });
-    await tabletPage.addInitScript(() => {
-      (window as any).__INSERTECH_APP_VERSION__ = '1.2.5';
-    });
-
-    for (const p of [hostPage, tabletPage]) {
-      await p.route(GITHUB_RELEASE_API, (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(makeReleasePayload({ tag_name: 'v1.2.5' }))
-        })
-      );
-    }
-
-    await hostPage.goto('http://localhost:4173/');
-    await tabletPage.goto('http://localhost:4173/');
-
-    // Le PC crée une activité Kiosque-concours et lance la session hôte
-    await hostPage.getByRole('radio', { name: /Kiosque-concours/ }).click();
-    await hostPage.locator('#eventName').fill('Concours Version Test');
-    await hostPage.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
-    await hostPage.getByRole('button', { name: "Créer l'activité" }).click();
-
-    await hostPage.getByRole('button', { name: 'Réseau LAN' }).click();
-    await hostPage.getByRole('button', { name: 'Créer la session hôte' }).click();
-
-    const codeLocator = hostPage.locator('span.text-3xl');
-    await expect(codeLocator).toHaveText(/^INS-\d{4}-/);
-    const sessionCode = (await codeLocator.textContent())!.trim();
-    await hostPage.getByRole('button', { name: 'Fermer la boîte de dialogue' }).click();
-
-    // La tablette (1.2.5) rejoint la session du PC (1.2.7)
-    await tabletPage.getByRole('button', { name: 'Rejoindre une session réseau' }).click();
-    await tabletPage.getByPlaceholder('Ex. INS-4821').fill(sessionCode);
-    await tabletPage.getByRole('button', { name: 'Rejoindre', exact: true }).click();
-
-    // La synchronisation fonctionne sans blocage : la tablette bascule sur l'activité du PC
-    await expect(tabletPage.getByText('Concours Version Test').first()).toBeVisible();
-
-    // Le PC affiche l'avertissement de différence de version
-    await expect(hostPage.getByText('Tablette en 1.2.5, PC en 1.2.7')).toBeVisible();
-  } finally {
-    await hostContext.close();
-    await tabletContext.close();
-  }
 });
