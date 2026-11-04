@@ -2313,7 +2313,13 @@ Le lanceur affiche toujours l'interface embarquée dans l'exécutable : un `inde
 npm run build:mobile
 ```
 Cela compile l'application et génère `dist/InsertechEvenements-Mobile.html`.
-Sur machine avec Android SDK ou via GitHub Actions, l'APK est produit par `gradle assembleDebug` (ou `assembleRelease` avec la clé de release) dans le dossier `android/`. Gradle copie lui-même `dist/` dans les assets de l'APK : lancer `npm run build` avant, sinon la compilation s'arrête.
+L'appli Android est un projet [Capacitor](https://capacitorjs.com) 8 (Android 10 et plus, aucune dépendance aux services Google). Sur une machine avec le SDK Android et un JDK 21, ou via GitHub Actions :
+```bash
+npm run build
+npx cap sync android          # copie dist/ dans android/app/src/main/assets/public
+cd android && ./gradlew assembleDebug lintDebug
+```
+Ne jamais modifier `android/app/src/main/assets/public/` à la main : il est régénéré par `cap sync`. La sauvegarde SQLite de la tablette (`window.InsertechStockage`, `StorageBridge.java`) est branchée dans `MainActivity.java`.
 
 **Signature de l'APK.** L'APK debug est signé avec `android/app/debug.keystore`, commité pour que chaque APK puisse mettre à jour le précédent sans désinstallation. Quand les secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` et `ANDROID_KEY_PASSWORD` sont définis dans le dépôt, la CI produit à la place un APK release (`org.insertech.evenements`, sans suffixe `.debug`) signé avec cette clé. Passer de l'un à l'autre installe une autre application : exporter les données avant.
 

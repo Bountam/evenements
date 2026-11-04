@@ -1,56 +1,17 @@
 package org.insertech.evenements;
 
-import android.annotation.SuppressLint;
 import android.os.Bundle;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import androidx.appcompat.app.AppCompatActivity;
 
-public class MainActivity extends AppCompatActivity {
+import com.getcapacitor.BridgeActivity;
 
-    private WebView webView;
+public class MainActivity extends BridgeActivity {
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Les plugins maison (lots suivants) s'enregistrent ici, avant super.onCreate : registerPlugin(...)
         super.onCreate(savedInstanceState);
 
-        // La WebView reste sous la barre d'état (colorée par le thème) : dessiner dessous
-        // masquait le haut de l'en-tête, la WebView ne recevant pas les safe-area insets.
-        webView = new WebView(this);
-        setContentView(webView);
-
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
-
         // Sauvegarde SQLite hors du navigateur (window.InsertechStockage), voir src/utils/sqliteBackup.ts
-        webView.addJavascriptInterface(new StorageBridge(getApplicationContext()), "InsertechStockage");
-
-        // Charger l'application autonome embarquée hors-ligne
-        webView.loadUrl("file:///android_asset/index.html");
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        getBridge().getWebView().addJavascriptInterface(new StorageBridge(getApplicationContext()), "InsertechStockage");
     }
 }

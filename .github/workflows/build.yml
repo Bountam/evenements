@@ -129,10 +129,23 @@ jobs:
           name: InsertechEvenements-PWA-Android-Web
           path: dist/
 
+      # Projet Capacitor : node_modules fournit @capacitor/android (inclus par capacitor.settings.gradle)
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Copie dist/ dans android/app/src/main/assets/public et régénère la liste des plugins
+      - name: Synchroniser le projet Android (Capacitor)
+        run: npx cap sync android
+
+      # Capacitor 8 / AGP 8.13 : JDK 21
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # Gradle vient du wrapper commité ; setup-gradle ne fait que le cache
       - uses: gradle/actions/setup-gradle@v4
@@ -157,12 +170,20 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_PATH" ]; then
-            ./gradlew assembleRelease --no-daemon
+            ./gradlew assembleRelease lintRelease --no-daemon
             cp app/build/outputs/apk/release/app-release.apk ../InsertechEvenements-Android.apk
           else
-            ./gradlew assembleDebug --no-daemon
+            ./gradlew assembleDebug lintDebug --no-daemon
             cp app/build/outputs/apk/debug/app-debug.apk ../InsertechEvenements-Android.apk
           fi
+
+      - name: Rapport lint Android (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-lint-android
+          path: android/app/build/reports/
+          retention-days: 7
 
       - uses: actions/upload-artifact@v4
         with:
