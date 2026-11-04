@@ -1,7 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Insertech.Fullscreen" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+
+    <!-- Thème sombre aux couleurs Insertech : la WebView s'affiche sous la barre d'état, jamais dessous
+         (Capacitor décale le contenu tant que la page ne demande pas viewport-fit=cover). -->
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryDark">@color/primary_dark</item>
+        <item name="colorAccent">@color/accent</item>
         <item name="android:windowBackground">@color/primary_dark</item>
-        <item name="android:statusBarColor">@color/primary_dark</item>
-        <item name="android:navigationBarColor">@color/primary_dark</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="AppTheme">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+    </style>
+
+    <!-- Écran de démarrage (androidx.core:core-splashscreen), puis thème normal -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

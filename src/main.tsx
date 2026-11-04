@@ -5,6 +5,7 @@ import App from './App.tsx';
 import { ToastContainer, showToast } from './components/shared/Toast';
 import { ConfirmDialogHost } from './components/shared/ConfirmDialog';
 import './index.css';
+import { isAndroidApp } from './native/android';
 
 // Prevent benign sandbox WebSocket error from appearing as an unhandled rejection overlay
 if (typeof window !== 'undefined') {
@@ -27,8 +28,11 @@ if (typeof window !== 'undefined') {
     }
   });
 
-  // Enregistrement du Service Worker PWA (uniquement sur HTTP/HTTPS comme GitHub Pages)
+  // Enregistrement du Service Worker PWA (uniquement sur HTTP/HTTPS comme GitHub Pages).
+  // Jamais dans l'appli Android : ses fichiers sont déjà dans l'APK, et un service worker y servirait
+  // une ancienne interface après une mise à jour.
   if (
+    !isAndroidApp() &&
     'serviceWorker' in navigator &&
     (window.location.protocol === 'https:' || window.location.protocol === 'http:')
   ) {

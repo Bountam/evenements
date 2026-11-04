@@ -1,40 +1,27 @@
-plugins {
-    id 'com.android.application'
-}
+apply plugin: 'com.android.application'
 
-// Le bundle web (dist/ à la racine du dépôt) est copié au build dans les assets de l'APK :
-// impossible de compiler un APK avec une ancienne interface. Lancer `npm run build` avant Gradle.
-def webDist = file("${rootDir}/../dist")
-def webAssetsDir = layout.buildDirectory.dir('generated/webAssets').get().asFile
-
-def copyWebAssets = tasks.register('copyWebAssets', Sync) {
-    from(webDist) {
-        // Doublon de index.html destiné au téléchargement direct, inutile dans l'APK
-        exclude 'InsertechEvenements-Mobile.html'
-    }
-    into webAssetsDir
-    doFirst {
-        if (!new File(webDist, 'index.html').exists()) {
-            throw new GradleException("dist/index.html introuvable : lancer `npm run build` à la racine avant Gradle.")
-        }
-    }
-}
+// Projet Capacitor : `npm run build` puis `npx cap sync android` copient dist/ dans
+// app/src/main/assets/public avant Gradle (voir .github/workflows/build.yml).
 
 // Clé de release fournie par la CI (secrets GitHub) ; sans elle, seul le build debug est signé.
 def releaseKeystore = System.getenv('ANDROID_KEYSTORE_PATH')
 
 android {
-    namespace 'org.insertech.evenements'
-    compileSdk 34
-
+    namespace = "org.insertech.evenements"
+    compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "org.insertech.evenements"
-        minSdk 24
-        targetSdk 34
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // Réécrits par scripts/sync-version.js à partir de package.json : ne pas modifier à la main
         versionCode 10400
         versionName "1.4.0"
-
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
     }
 
     signingConfigs {
@@ -59,6 +46,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (releaseKeystore) {
                 signingConfig signingConfigs.release
             }
@@ -70,24 +58,30 @@ android {
         }
     }
 
-    sourceSets {
-        main {
-            assets.srcDir webAssetsDir
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+    lint {
+        // Le rapport reste dans app/build/reports ; seules les erreurs font échouer la CI
+        abortOnError true
+        warningsAsErrors false
     }
 }
 
-tasks.named('preBuild') {
-    dependsOn copyWebAssets
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.webkit:webkit:1.9.0'
-    implementation 'com.google.android.material:material:1.11.0'
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
 }
+
+apply from: 'capacitor.build.gradle'
+// Aucun service Google : pas de plugin google-services, même si un google-services.json apparaissait.

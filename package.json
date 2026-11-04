@@ -17,6 +17,8 @@
     "build:all": "npm run build:exe && npm run build:linux && npm run build:mobile"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.4.1",
     "dexie": "^4.0.10",
@@ -30,6 +32,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@playwright/test": "^1.56.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/canvas-confetti": "^1.9.0",
