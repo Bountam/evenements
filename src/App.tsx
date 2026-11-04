@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EventSettings, EventType } from './types';
 import { db, notifySync, registerSyncListener, clearAllData, seedDemoData, saveAutoSnapshot } from './db';
 import { SqliteBackupStatus, getSqliteBackupStatus, onSqliteBackupStatus, restoreFromSqliteIfEmpty, startSqliteBackup } from './utils/sqliteBackup';
@@ -33,9 +33,14 @@ import VolunteerSurveyButton from './components/shared/VolunteerSurveyButton';
 import Button from './components/shared/Button';
 import { downloadAllContactsXlsx } from './utils/contactExport';
 import { saveFile } from './utils/saveFile';
-import { fileAccept, isAndroidApp } from './native/android';
 import {
-  getDeviceRole, getEffectivePinLock, readEventPinLock, readLocked, readSavedMode, saveLocked, saveMode, storePinCopy,
+  bloquerPaysage, desepingler, epingler, fileAccept, garderEcranAllume, isAndroidApp, onBoutonRetour, pleinEcran,
+  quitterApplication
+} from './native/android';
+import { confirmDialog } from './components/shared/ConfirmDialog';
+import {
+  getDeviceRole, getEffectivePinLock, readEventPinLock, readLandscapeLock, readLocked, readSavedMode, saveLandscapeLock,
+  saveLocked, saveMode, storePinCopy,
   tabForMode, NO_PIN_MESSAGE, type ModeUsage
 } from './utils/modeLock';
 import ModePicker from './components/tablette/ModePicker';
@@ -87,6 +92,7 @@ export default function App() {
   const [tabletMode, setTabletMode] = useState<ModeUsage | null>(() => (IS_TABLET ? readSavedMode() : null));
   const [isModeLocked, setIsModeLocked] = useState<boolean>(() => IS_TABLET && readLocked());
   const [showPinDialog, setShowPinDialog] = useState(false);
+  const [isLandscapeLocked, setIsLandscapeLocked] = useState<boolean>(() => IS_TABLET && readLandscapeLock());
 
   // Gestion de l'installation PWA Android / Tablette
   useEffect(() => {
@@ -553,6 +559,67 @@ export default function App() {
     setIsModeLocked(true);
     showToast('Mode verrouillé. Maintenez le cadenas 2 secondes pour le déverrouiller.', 'info');
   };
+
+  // Tablette verrouillée : plein écran, écran toujours allumé et application épinglée (Retour et Accueil
+  // ne sortent plus). Déverrouillée : barres visibles, et l'écran reste allumé seulement pendant une session réseau.
+  useEffect(() => {
+    if (!IS_TABLET) return;
+    if (isModeLocked) {
+      pleinEcran(true);
+      garderEcranAllume(true);
+      epingler();
+    } else {
+      pleinEcran(false);
+      desepingler();
+      garderEcranAllume(Boolean(sessionCode));
+    }
+  }, [isModeLocked, sessionCode]);
+
+  useEffect(() => {
+    if (IS_TABLET) bloquerPaysage(isLandscapeLocked);
+  }, [isLandscapeLocked]);
+
+  const handleLandscapeChange = (locked: boolean) => {
+    saveLandscapeLock(locked);
+    setIsLandscapeLocked(locked);
+  };
+
+  // Bouton Retour d'Android. Verrouillée : rien. Libre : fermer la fenêtre ouverte, sinon revenir au choix
+  // du mode, sinon (accueil ou choix du mode) demander avant de quitter l'application.
+  const backStateRef = useRef({ isModeLocked, tabletMode, hasEvent: false });
+  backStateRef.current = { isModeLocked, tabletMode, hasEvent: Boolean(activeEvent) };
+  useEffect(() => {
+    if (!IS_TABLET) return;
+    let asking = false;
+    return onBoutonRetour(async () => {
+      const state = backStateRef.current;
+      if (state.isModeLocked) return;
+      const openDialog = document.querySelector('dialog[open]');
+      if (openDialog) {
+        // Même effet qu'Échap : la fenêtre décide elle-même de sa fermeture (voir Modal, ConfirmDialog)
+        openDialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+        return;
+      }
+      if (asking) return;
+      if (state.hasEvent && state.tabletMode) {
+        saveMode(null);
+        setTabletMode(null);
+        return;
+      }
+      asking = true;
+      try {
+        const quit = await confirmDialog({
+          title: "Quitter l'application ?",
+          message: 'La tablette ne recevra plus les données du PC hôte tant que l’application est fermée.',
+          confirmLabel: 'Quitter',
+          cancelLabel: 'Rester'
+        });
+        if (quit) quitterApplication();
+      } finally {
+        asking = false;
+      }
+    });
+  }, []);
 
   const handleUnlocked = () => {
     saveLocked(false);
@@ -1860,7 +1927,13 @@ export default function App() {
   if (activeEvent && IS_TABLET && !tabletMode) {
     return (
       <>
-        <ModePicker event={activeEvent} onPick={handlePickMode} onLeaveEvent={handleLeaveEvent} />
+        <ModePicker
+          event={activeEvent}
+          onPick={handlePickMode}
+          onLeaveEvent={handleLeaveEvent}
+          landscapeLocked={isLandscapeLocked}
+          onLandscapeChange={handleLandscapeChange}
+        />
         {renderNetModal()}
       </>
     );
