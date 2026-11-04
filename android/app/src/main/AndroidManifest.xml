@@ -37,6 +37,14 @@
 
         </activity>
 
+        <!-- Mise à jour envoyée par le PC hôte (lot 8) -->
+        <receiver android:name=".InstallResultReceiver" android:exported="false" />
+        <receiver android:name=".MiseAJourReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -56,6 +64,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <!-- Installer la mise à jour envoyée par le PC hôte (Android demande toujours confirmation) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Android 10 seulement : écrire les exports dans Documents/Insertech (inutile à partir d'Android 11) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />

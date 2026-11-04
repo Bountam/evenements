@@ -1,6 +1,7 @@
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { LienChiffre, PoigneeTablette } from '../../src/net/poignee';
+import { estMessageMaj, recevoirMajTablette, reinitialiserReceptionMaj, versionCodeDe, type NatifMaj } from '../../src/net/miseAJour';
 
 // Tablette simulée en Node : même serveur que le plugin Android ServeurLocal (/decouverte, /session),
 // même poignée de main et même chiffrement que l'application, partagés avec src/net.
@@ -9,6 +10,9 @@ export class FakeTablette {
   readonly recus: any[] = [];
   lien: LienChiffre | null = null;
   refus = 0;
+  // Plugin natif de mise à jour simulé : la tablette répond aux MAJ_* avec le vrai code de l'appli
+  natifMaj: NatifMaj | null = null;
+  version = '1.2.5';
   port = 0;
 
   constructor(
@@ -19,6 +23,7 @@ export class FakeTablette {
   ) {}
 
   async demarrer(port = 0): Promise<number> {
+    reinitialiserReceptionMaj();
     const serveur = new WebSocketServer({ host: '127.0.0.1', port });
     await new Promise<void>((resolve, reject) => {
       serveur.once('listening', () => resolve());
@@ -61,7 +66,18 @@ export class FakeTablette {
           return;
         }
         lien = new LienChiffre('PC hôte', cleSession, (t) => ws.send(t), () => ws.close());
-        lien.on('data', (m: any) => this.recus.push(m));
+        const actuel = lien;
+        lien.on('data', (m: any) => {
+          this.recus.push(m);
+          if (estMessageMaj(m)) {
+            recevoirMajTablette(actuel, m, {
+              natif: this.natifMaj,
+              versionCodeActuel: () => versionCodeDe(this.version) ?? 0,
+              verrouillee: () => false,
+              avantInstallation: async () => {}
+            });
+          }
+        });
         this.lien?.close();
         this.lien = lien;
       });

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FakeTablette } from './helpers/fakeTablette';
+import { FauxNatifMaj } from './helpers/fauxNatifMaj';
 
 // Synchro 100 % réseau local : la page du PC hôte appelle une tablette simulée (serveur WebSocket Node sur
 // 127.0.0.1), comme l'exe le fait avec la liste /tablettes de son lanceur. Aucune requête ne doit sortir
@@ -102,4 +103,44 @@ test('PC hôte : une tablette avec une autre clé est refusée', async ({ page }
   } finally {
     await tablette.arreter();
   }
+});
+
+test('PC hôte : « Mettre à jour les tablettes » envoie l\'APK par le réseau local', async ({ page }) => {
+  test.setTimeout(60_000);
+  let tablette: FakeTablette | null = null;
+  const { code, cle, sorties } = await preparerPc(page, () => (tablette ? [tablette] : []));
+  tablette = new FakeTablette(code, cle, 'Kiosque entrée');
+  const natif = new FauxNatifMaj();
+  tablette.natifMaj = natif;
+  await tablette.demarrer();
+  try {
+    await expect(page.getByText('Connectée', { exact: true })).toBeVisible({ timeout: 15_000 });
+    tablette.envoyer({ type: 'REQUEST_INITIAL_SYNC', version: '1.2.5' });
+    await tablette.attendre((m) => m.type === 'INITIAL_SYNC');
+
+    // Un faux APK de 200 Ko (une archive ZIP commence par « PK »), version lue dans le nom du fichier
+    const apk = Buffer.alloc(200 * 1024, 7);
+    apk.write('PK', 0);
+    await page.getByText('Mettre à jour les tablettes').click();
+    await page.locator('#apk-fichier').setInputFiles({ name: 'InsertechEvenements-9.9.9.apk', mimeType: 'application/vnd.android.package-archive', buffer: apk });
+    await expect(page.getByTestId('apk-pret')).toContainText('0,2 Mo');
+    await expect(page.locator('#apk-version')).toHaveValue('9.9.9');
+    await page.getByRole('button', { name: 'Envoyer aux tablettes (1)' }).click();
+
+    await expect(page.getByTestId('etat-maj')).toHaveText('À confirmer sur la tablette', { timeout: 15_000 });
+    expect(Buffer.compare(natif.recu(), apk)).toBe(0);
+    expect(natif.installe).toBe(true);
+
+    // Après l'installation, la tablette revient avec sa nouvelle version : le PC l'affiche
+    tablette.version = '9.9.9';
+    tablette.envoyer({ type: 'REQUEST_INITIAL_SYNC', version: '9.9.9' });
+    await expect(page.getByTestId('etat-maj')).toHaveText('Installée (9.9.9)');
+
+    // Un fichier qui n'est pas un APK est refusé dès le PC
+    await page.locator('#apk-fichier').setInputFiles({ name: 'photo.apk', mimeType: 'image/png', buffer: Buffer.from('pas un apk') });
+    await expect(page.getByRole('alert')).toContainText("n'est pas un APK");
+  } finally {
+    await tablette.arreter();
+  }
+  expect(sorties).toEqual([]);
 });

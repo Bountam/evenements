@@ -424,6 +424,11 @@ export default function App() {
   };
 
   const handleTriggerUpdate = () => {
+    // Les tablettes ne vont jamais sur GitHub : le PC hôte leur envoie l'APK (fenêtre Réseau local)
+    if (IS_TABLET) {
+      showToast('Les mises à jour arrivent du PC hôte : sur le PC, fenêtre Réseau local, « Mettre à jour les tablettes ».', 'info');
+      return;
+    }
     if (!availableRelease || isUpdateBlocked || Boolean(sessionCode)) return;
     window.open(availableRelease.htmlUrl, '_blank', 'noopener,noreferrer');
   };
@@ -583,6 +588,15 @@ export default function App() {
         asking = false;
       }
     });
+  }, []);
+
+  // Tablette : étapes d'une mise à jour envoyée par le PC hôte
+  useEffect(() => {
+    if (!IS_TABLET) return;
+    networkManager.onMajTablette = (texte) => showToast(texte, 'info');
+    return () => {
+      networkManager.onMajTablette = null;
+    };
   }, []);
 
   // QR du PC lu par l'appareil photo Samsung : insertech://rejoindre ouvre l'appli et rejoint la session

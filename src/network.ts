@@ -5,6 +5,10 @@ import type { Lien } from './net/lien';
 import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
 import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } from './net/tabletteLocale';
 import { nouvelleCle } from './net/chiffrement';
+import { DiffusionMaj, estMessageMaj, recevoirMajTablette, reinitialiserReceptionMaj, versionCodeDe, type ApkPret, type MessageMaj } from './net/miseAJour';
+import { getNatifMaj } from './native/android';
+import { readLocked } from './utils/modeLock';
+import { sauvegarderMaintenant } from './utils/sqliteBackup';
 
 // Types de messages réseau local
 export type NetworkMessage =
@@ -19,7 +23,8 @@ export type NetworkMessage =
   | { type: 'REQUEST_INITIAL_SYNC'; version?: string }
   | { type: 'CLOCK_PING'; t0: number }
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
-  | { type: 'INITIAL_SYNC'; payload: { event: any; tickets: any[]; technicians: any[]; participants: any[]; attendees: any[] } };
+  | { type: 'INITIAL_SYNC'; payload: { event: any; tickets: any[]; technicians: any[]; participants: any[]; attendees: any[] } }
+  | MessageMaj;
 
 const OUTBOX_KEY = 'insertech_net_outbox';
 const HEARTBEAT_MS = 4000;
@@ -42,6 +47,10 @@ class P2PNetworkManager {
   onRaffleAction: ((action: SyncMessage) => void) | null = null;
   onClientVersionsChange: ((mismatchedVersions: string[]) => void) | null = null;
   onActivityStateChange: (() => void) | null = null;
+  // Tablette : messages à afficher pendant une mise à jour envoyée par le PC
+  onMajTablette: ((texte: string) => void) | null = null;
+  private diffusionMaj: DiffusionMaj | null = null;
+  private abonnesMaj = new Set<(d: DiffusionMaj | null) => void>();
 
   // Versions des tablettes connectées au PC principal (connectionId -> version X.Y.Z)
   private clientVersions = new Map<string, string>();
@@ -291,6 +300,42 @@ class P2PNetworkManager {
     return cle;
   }
 
+  // PC hôte : envoie l'APK à toutes les tablettes reliées (et à celles qui se relieront avec une version plus ancienne)
+  lancerMiseAJour(apk: ApkPret): DiffusionMaj {
+    if (this.role !== 'host') throw new Error('Aucune session hôte ouverte');
+    const diffusion = new DiffusionMaj(apk);
+    this.diffusionMaj = diffusion;
+    diffusion.onChange(() => this.abonnesMaj.forEach((cb) => cb(diffusion)));
+    for (const conn of this.connections) if (conn.open) diffusion.proposer(conn);
+    this.abonnesMaj.forEach((cb) => cb(diffusion));
+    return diffusion;
+  }
+
+  renvoyerMiseAJour(nomTablette: string) {
+    const conn = this.connections.find((c) => c.open && c.idDistant === nomTablette);
+    if (conn && this.diffusionMaj) this.diffusionMaj.proposer(conn);
+  }
+
+  getDiffusionMaj(): DiffusionMaj | null {
+    return this.diffusionMaj;
+  }
+
+  onMajChange(cb: (d: DiffusionMaj | null) => void): () => void {
+    this.abonnesMaj.add(cb);
+    cb(this.diffusionMaj);
+    return () => this.abonnesMaj.delete(cb);
+  }
+
+  // Tablette : attendre que le PC ait accusé réception de tous les envois en attente (au plus delaiMs)
+  async attendreFileVide(delaiMs = 5000): Promise<boolean> {
+    const fin = Date.now() + delaiMs;
+    // Les envois en attente sont déjà partis (ou repartiront à la reconnexion) : on attend leurs accusés
+    while (this.outbox.length > 0 && Date.now() < fin) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return this.outbox.length === 0;
+  }
+
   getHoteLocal(): HoteLocal | null {
     return this.hoteLocal;
   }
@@ -312,6 +357,7 @@ class P2PNetworkManager {
 
     conn.on('close', () => {
       this.connections = this.connections.filter(c => c.connectionId !== conn.connectionId);
+      this.diffusionMaj?.lienFerme(conn);
       this.lastClientPingAt.delete(conn.connectionId);
       this.incomingChains.delete(conn.connectionId);
       if (this.clientVersions.delete(conn.connectionId)) {
@@ -507,6 +553,9 @@ class P2PNetworkManager {
   // QUITTER LA SESSION RÉSEAU (Retour au mode standalone)
   leaveSession() {
     const wasClient = this.role === 'client';
+    this.diffusionMaj = null;
+    this.abonnesMaj.forEach((cb) => cb(null));
+    reinitialiserReceptionMaj();
     this.role = 'standalone';
     this.joinCode = null;
     this.hostLostSince = null;
@@ -622,6 +671,24 @@ class P2PNetworkManager {
 
   // TRAITER LES MESSAGES ENTRANTS (Master & Clients)
   private async handleIncomingData(conn: Lien, msg: NetworkMessage, eventId: string) {
+    if (estMessageMaj(msg)) {
+      if (this.role === 'host') {
+        this.lastClientPingAt.set(conn.connectionId, Date.now());
+        this.diffusionMaj?.recevoir(conn, msg);
+      } else if (this.role === 'client') {
+        await recevoirMajTablette(conn, msg, {
+          natif: getNatifMaj(),
+          versionCodeActuel: () => versionCodeDe(getAppVersion()) ?? 0,
+          verrouillee: () => readLocked(),
+          avantInstallation: async () => {
+            await sauvegarderMaintenant();
+            await this.attendreFileVide();
+          },
+          informer: (texte) => this.onMajTablette?.(texte)
+        });
+      }
+      return;
+    }
     if (this.role === 'host') {
       // --- PARTIE HÔTE / MASTER (Source de vérité) ---
       this.lastClientPingAt.set(conn.connectionId, Date.now());
@@ -639,6 +706,7 @@ class P2PNetworkManager {
             const cleanVer = normalizeVersion(msg.version) || msg.version.trim();
             this.clientVersions.set(conn.connectionId, cleanVer);
             this.notifyClientVersions();
+            this.diffusionMaj?.versionSignalee(conn, cleanVer);
           }
           await this.sendInitialSync(conn, eventId);
           break;
