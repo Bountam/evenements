@@ -2204,8 +2204,9 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
             Piste {track.trackId}
           </span>
           <h3
-            className={`font-display font-black uppercase text-app-text line-clamp-2 text-balance mt-0.5 leading-tight ${
-              isSingle ? 'text-[clamp(1.5rem,6cqi,3.75rem)]' : 'text-[clamp(1.125rem,7cqi,1.875rem)]'
+            className={`font-display font-black uppercase text-app-text line-clamp-2 text-balance mt-0.5 leading-[1.05] ${
+              // Lisible à 5 mètres sur un téléviseur : environ 6 % de la hauteur de l'écran, borné par la largeur de la carte
+              isSingle ? 'text-[clamp(1.5rem,min(8cqi,8vh),5.5rem)]' : 'text-[clamp(1.125rem,min(9cqi,5.5vh),4rem)]'
             }`}
           >
             {track.participantName}

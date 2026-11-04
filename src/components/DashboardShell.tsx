@@ -261,8 +261,13 @@ export default function DashboardShell({
               </div>
             )}
 
-            {/* Commandes de la tablette, hors du groupe qui s'efface : l'icône verrouillée reste touchable */}
-            {modeControls}
+            {/* Commandes de la tablette : effacées avec le reste au repos (rien de visible sur le téléviseur),
+                mais toujours touchables : un appui les réveille et l'icône verrouillée se maintient encore */}
+            {modeControls && (
+              <div className={`shrink-0 transition-opacity duration-500 ${isPointerIdle ? 'opacity-0' : ''}`} data-testid="commandes-tablette">
+                {modeControls}
+              </div>
+            )}
 
             {/* Séparateur vertical discret */}
             <div className={`h-6 w-px bg-app-card-border shrink-0 transition-opacity duration-500 ${isPointerIdle ? 'opacity-0' : ''}`} aria-hidden="true" />
