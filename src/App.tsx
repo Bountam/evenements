@@ -523,6 +523,9 @@ export default function App() {
 
   // Tablette verrouillée : plein écran, écran toujours allumé et application épinglée (Retour et Accueil
   // ne sortent plus). Déverrouillée : barres visibles, et l'écran reste allumé seulement pendant une session réseau.
+  // Écran public (souvent envoyé au téléviseur par Smart View) : toujours plein écran, allumé et en paysage,
+  // verrouillé ou non, puisque personne ne touche la tablette pendant l'événement.
+  const isPublicScreenMode = IS_TABLET && tabletMode === 'ecran_public' && Boolean(activeEvent);
   useEffect(() => {
     if (!IS_TABLET) return;
     if (isModeLocked) {
@@ -530,15 +533,15 @@ export default function App() {
       garderEcranAllume(true);
       epingler();
     } else {
-      pleinEcran(false);
+      pleinEcran(isPublicScreenMode);
       desepingler();
-      garderEcranAllume(Boolean(sessionCode));
+      garderEcranAllume(isPublicScreenMode || Boolean(sessionCode));
     }
-  }, [isModeLocked, sessionCode]);
+  }, [isModeLocked, sessionCode, isPublicScreenMode]);
 
   useEffect(() => {
-    if (IS_TABLET) bloquerPaysage(isLandscapeLocked);
-  }, [isLandscapeLocked]);
+    if (IS_TABLET) bloquerPaysage(isLandscapeLocked || isPublicScreenMode);
+  }, [isLandscapeLocked, isPublicScreenMode]);
 
   const handleLandscapeChange = (locked: boolean) => {
     saveLandscapeLock(locked);
