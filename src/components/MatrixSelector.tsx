@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { showToast } from './shared/Toast';
+import { saveFile } from '../utils/saveFile';
+import { fileAccept } from '../native/android';
 
 interface MatrixSelectorProps {
   onCreateEvent: (settings: Omit<EventSettings, 'id' | 'createdAt'>) => void;
@@ -307,14 +309,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
         };
 
         const blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'exemple_import_evenement.xlsx';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        await saveFile('exemple_import_evenement.xlsx', blob);
         return;
       } catch (err) {
         console.error(err);
@@ -324,14 +319,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
     }
 
     const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    await saveFile(fileName, blob);
   };
 
   const activeMatrix = MATRICES_LIST.find(m => m.type === selectedType);
@@ -472,7 +460,7 @@ export default function MatrixSelector({ onCreateEvent, onImportEvent }: MatrixS
                   <input
                     id="eventImportSelector"
                     type="file"
-                    accept=".json,.csv,.md,.tex,.latex,.xlsx,.xls"
+                    accept={fileAccept(".json,.csv,.md,.tex,.latex,.xlsx,.xls")}
                     onChange={onImportEvent}
                     className="sr-only"
                   />
