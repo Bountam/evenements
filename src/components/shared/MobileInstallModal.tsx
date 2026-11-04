@@ -5,6 +5,7 @@ import {
   Check, ExternalLink, X, Sparkles, Tablet, Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { saveFile } from '../../utils/saveFile';
 
 interface MobileInstallModalProps {
   isOpen: boolean;
@@ -56,18 +57,12 @@ export default function MobileInstallModal({
   }, [isOpen]);
 
   // Télécharger le fichier HTML autonome pour mobile
-  const handleDownloadStandaloneMobile = () => {
+  const handleDownloadStandaloneMobile = async () => {
     try {
       const htmlContent = document.documentElement.outerHTML;
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'InsertechEvenements-Mobile.html';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const saved = await saveFile('InsertechEvenements-Mobile.html', blob);
+      if (saved !== 'enregistre') return;
       setDownloadSuccess(true);
       setTimeout(() => setDownloadSuccess(false), 4000);
     } catch (err) {

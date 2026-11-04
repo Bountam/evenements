@@ -32,6 +32,8 @@ import ThemeToggle from './components/shared/ThemeToggle';
 import VolunteerSurveyButton from './components/shared/VolunteerSurveyButton';
 import Button from './components/shared/Button';
 import { downloadAllContactsXlsx } from './utils/contactExport';
+import { saveFile } from './utils/saveFile';
+import { fileAccept, isAndroidApp } from './native/android';
 import { escapeCsvCell, escapeLatex, sanitizeFileName, clampNumber } from './utils/security';
 import { 
   History, Calendar, MapPin, ArrowRight, Trash2, Upload, AlertCircle, FileJson, Sparkles, Wifi, X, Share2, Copy, AlertTriangle, Download, Smartphone, RefreshCw
@@ -865,15 +867,8 @@ export default function App() {
           };
 
           const blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          showToast(`Exportation Excel (${fileName}) terminée !`, "success");
+          const saved = await saveFile(fileName, blob);
+          if (saved === 'enregistre' && !isAndroidApp()) showToast(`Exportation Excel (${fileName}) terminée !`, "success");
           return;
         } catch (err) {
           console.error(err);
@@ -883,15 +878,8 @@ export default function App() {
       }
 
       const blob = new Blob([content], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast(`Exportation (${fileName}) terminée !`, "success");
+      const saved = await saveFile(fileName, blob);
+      if (saved === 'enregistre' && !isAndroidApp()) showToast(`Exportation (${fileName}) terminée !`, "success");
     } catch (e) {
       console.error(e);
       showToast("Erreur lors de la génération du fichier d'exportation.", "error");
@@ -1903,7 +1891,8 @@ export default function App() {
               onClick={async () => {
                 try {
                   const count = await downloadAllContactsXlsx();
-                  showToast(`${count} contact${count > 1 ? 's' : ''} exporté${count > 1 ? 's' : ''} (xlsx).`, 'success');
+                  // Sur Android, saveFile affiche déjà « Enregistré dans Documents/Insertech » (ou l'erreur)
+                  if (count >= 0 && !isAndroidApp()) showToast(`${count} contact${count > 1 ? 's' : ''} exporté${count > 1 ? 's' : ''} (xlsx).`, 'success');
                 } catch (err) {
                   console.error(err);
                   showToast("Erreur lors de l'export des contacts.", 'error');
@@ -1952,7 +1941,7 @@ export default function App() {
                 <input
                   id="jsonImport"
                   type="file"
-                  accept=".json"
+                  accept={fileAccept(".json")}
                   onChange={handleImportData}
                   className="sr-only"
                 />

@@ -12,6 +12,7 @@ import { confirmDialog } from '../shared/ConfirmDialog';
 import { clampNumber } from '../../utils/security';
 import ContactForm from '../shared/ContactForm';
 import { CONTACT_IMPORT_IGNORED, ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
+import { fileAccept } from '../../native/android';
 
 interface ReparothonMatrixProps {
   event: EventSettings;
@@ -903,7 +904,7 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
             <input
               id="csvImport"
               type="file"
-              accept=".csv"
+              accept={fileAccept(".csv")}
               onChange={handleImportCSV}
               className="hidden"
             />

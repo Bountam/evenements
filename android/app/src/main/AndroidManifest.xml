@@ -4,6 +4,7 @@
     <!-- allowBackup="false" : la base SQLite d'un événement ne doit pas partir dans une sauvegarde
          cloud ni revenir, périmée, après une réinstallation. -->
     <application
+        android:requestLegacyExternalStorage="true"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -43,4 +44,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Android 10 seulement : écrire les exports dans Documents/Insertech (inutile à partir d'Android 11) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 </manifest>

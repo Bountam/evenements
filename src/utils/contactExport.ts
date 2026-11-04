@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { saveFile } from './saveFile';
 import type { ContactSource, EventSettings } from '../types';
 import { CONTACT_EXPORT_HEADER, contactExportCells, protectFormula, readContact } from './contact';
 
@@ -53,15 +54,12 @@ export async function downloadAllContactsXlsx(): Promise<number> {
   if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-  // Même téléchargement que les exports par activité (lien et Blob), compatible avec l'exe et l'APK
+  // Même enregistrement que les exports par activité : téléchargement sur PC, Documents/Insertech sur Android
   const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const url = URL.createObjectURL(new Blob([data], { type: 'application/octet-stream' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `contacts_insertech_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  return rows.length;
+  const saved = await saveFile(
+    `contacts_insertech_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    new Blob([data], { type: 'application/octet-stream' })
+  );
+  // -1 : l'enregistrement a échoué sur Android (le message d'erreur est déjà affiché)
+  return saved === 'enregistre' ? rows.length : -1;
 }
