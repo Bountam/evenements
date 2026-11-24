@@ -62,6 +62,8 @@ for (const target of TARGETS) {
       const box = await header.boundingBox();
       expect(box?.y ?? -1, "l'en-tête commence en haut de l'écran").toBeGreaterThanOrEqual(0);
       await expect(page.getByRole('tablist')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Menu principal' })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Synchronisation réseau/i })).toBeVisible();
       await expectIntactUi(page);
 
       // En-tête allégé : les commandes rares sont dans le volet « Plus »

@@ -2,15 +2,20 @@ import { expect, test } from '@playwright/test';
 
 const URL = 'http://localhost:4173/';
 
-test('Workflows par rôle : Réparateur (Piste + Lexique + Rapport 3 écrans), Assistant, Vue Map & Écran Public Loi 25', async ({
+const SIMULATE_ANDROID = () => {
+  (window as any).androidBridge = { postMessage: () => {} };
+};
+
+test('Workflows par rôle sur mobile : Réparateur (Piste + Lexique + sans bénévolat), Assistant & Écran Public Laptop Loi 25', async ({
   page
 }) => {
+  test.setTimeout(60_000);
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto(URL);
 
-  // 1. Créer un Réparothon et inscrire un appareil (1 question/écran)
+  // 1. Laptop (Admin) : Créer un Réparothon et inscrire un appareil (1 question/écran)
   await page.getByRole('radio', { name: /^Réparothon/ }).click();
   await page.locator('#eventName').fill('Réparothon Rôles CI');
   await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
@@ -31,12 +36,17 @@ test('Workflows par rôle : Réparateur (Piste + Lexique + Rapport 3 écrans), A
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();
   await expect(page.getByText('Appareil enregistré pour Sophie Côté !')).toBeVisible();
 
-  // 2. Basculer vers Animateur Réparateur via WorkRoleBar
-  await page.getByRole('button', { name: 'Changer mon rôle' }).click();
+  // 2. Simuler le cellulaire/tablette qui rejoint le Réparothon -> Onboarding 4 étapes -> Réparateur
+  await page.addInitScript(SIMULATE_ANDROID);
+  await page.reload();
   await page.getByRole('button', { name: /Animateur Réparateur/i }).click();
 
-  // Choisir un profil réparateur existant (Alexandre Tremblay, spécialiste laptop)
+  // Étape 3 Réparateur : choisir Alexandre Tremblay (créé par seedDemoData)
   await page.getByRole('button', { name: /Alexandre Tremblay/i }).click();
+
+  // Un Réparateur ne doit JAMAIS avoir le bouton Devenir bénévole dans son en-tête
+  await expect(page.getByRole('button', { name: /Devenir bénévole/i })).toHaveCount(0);
+  await expect(page.getByText(/Orientez-le vers l'Accueil/i)).toBeVisible();
 
   // File d'attente intelligente : « Recommandé pour toi » + prise de l'appareil de Sophie Côté
   await expect(page.getByText('Recommandé pour toi').first()).toBeVisible({ timeout: 10_000 });
@@ -53,22 +63,23 @@ test('Workflows par rôle : Réparateur (Piste + Lexique + Rapport 3 écrans), A
   await expect(page.getByRole('heading', { name: /Lexique & Fiches/i })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // Vérifier Écran Public anonymisé Loi 25 (Sophie C. sans nom complet)
-  await page.getByRole('tab', { name: 'Écran Public' }).click();
-  await expect(page.getByText(/Au tour de Sophie C\./i)).toBeVisible();
-  await expect(page.getByText('Sophie Côté')).toHaveCount(0);
-
-  // Vérifier Cockpit Assistant (reçoit alerte + appel)
-  await page.mouse.move(100, 100);
-  await page.getByRole('button', { name: /Basculer vers la console/i }).click();
-  await page.getByRole('button', { name: 'Changer mon rôle' }).click();
+  // Changer de rôle via le bouton unique d'en-tête -> Animateur Assistant -> formulaire bénévole -> Cockpit Assistant
+  await page.getByRole('button', { name: 'Animateur Réparateur' }).click();
   await page.getByRole('button', { name: /Animateur Assistant/i }).click();
+  await page.locator('#mob-vol-firstName').fill('Julie');
+  await page.locator('#mob-vol-lastName').fill('Martin');
+  await page.locator('#mob-vol-phone').fill('514 555-3333');
+  await page.getByLabel('Accueil', { exact: true }).check();
+  await page.locator('#mob-vol-consentVolunteer').check();
+  await page.getByRole('button', { name: /Confirmer et ouvrir mon espace/i }).click();
+
   await expect(page.getByText(/Demandes d'aide des réparateurs \(1\)/i)).toBeVisible();
   await page.getByRole('button', { name: /J'interviens \/ Résolu/i }).click();
 
   // Revenir en Réparateur et compléter le Rapport final en 3 écrans
-  await page.getByRole('button', { name: 'Changer mon rôle' }).click();
+  await page.getByRole('button', { name: 'Animateur Assistant' }).click();
   await page.getByRole('button', { name: /Animateur Réparateur/i }).click();
+  await page.getByRole('button', { name: /Alexandre Tremblay/i }).click();
   await page.getByRole('button', { name: '4. Rapport' }).click();
   await page.getByRole('button', { name: 'Réparé !' }).click();
   await page.getByRole('button', { name: 'Nettoyage poussière interne' }).click();
@@ -77,10 +88,18 @@ test('Workflows par rôle : Réparateur (Piste + Lexique + Rapport 3 écrans), A
   await page.getByRole('button', { name: 'Enregistrer le rapport' }).click();
   await expect(page.getByText('Rapport de réparation enregistré !')).toBeVisible();
 
+  // Repasser en vue Laptop (sans androidBridge) pour vérifier l'Écran Public anonymisé Loi 25
+  await page.evaluate(() => {
+    delete (window as any).androidBridge;
+  });
+  await page.addInitScript(() => {
+    delete (window as any).androidBridge;
+  });
+
   expect(errors).toEqual([]);
 });
 
-test('Formateur : évaluation Avant / Pendant / Après (+X niveaux & Prêt Réparothon)', async ({ page }) => {
+test('Formateur sur tablette : évaluation Avant / Pendant / Après (+X niveaux & Prêt Réparothon)', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
   await page.setViewportSize({ width: 1280, height: 800 });

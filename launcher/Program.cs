@@ -11,12 +11,24 @@ namespace InsertechEvenements
 {
     class Program
     {
+        [DllImport("kernel32.dll")]
+        static extern uint SetThreadExecutionState(uint esFlags);
+        const uint ES_CONTINUOUS = 0x80000000u;
+        const uint ES_SYSTEM_REQUIRED = 0x00000001u;
+        const uint ES_DISPLAY_REQUIRED = 0x00000002u;
+
         [STAThread]
         static void Main()
         {
+            bool keepAwakeWindows = false;
             try
             {
                 bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+                if (!isLinux)
+                {
+                    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+                    keepAwakeWindows = true;
+                }
                 string appDataDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "InsertechEvenements"
@@ -71,6 +83,13 @@ namespace InsertechEvenements
             catch
             {
                 // Repli silencieux pour éviter tout crash bloquant
+            }
+            finally
+            {
+                if (keepAwakeWindows)
+                {
+                    try { SetThreadExecutionState(ES_CONTINUOUS); } catch { }
+                }
             }
         }
 

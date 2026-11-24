@@ -10,18 +10,16 @@ import { formatTime } from '../shared/Stopwatch';
 import { confirmDialog } from '../shared/ConfirmDialog';
 import ContactForm from '../shared/ContactForm';
 import FormateurEvaluationPanel from './generic/FormateurEvaluationPanel';
-import WorkRoleBar from '../tablette/WorkRoleBar';
 import type { ProgressionLevel, WorkRole } from '../../types';
-import { readSavedWorkRole, saveWorkRole } from '../../utils/modeLock';
-import { isAndroidApp } from '../../native/android';
 import { ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
 
 interface GenericMatrixProps {
   event: EventSettings;
   activeTab: 'enregistrements' | 'bilan' | 'public' | 'formulaire';
+  workRole?: WorkRole;
 }
 
-export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) {
+export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: GenericMatrixProps) {
   const [attendees, setAttendees] = useState<GenericAttendee[]>([]);
   
   // États Formulaires
@@ -34,12 +32,6 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   const [selectedAttendeeId, setSelectedAttendeeId] = useState<string | null>(null);
   const [feedbackScore, setFeedbackScore] = useState<number>(5);
   const [feedbackText, setFeedbackText] = useState('');
-  const [workRole, setWorkRole] = useState<WorkRole>(() => readSavedWorkRole());
-
-  const handleSelectWorkRole = (role: WorkRole) => {
-    setWorkRole(role);
-    saveWorkRole(role);
-  };
 
   const setQuickBeforeLevel = async (id: string, level: ProgressionLevel) => {
     try {
@@ -349,9 +341,6 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
     const kioskForm = activeTab === 'formulaire';
     return (
       <div className="space-y-6">
-        {!kioskForm && (
-          <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
-        )}
         {!kioskForm && workRole === 'formateur' && (
           <FormateurEvaluationPanel attendees={attendees} onReload={loadAttendees} />
         )}

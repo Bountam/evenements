@@ -1,6 +1,6 @@
 # GEMINI.md — Guide Architecture & Conventions (`insertech-tableau-evenements`)
 
-Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.6.0.
+Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.7.0.
 
 ---
 
@@ -15,9 +15,17 @@ Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC
 
 ---
 
-## 2. Rôles Terrain (`WorkRole`) & Workflows
+## 2. Rôles Terrain (`WorkRole`), Appareils & Workflows
 
-Définis dans `src/types.ts` et gérés par `src/utils/modeLock.ts` + `src/components/tablette/WorkRoleBar.tsx` :
+Définis dans `src/types.ts` et gérés par `src/utils/modeLock.ts` + `src/components/tablette/MobileOnboardingWizard.tsx` + `src/components/DashboardShell.tsx` :
+
+- **Poste Laptop (Serveur Hôte) :** toujours `admin`, anti-veille automatique (`src/utils/wakeLock.ts` + `SetThreadExecutionState` dans `launcher/Program.cs`), seul à pouvoir ouvrir le projecteur / Écran Public, verrouillable manuellement via le code PIN par défaut **`0000`** (modifiable dans les réglages réseau).
+- **Appareils Mobiles / Tablettes (après scan QR) :** parcours guidé en 4 étapes :
+  1. Choix de l'événement actif *(sauté automatiquement s'il n'y en a qu'un seul)*
+  2. Choix du rôle adapté à l'événement *(sans Écran Public sur mobile)*
+  3. Formulaire bénévole complet (`ContactForm` en mode `volunteer` pour tous les rôles sauf `reparateur`, qui choisit/crée sa fiche technique Nom + Table + Spécialités ; `kiosque_formulaire` saute directement au formulaire visiteur)
+  4. Vue dédiée au rôle avec en-tête minimaliste : logo Insertech = Menu principal, icône synchro seule (Bleu/Jaune/Rouge), 1 seul bouton de rôle, et verrouillage réservé au mode `kiosque_formulaire`.
+- **`juge` (Animateur Juge Kiosque-Concours) :** `src/components/matrices/concours/JudgeConcoursCockpit.tsx` — inscription directe des 1 ou 2 joueurs devant le juge, bassin multi-animateurs pour départ commun synchronisé (10 pistes réseau), 2 arrêts séparés contrôlés uniquement par le juge, puis écran temps + rang cumulé + rappel des prix + `Nouvelle compétition`. L'onglet `Tirage` reste réservé à `admin`.
 
 1. **`admin` (Administrateur / God Mode) :**
    - Protégé par le code PIN à 4 chiffres de l'événement sur tablette/cellulaire.

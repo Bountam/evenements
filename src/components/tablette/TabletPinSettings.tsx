@@ -67,8 +67,8 @@ export default function TabletPinSettings({ event, onSave }: TabletPinSettingsPr
       </div>
       <p id="tablet-pin-help" className="text-[10px] text-app-text-muted">
         {hasPin
-          ? 'Un code est défini pour cette activité. Le nouveau code remplace l’ancien sur les tablettes connectées.'
-          : 'Sans code, les tablettes ne peuvent pas verrouiller leur mode.'}
+          ? 'Un code personnalisé est défini pour cette activité. Il remplace le code par défaut (0000).'
+          : 'Code par défaut actif : 0000. Définissez un autre code à 4 chiffres si souhaité.'}
       </p>
       {error && <p role="alert" className="text-xs font-bold text-danger">{error}</p>}
     </form>

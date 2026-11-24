@@ -94,15 +94,17 @@ export interface StopwatchState {
   elapsedBeforeStart: number;
 }
 
-// État d'une piste de chronométrage concurrent (jusqu'à 5 pistes)
+// État d'une piste de chronométrage concurrent (jusqu'à 10 pistes)
 export interface TrackState {
-  trackId: number; // 1 à 5
+  trackId: number; // 1 à 10
   participantId: string | null;
   participantName: string | null;
   isRunning: boolean;
   startTime: number | null;
   elapsedBeforeStart: number;
   eventId?: string | null; // Événement propriétaire de l'assignation (les pistes sont partagées entre événements)
+  judgeId?: string | null; // Identifiant de l'animateur juge qui contrôle la piste
+  judgeName?: string | null; // Nom affiché aux autres animateurs pour le départ commun
 }
 
 export type RaffleStatus = 'idle' | 'spinning' | 'celebrating';
@@ -166,6 +168,7 @@ export type WorkRole =
   | 'reparateur'
   | 'assistant'
   | 'formateur'
+  | 'juge'
   | 'kiosque_formulaire'
   | 'ecran_public';
 
@@ -223,13 +226,22 @@ export type SyncMessage =
   | { type: 'EVENT_CHANGED'; eventId: string }
   | { type: 'STATE_SYNC'; payload: any }
   | { type: 'TIMER_START'; trackId: number; startTime: number; elapsedBeforeStart: number }
+  | { type: 'TIMER_START_BATCH'; trackIds: number[]; startTime: number }
   | { type: 'TIMER_STOP'; trackId: number; elapsed: number }
   | { type: 'TIMER_RESET'; trackId: number }
   | { type: 'RAFFLE_START'; spinStartTime: number; winnerId: string }
   | { type: 'RAFFLE_RESET' }
   | { type: 'DB_UPDATE'; timestamp: number }
   | { type: 'PEER_CELEBRATION'; payload: any }
-  | { type: 'TRACK_ASSIGN'; trackId: number; participantId: string | null; participantName: string | null; eventId?: string }
+  | {
+      type: 'TRACK_ASSIGN';
+      trackId: number;
+      participantId: string | null;
+      participantName: string | null;
+      eventId?: string;
+      judgeId?: string | null;
+      judgeName?: string | null;
+    }
   | { type: 'TRACKS_STATE_SYNC'; tracks: Record<number, TrackState> }
   | {
       type: 'PUBLIC_CALL_TABLE';

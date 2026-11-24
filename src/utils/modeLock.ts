@@ -28,7 +28,12 @@ export const MODE_LABELS: Record<ModeUsage, string> = {
   kiosque_formulaire: 'Kiosque formulaire'
 };
 
-export const NO_PIN_MESSAGE = "Définissez un code dans l'administration du PC";
+export const DEFAULT_PIN_CODE = '0000';
+export const NO_PIN_MESSAGE = "Le code par défaut est 0000 (modifiable par l'administrateur).";
+
+export async function createDefaultPinLock(): Promise<PinLock> {
+  return createPinLock(DEFAULT_PIN_CODE);
+}
 
 export function getDeviceRole(): DeviceRole {
   return isAndroidApp() ? 'tablette' : 'hote';
@@ -207,10 +212,10 @@ export type PinCheckResult =
   | { status: 'no_pin' };
 
 export async function checkPin(code: string, lock: PinLock | null, now = Date.now()): Promise<PinCheckResult> {
-  if (!lock) return { status: 'no_pin' };
   const remainingMs = getBlockRemainingMs(now);
   if (remainingMs > 0) return { status: 'blocked', remainingMs };
-  if (await verifyPin(code, lock)) {
+  const ok = lock ? await verifyPin(code, lock) : code === DEFAULT_PIN_CODE;
+  if (ok) {
     resetPinFailures();
     return { status: 'ok' };
   }
@@ -230,6 +235,10 @@ export function formatWait(ms: number): string {
 // --- Rôles terrain & anonymisation Loi 25 ---
 
 export const WORK_ROLE_STORAGE_KEY = 'insertech_work_role';
+export const MOBILE_ONBOARDED_KEY = 'insertech_mobile_onboarded';
+export const MOBILE_VOLUNTEER_NAME_KEY = 'insertech_mobile_volunteer_name';
+export const MOBILE_TECH_ID_KEY = 'insertech_mobile_tech_id';
+export const JUDGE_DEVICE_ID_KEY = 'insertech_judge_device_id';
 
 export const WORK_ROLES: WorkRole[] = [
   'admin',
@@ -237,19 +246,58 @@ export const WORK_ROLES: WorkRole[] = [
   'reparateur',
   'assistant',
   'formateur',
+  'juge',
   'kiosque_formulaire',
   'ecran_public'
 ];
 
 export const WORK_ROLE_LABELS: Record<WorkRole, string> = {
-  admin: 'Administrateur (God Mode)',
+  admin: 'Administrateur',
   accueil: "Animateur d'Accueil",
   reparateur: 'Animateur Réparateur',
   assistant: 'Animateur Assistant',
   formateur: 'Formateur',
-  kiosque_formulaire: 'Kiosque Visiteur',
+  juge: 'Animateur Juge',
+  kiosque_formulaire: "Kiosque d'inscription",
   ecran_public: 'Écran Public'
 };
+
+// Seul le Kiosque d'inscription peut être verrouillé sur mobile/tablette
+export function canLockWorkRole(role: WorkRole): boolean {
+  return role === 'kiosque_formulaire';
+}
+
+export function getOrCreateJudgeDeviceId(): string {
+  const existing = readStorage(JUDGE_DEVICE_ID_KEY);
+  if (existing) return existing;
+  const created = `juge-${Math.random().toString(36).substring(2, 10)}`;
+  writeStorage(JUDGE_DEVICE_ID_KEY, created);
+  return created;
+}
+
+export function readMobileVolunteerName(): string {
+  return readStorage(MOBILE_VOLUNTEER_NAME_KEY) || '';
+}
+
+export function saveMobileVolunteerName(name: string) {
+  writeStorage(MOBILE_VOLUNTEER_NAME_KEY, name.trim() || null);
+}
+
+export function readMobileTechId(): string {
+  return readStorage(MOBILE_TECH_ID_KEY) || '';
+}
+
+export function saveMobileTechId(techId: string) {
+  writeStorage(MOBILE_TECH_ID_KEY, techId.trim() || null);
+}
+
+export function readMobileOnboarded(): boolean {
+  return readStorage(MOBILE_ONBOARDED_KEY) === 'true';
+}
+
+export function saveMobileOnboarded(done: boolean) {
+  writeStorage(MOBILE_ONBOARDED_KEY, done ? 'true' : null);
+}
 
 export function readSavedWorkRole(defaultRole: WorkRole = 'admin'): WorkRole {
   const saved = readStorage(WORK_ROLE_STORAGE_KEY);

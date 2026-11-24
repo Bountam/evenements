@@ -53,7 +53,7 @@ async function qrDuPc(page: Page) {
   await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
   await page.getByRole('button', { name: "Créer l'activité" }).click();
   await expect(page.getByRole('tab', { name: 'Pistes' })).toBeVisible();
-  await page.getByRole('button', { name: /Réseau LAN/ }).click();
+  await page.getByRole('button', { name: /Synchronisation réseau/ }).click();
   await page.getByRole('button', { name: 'Créer la session hôte' }).click();
   const code = (await page.getByTestId('code-session').innerText()).trim();
   const img = page.getByRole('img', { name: /Code QR pour rejoindre la session/ });

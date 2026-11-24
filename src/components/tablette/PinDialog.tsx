@@ -63,7 +63,7 @@ export default function PinDialog({ isOpen, pinLock, onClose, onUnlocked }: PinD
     <Modal isOpen={isOpen} onClose={onClose} title="Déverrouiller la tablette" icon={KeyRound} maxWidth="max-w-sm" initialFocusRef={inputRef}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <label htmlFor="pin-code" className="block text-xs text-app-text-muted">
-          Code à 4 chiffres défini sur le PC hôte
+          Code à 4 chiffres (0000 par défaut, modifiable par l'admin)
         </label>
         <input
           ref={inputRef}

@@ -28,18 +28,19 @@ import {
   validateContactStep
 } from '../../utils/contact';
 import type { WorkRole } from '../../types';
-import { formatPublicShortName, readSavedWorkRole, saveWorkRole } from '../../utils/modeLock';
-import WorkRoleBar from '../tablette/WorkRoleBar';
+import { formatPublicShortName } from '../../utils/modeLock';
 import ReparateurCockpit from './reparothon/ReparateurCockpit';
 import AssistantCockpit from './reparothon/AssistantCockpit';
 import AdminMapAndGodMode from './reparothon/AdminMapAndGodMode';
 import AccueilQueueView from './reparothon/AccueilQueueView';
-import { fileAccept, isAndroidApp } from '../../native/android';
+import { fileAccept } from '../../native/android';
 import { clampNumber } from '../../utils/security';
 
 interface ReparothonMatrixProps {
   event: EventSettings;
   activeTab: 'accueil' | 'techniciens' | 'public' | 'formulaire';
+  workRole?: WorkRole;
+  preselectedTechId?: string;
 }
 
 interface StatKpiCardProps {
@@ -261,19 +262,19 @@ interface DraftDeviceItem {
   customDiagnosisNote: string;
 }
 
-export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixProps) {
-  // 1. États de base (Rôle terrain, Tickets & Techniciens)
-  const [workRole, setWorkRole] = useState<WorkRole>(() => readSavedWorkRole('admin'));
+export default function ReparothonMatrix({
+  event,
+  activeTab,
+  workRole = 'admin',
+  preselectedTechId
+}: ReparothonMatrixProps) {
+  // 1. États de base (Tickets & Techniciens)
   const [lastRegistrationReceipt, setLastRegistrationReceipt] = useState<{
     visitorName: string;
     deviceNames: string[];
     queueNumber: number;
     estimatedWaitMinutes: number;
   } | null>(null);
-  const handleSelectWorkRole = (nextRole: WorkRole) => {
-    setWorkRole(nextRole);
-    saveWorkRole(nextRole);
-  };
   const [tickets, setTickets] = useState<RepairTicket[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
 
@@ -1340,11 +1341,11 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
     if (!kioskForm && workRole === 'reparateur') {
       return (
         <div className="max-w-4xl mx-auto space-y-5">
-          <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
           <ReparateurCockpit
             event={event}
             tickets={tickets}
             technicians={technicians}
+            preselectedTechId={preselectedTechId}
             onReload={loadData}
             onCelebrate={(payload) => {
               setActiveCelebration(payload);
@@ -1360,7 +1361,6 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
     if (!kioskForm && workRole === 'assistant') {
       return (
         <div className="max-w-4xl mx-auto space-y-5">
-          <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
           <AssistantCockpit tickets={tickets} onReload={loadData} />
         </div>
       );
@@ -1385,9 +1385,6 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
 
     return (
       <div className={`max-w-4xl mx-auto space-y-5 ${kioskForm ? 'kiosk-form-only' : ''}`}>
-        {!kioskForm && (
-          <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
-        )}
         {lastRegistrationReceipt && (
           <div
             role="status"
@@ -2383,11 +2380,11 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   if (workRole === 'reparateur') {
     return (
       <div className="max-w-4xl mx-auto space-y-5">
-        <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
         <ReparateurCockpit
           event={event}
           tickets={tickets}
           technicians={technicians}
+          preselectedTechId={preselectedTechId}
           onReload={loadData}
           onCelebrate={(payload) => {
             setActiveCelebration(payload);
@@ -2403,7 +2400,6 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   if (workRole === 'assistant') {
     return (
       <div className="max-w-4xl mx-auto space-y-5">
-        <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
         <AssistantCockpit tickets={tickets} onReload={loadData} />
       </div>
     );
@@ -2412,7 +2408,6 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
   if (workRole === 'accueil') {
     return (
       <div className="max-w-5xl mx-auto space-y-5">
-        <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
         <AccueilQueueView
           event={event}
           tickets={tickets}
@@ -2443,7 +2438,6 @@ export default function ReparothonMatrix({ event, activeTab }: ReparothonMatrixP
 
   return (
     <div className="space-y-6">
-      <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
       {workRole === 'admin' && (
         <AdminMapAndGodMode event={event} tickets={tickets} technicians={technicians} onReload={loadData} />
       )}

@@ -17,6 +17,7 @@ interface ReparateurCockpitProps {
   event: EventSettings;
   tickets: RepairTicket[];
   technicians: Technician[];
+  preselectedTechId?: string;
   onReload: () => Promise<void>;
   onCelebrate: (payload: { visitorName: string; objectName: string; techName: string; weightKg: number }) => void;
 }
@@ -32,11 +33,20 @@ export default function ReparateurCockpit({
   event,
   tickets,
   technicians,
+  preselectedTechId,
   onReload,
   onCelebrate
 }: ReparateurCockpitProps) {
   const storageKey = `insertech_active_tech_${event.id}`;
-  const [selectedTechId, setSelectedTechId] = useState<string>(() => localStorage.getItem(storageKey) || '');
+  const [selectedTechId, setSelectedTechId] = useState<string>(
+    () => preselectedTechId || localStorage.getItem(storageKey) || ''
+  );
+
+  useEffect(() => {
+    if (preselectedTechId && technicians.some((t) => t.id === preselectedTechId)) {
+      setSelectedTechId(preselectedTechId);
+    }
+  }, [preselectedTechId, technicians]);
   const [activeTicketId, setActiveTicketId] = useState<string>('');
   const [showLexicon, setShowLexicon] = useState(false);
 
@@ -400,6 +410,9 @@ export default function ReparateurCockpit({
             </div>
           )}
         </div>
+        <p className="text-center text-xs text-app-text-muted pt-1">
+          Un visiteur souhaite devenir bénévole ? Orientez-le vers <strong className="text-app-text">l'Accueil</strong>, un <strong className="text-app-text">Assistant</strong> ou un <strong className="text-app-text">Administrateur</strong>.
+        </p>
       </div>
     );
   }
@@ -775,6 +788,11 @@ export default function ReparateurCockpit({
           )}
         </div>
       )}
+
+      {/* Orientation bénévolat : le réparateur réfère vers Accueil, Assistant ou Admin */}
+      <p className="text-center text-xs text-app-text-muted pt-2">
+        Un visiteur souhaite devenir bénévole ? Orientez-le vers <strong className="text-app-text">l'Accueil</strong>, un <strong className="text-app-text">Assistant</strong> ou un <strong className="text-app-text">Administrateur</strong>.
+      </p>
 
       {/* Modale Lexique & Fiches hors-ligne */}
       <Modal isOpen={showLexicon} onClose={() => setShowLexicon(false)} title="Lexique & Fiches de réparation" icon={BookOpen}>

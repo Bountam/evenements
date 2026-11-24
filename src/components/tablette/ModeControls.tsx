@@ -1,21 +1,20 @@
 import React, { useRef } from 'react';
-import { Lock, LockOpen, Repeat } from 'lucide-react';
+import { Lock, LockOpen } from 'lucide-react';
 import Button from '../shared/Button';
-import { MODE_LABELS, type ModeUsage } from '../../utils/modeLock';
 
 export const UNLOCK_HOLD_MS = 2000;
 
 interface ModeControlsProps {
-  mode: ModeUsage;
   locked: boolean;
-  onChangeMode: () => void;
+  canLock?: boolean;
   onLock: () => void;
   onRequestUnlock: () => void;
 }
 
-// Commandes de la tablette dans l'en-tête : changer de mode, verrouiller, ou (verrouillée)
-// une icône discrète à maintenir 2 secondes pour demander le code.
-export default function ModeControls({ mode, locked, onChangeMode, onLock, onRequestUnlock }: ModeControlsProps) {
+// Commandes de verrouillage (réservées uniquement au mode Kiosque d'inscription) :
+// - Non verrouillé : bouton « Verrouiller ce mode »
+// - Verrouillé : icône cadenas discrète à maintenir 2 secondes pour demander le PIN (0000 par défaut)
+export default function ModeControls({ locked, canLock = true, onLock, onRequestUnlock }: ModeControlsProps) {
   const timer = useRef<number | null>(null);
 
   const startHold = () => {
@@ -57,19 +56,16 @@ export default function ModeControls({ mode, locked, onChangeMode, onLock, onReq
     );
   }
 
+  if (!canLock) return null;
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="inline-flex items-center min-h-9 px-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-bold font-display uppercase tracking-wide">
-        {MODE_LABELS[mode]}
-      </span>
-      <Button size="sm" onClick={onChangeMode} title="Choisir un autre mode d'usage pour cette tablette">
-        <Repeat size={13} aria-hidden="true" />
-        <span>Changer de mode</span>
-      </Button>
-      <Button size="sm" onClick={onLock} title="Verrouiller la tablette dans ce mode (le code du PC sera demandé pour en sortir)">
-        <LockOpen size={13} aria-hidden="true" />
-        <span>Verrouiller ce mode</span>
-      </Button>
-    </div>
+    <Button
+      size="sm"
+      onClick={onLock}
+      title="Verrouiller la tablette dans le Kiosque d'inscription (code 0000 par défaut pour en sortir)"
+    >
+      <LockOpen size={13} aria-hidden="true" />
+      <span>Verrouiller le kiosque</span>
+    </Button>
   );
 }

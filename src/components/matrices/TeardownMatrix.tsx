@@ -31,6 +31,9 @@ import {
 } from '../../utils/contact';
 import type { TabBadge } from '../shared/TabSwitcher';
 import KioskFormFrame from '../tablette/KioskFormFrame';
+import JudgeConcoursCockpit from './concours/JudgeConcoursCockpit';
+import type { WorkRole } from '../../types';
+import { getOrCreateJudgeDeviceId, readMobileVolunteerName } from '../../utils/modeLock';
 import confetti from 'canvas-confetti';
 import {
   UserPlus,
@@ -59,6 +62,9 @@ import {
 interface TeardownMatrixProps {
   event: EventSettings;
   activeTab: 'pistes' | 'participants' | 'tirage' | 'public' | 'formulaire';
+  workRole?: WorkRole;
+  judgeId?: string;
+  judgeName?: string;
   onTabChange?: (tab: string) => void;
   // Pastilles d'état des onglets de régie (chronos en marche, file d'attente, tirage)
   onTabBadgesChange?: (badges: Record<string, TabBadge>) => void;
@@ -88,7 +94,15 @@ function playRecordFanfare() {
   }
 }
 
-export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBadgesChange }: TeardownMatrixProps) {
+export default function TeardownMatrix({
+  event,
+  activeTab,
+  workRole = 'admin',
+  judgeId,
+  judgeName,
+  onTabChange,
+  onTabBadgesChange
+}: TeardownMatrixProps) {
   // 1. États principaux
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [lastSavedParticipantId, setLastSavedParticipantId] = useState<string | null>(null);
@@ -925,6 +939,79 @@ export default function TeardownMatrix({ event, activeTab, onTabChange, onTabBad
     onTabBadgesChange(badges);
   }, [runningCount, waitingCount, raffle.status, onTabBadgesChange]);
   useEffect(() => () => onTabBadgesChange?.({}), [onTabBadgesChange]);
+
+  const saveTimeForParticipant = async (participantId: string, finalTime: number) => {
+    try {
+      let participant = await db.participants.get(participantId);
+      if (!participant) {
+        participant = participants.find((p) => p.id === participantId);
+      }
+      if (!participant) return;
+
+      const previousBest =
+        typeof participant.timeMs === 'number' && participant.timeMs > 0 ? participant.timeMs : null;
+      const bestToSave = previousBest !== null ? Math.min(previousBest, finalTime) : finalTime;
+
+      const existingScores = participants
+        .filter((p) => p.id !== participant!.id && typeof p.timeMs === 'number' && p.timeMs > 0)
+        .map((p) => p.timeMs!);
+      const currentBestOverall = existingScores.length > 0 ? Math.min(...existingScores) : Infinity;
+      const isNewRecord = bestToSave < currentBestOverall;
+
+      const updatedParticipant: Participant = {
+        ...participant,
+        timeMs: bestToSave
+      };
+
+      await networkManager.writeToDatabase('participants', 'put', updatedParticipant);
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === updatedParticipant.id ? updatedParticipant : p))
+      );
+      setLastSavedParticipantId(updatedParticipant.id);
+
+      if (isNewRecord) {
+        playRecordFanfare();
+        confetti({
+          disableForReducedMotion: true,
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#9ecd33', '#480A94', '#ffffff']
+        });
+        networkManager.sendChronoAction({
+          type: 'PEER_CELEBRATION',
+          payload: {
+            ticketId: updatedParticipant.id,
+            visitorName: updatedParticipant.name,
+            deviceCategory: formatTime(bestToSave),
+            weightKg: 0
+          }
+        });
+        showToast(`Nouveau record ! ${updatedParticipant.name} : ${formatTime(bestToSave)}`, 'success');
+      } else {
+        showToast(`Temps enregistré pour ${updatedParticipant.name} : ${formatTime(finalTime)}`, 'success');
+      }
+      await loadParticipants();
+    } catch (e) {
+      console.error('Erreur sauvegarde score juge :', e);
+    }
+  };
+
+  if (workRole === 'juge' && activeTab !== 'public' && activeTab !== 'formulaire') {
+    const resolvedJudgeId = judgeId || getOrCreateJudgeDeviceId();
+    const resolvedJudgeName = judgeName || readMobileVolunteerName() || 'Animateur Juge';
+    return (
+      <JudgeConcoursCockpit
+        event={event}
+        participants={participants}
+        tracks={tracks}
+        prizes={prizes}
+        judgeId={resolvedJudgeId}
+        judgeName={resolvedJudgeName}
+        onSaveTimeForParticipant={saveTimeForParticipant}
+      />
+    );
+  }
 
   // ============================================================================
   // RENDU DE L'ÉCRAN PUBLIC DE PROJECTION (Kiosque Plein Écran Adaptatif)

@@ -23,8 +23,20 @@ export type NetworkMessage =
   | { type: 'REQUEST_INITIAL_SYNC'; version?: string }
   | { type: 'CLOCK_PING'; t0: number }
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
-  | { type: 'INITIAL_SYNC'; payload: { event: any; tickets: any[]; technicians: any[]; participants: any[]; attendees: any[] } }
+  | {
+      type: 'INITIAL_SYNC';
+      payload: {
+        event: any;
+        activeEvents?: any[];
+        tickets: any[];
+        technicians: any[];
+        participants: any[];
+        attendees: any[];
+      };
+    }
   | MessageMaj;
+
+export type SyncIndicatorColor = 'blue' | 'yellow' | 'red';
 
 const OUTBOX_KEY = 'insertech_net_outbox';
 const HEARTBEAT_MS = 4000;
@@ -47,10 +59,12 @@ class P2PNetworkManager {
   onRaffleAction: ((action: SyncMessage) => void) | null = null;
   onClientVersionsChange: ((mismatchedVersions: string[]) => void) | null = null;
   onActivityStateChange: (() => void) | null = null;
+  onActiveEventsSync: ((events: any[]) => void) | null = null;
   // Tablette : messages à afficher pendant une mise à jour envoyée par le PC
   onMajTablette: ((texte: string) => void) | null = null;
   private diffusionMaj: DiffusionMaj | null = null;
   private abonnesMaj = new Set<(d: DiffusionMaj | null) => void>();
+  private availableHostEvents: any[] = [];
 
   // Versions des tablettes connectées au PC principal (connectionId -> version X.Y.Z)
   private clientVersions = new Map<string, string>();
@@ -61,13 +75,18 @@ class P2PNetworkManager {
   private abonnesHoteLocal = new Set<(etat: EtatHoteLocal | null) => void>();
   private arretHoteLocal: (() => void) | null = null;
 
-  // Variables locales temporaires pour l'état des chronos (si hôte, on maintient l'état des 5 pistes)
+  // Variables locales temporaires pour l'état des chronos (jusqu'à 10 pistes pour multi-juges)
   tracksState: Record<number, TrackState> = {
     1: { trackId: 1, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
     2: { trackId: 2, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
     3: { trackId: 3, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
     4: { trackId: 4, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
-    5: { trackId: 5, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 }
+    5: { trackId: 5, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
+    6: { trackId: 6, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
+    7: { trackId: 7, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
+    8: { trackId: 8, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
+    9: { trackId: 9, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 },
+    10: { trackId: 10, participantId: null, participantName: null, isRunning: false, startTime: null, elapsedBeforeStart: 0 }
   };
 
   // Décalage d'horloge avec le PC Principal (ms) : heure commune = Date.now() + clockOffset.
@@ -481,6 +500,23 @@ class P2PNetworkManager {
     return this.outbox.length;
   }
 
+  getAvailableHostEvents(): any[] {
+    return this.availableHostEvents;
+  }
+
+  getSyncIndicatorColor(): SyncIndicatorColor {
+    if (this.role === 'host') {
+      return this.sessionId ? 'blue' : 'yellow';
+    }
+    if (this.role === 'client') {
+      if (!this.isLinkedToHost() || this.hostLostSince !== null) {
+        return this.hostLostSince !== null && Date.now() - this.hostLostSince > 45_000 ? 'red' : 'yellow';
+      }
+      return this.outbox.length > 0 ? 'yellow' : 'blue';
+    }
+    return 'red';
+  }
+
   private isLinkedToHost(): boolean {
     return this.connections.length > 0 && this.connections[0].open;
   }
@@ -672,17 +708,31 @@ class P2PNetworkManager {
     }
   }
 
-  // Envoyer à un client toutes les tables de l'activité partagée, puis l'état des chronomètres
+  // Envoyer à un client toutes les tables des activités actives/épinglées, puis l'état des chronomètres
   private async sendInitialSync(conn: Lien, eventId: string) {
-    const tickets = await db.tickets.where('eventId').equals(eventId).toArray();
-    const techs = await db.technicians.where('eventId').equals(eventId).toArray();
-    const participants = await db.participants.where('eventId').equals(eventId).toArray();
-    const attendees = await db.attendees.where('eventId').equals(eventId).toArray();
-    const eventSettings = await db.events.get(eventId);
+    let pinnedIds: string[] = [];
+    try {
+      const parsed = JSON.parse(localStorage.getItem('insertech_pinned_event_ids') || '[]');
+      if (Array.isArray(parsed)) pinnedIds = parsed.filter((x) => typeof x === 'string');
+    } catch {
+      pinnedIds = [];
+    }
+    const targetIds = Array.from(new Set([eventId, ...pinnedIds].filter(Boolean)));
+    const allEvents = await db.events.toArray();
+    const activeEvents = allEvents.filter((e) => targetIds.includes(e.id));
+    const eventSettings = activeEvents.find((e) => e.id === eventId) || (await db.events.get(eventId));
+    const syncIds = activeEvents.length > 0 ? activeEvents.map((e) => e.id) : eventId ? [eventId] : [];
+
+    const [tickets, techs, participants, attendees] = await Promise.all([
+      syncIds.length > 0 ? db.tickets.where('eventId').anyOf(syncIds).toArray() : Promise.resolve([]),
+      syncIds.length > 0 ? db.technicians.where('eventId').anyOf(syncIds).toArray() : Promise.resolve([]),
+      syncIds.length > 0 ? db.participants.where('eventId').anyOf(syncIds).toArray() : Promise.resolve([]),
+      syncIds.length > 0 ? db.attendees.where('eventId').anyOf(syncIds).toArray() : Promise.resolve([])
+    ]);
 
     conn.send({
       type: 'INITIAL_SYNC',
-      payload: { event: eventSettings, tickets, technicians: techs, participants, attendees }
+      payload: { event: eventSettings, activeEvents, tickets, technicians: techs, participants, attendees }
     });
     conn.send({
       type: 'CHRONO_ACTION',
@@ -819,21 +869,34 @@ class P2PNetworkManager {
           this.handleClockPong(msg.t0, msg.hostTime);
           break;
 
-        case 'INITIAL_SYNC':
+        case 'INITIAL_SYNC': {
           // Remplacer l'IndexedDB locale par celle du Master
           const importedEvent = msg.payload.event;
-          
-          await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees], async () => {
-            if (importedEvent) {
-              await db.events.put(importedEvent);
-            }
-            
-            const targetEventId = importedEvent ? importedEvent.id : eventId;
+          const syncedEvents: any[] =
+            Array.isArray(msg.payload.activeEvents) && msg.payload.activeEvents.length > 0
+              ? msg.payload.activeEvents
+              : importedEvent
+                ? [importedEvent]
+                : [];
+          this.availableHostEvents = syncedEvents;
+          const targetEventIds = Array.from(
+            new Set([
+              ...syncedEvents.map((e) => e?.id).filter(Boolean),
+              ...(importedEvent?.id ? [importedEvent.id] : eventId ? [eventId] : [])
+            ])
+          );
 
-            await db.tickets.where('eventId').equals(targetEventId).delete();
-            await db.technicians.where('eventId').equals(targetEventId).delete();
-            await db.participants.where('eventId').equals(targetEventId).delete();
-            await db.attendees.where('eventId').equals(targetEventId).delete();
+          await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees], async () => {
+            for (const evt of syncedEvents) {
+              if (evt) await db.events.put(evt);
+            }
+
+            if (targetEventIds.length > 0) {
+              await db.tickets.where('eventId').anyOf(targetEventIds).delete();
+              await db.technicians.where('eventId').anyOf(targetEventIds).delete();
+              await db.participants.where('eventId').anyOf(targetEventIds).delete();
+              await db.attendees.where('eventId').anyOf(targetEventIds).delete();
+            }
 
             if (msg.payload.tickets.length > 0) await db.tickets.bulkPut(msg.payload.tickets);
             if (msg.payload.technicians.length > 0) await db.technicians.bulkPut(msg.payload.technicians);
@@ -845,8 +908,10 @@ class P2PNetworkManager {
           if (importedEvent) {
             localStorage.setItem('insertech_active_event_id', importedEvent.id);
           }
+          if (this.onActiveEventsSync) this.onActiveEventsSync(syncedEvents);
           notifySync(); // Recharger les composants locaux React
           break;
+        }
 
         case 'DB_DELTA':
           // Réception d'un delta atomique unitaire (O(1))
@@ -939,7 +1004,7 @@ class P2PNetworkManager {
     }
 
     if (action.type === 'TRACKS_STATE_SYNC') {
-      this.tracksState = action.tracks;
+      this.tracksState = { ...this.tracksState, ...action.tracks };
       this.persistTracksState();
       if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
     } else if (action.type === 'TRACK_ASSIGN') {
@@ -948,6 +1013,8 @@ class P2PNetworkManager {
         track.participantId = action.participantId;
         track.participantName = action.participantName;
         track.eventId = action.eventId ?? null;
+        track.judgeId = action.judgeId ?? null;
+        track.judgeName = action.judgeName ?? null;
         track.isRunning = false;
         track.startTime = null;
         track.elapsedBeforeStart = 0;
@@ -962,6 +1029,21 @@ class P2PNetworkManager {
         track.startTime = action.startTime;
         track.elapsedBeforeStart = action.elapsedBeforeStart;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
+        if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
+      }
+    } else if (action.type === 'TIMER_START_BATCH') {
+      let changed = false;
+      for (const trackId of action.trackIds) {
+        const track = this.tracksState[trackId];
+        if (track && track.participantId && !track.isRunning) {
+          track.isRunning = true;
+          track.startTime = action.startTime;
+          this.tracksState[trackId] = { ...track };
+          changed = true;
+        }
+      }
+      if (changed) {
         this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }

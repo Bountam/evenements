@@ -1,12 +1,25 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { EventSettings, PartnerLogo } from '../types';
+import { EventSettings, PartnerLogo, WorkRole } from '../types';
 import { MATRICES_LIST } from './MatrixSelector';
-import { 
-  House, Download, Database, Wifi,
-  Maximize, Minimize, Settings2, MonitorUp, HardDriveDownload, AlertTriangle, Sun, Moon
+import {
+  Download,
+  Database,
+  Wifi,
+  Maximize,
+  Minimize,
+  Settings2,
+  MonitorUp,
+  HardDriveDownload,
+  AlertTriangle,
+  Sun,
+  Moon,
+  Lock,
+  UserCheck
 } from 'lucide-react';
 import type { FileBackupState } from '../utils/backupFile';
 import type { SqliteBackupStatus } from '../utils/sqliteBackup';
+import type { SyncIndicatorColor } from '../network';
+import { WORK_ROLE_LABELS } from '../utils/modeLock';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
@@ -41,14 +54,31 @@ interface DashboardShellProps {
   isNetworkClient?: boolean; // Tablette connectée au PC principal
   isLightTheme: boolean;
   onToggleTheme: () => void;
-  // Tablette : commandes de mode (changer, verrouiller, déverrouiller) affichées dans l'en-tête
+  workRole?: WorkRole;
+  isMobileDevice?: boolean;
+  syncColor?: SyncIndicatorColor;
+  onOpenRolePicker?: () => void;
+  onLockScreen?: () => void;
+  // Tablette : commandes de mode (verrouiller/déverrouiller Kiosque uniquement) affichées dans l'en-tête
   modeControls?: React.ReactNode;
-  // Tablette verrouillée : pas de retour au menu principal ni de fenêtre réseau
+  // Kiosque verrouillé : pas de retour au menu principal ni de fenêtre réseau
   hideNavigation?: boolean;
   children: React.ReactNode;
 }
 
 const PROJECTOR_IDLE_MS = 3000;
+
+const SYNC_INDICATOR_STYLES: Record<SyncIndicatorColor, string> = {
+  blue: '!bg-info/15 !border-info/50 text-info',
+  yellow: '!bg-warning/15 !border-warning/50 text-warning',
+  red: '!bg-danger/15 !border-danger/50 text-danger'
+};
+
+const SYNC_INDICATOR_LABELS: Record<SyncIndicatorColor, string> = {
+  blue: 'Synchronisé',
+  yellow: 'Connexion ou envoi en cours',
+  red: 'Hors ligne / déconnecté'
+};
 
 export default function DashboardShell({
   event,
@@ -72,6 +102,11 @@ export default function DashboardShell({
   isNetworkClient = false,
   isLightTheme,
   onToggleTheme,
+  workRole = 'admin',
+  isMobileDevice = false,
+  syncColor = 'red',
+  onOpenRolePicker,
+  onLockScreen,
   modeControls = null,
   hideNavigation = false,
   children
@@ -148,32 +183,44 @@ export default function DashboardShell({
   // Les onglets de régie du kiosque partagent un seul module : il reste monté (saisie, chronos, tirage)
   const panelKey = event.type === 'kiosque_concours' && !isPublicView ? 'regie' : currentTab;
 
-  // Définir les onglets selon la matrice active
+  // Définir et filtrer les onglets selon la matrice active, le rôle et l'appareil
+  // - Écran Public : uniquement sur Laptop (!isMobileDevice)
+  // - Onglet Tirage : uniquement Admin
+  // - Juge Concours : uniquement le cockpit Pistes
+  // - Réparateur / Assistant : cockpit unique plein écran
   let tabs: TabItem[] = [];
   if (event.type === 'reparothon') {
-    tabs = [
-      { id: 'accueil', label: 'Console d\'accueil' },
-      { id: 'techniciens', label: 'Gestion Techniciens' },
-      { id: 'public', label: 'Écran Public' }
-    ];
+    if (workRole === 'reparateur' || workRole === 'assistant') {
+      tabs = [];
+    } else {
+      tabs = [
+        { id: 'accueil', label: "Console d'accueil" },
+        { id: 'techniciens', label: workRole === 'accueil' ? "File d'attente & Tables" : 'Gestion Techniciens' },
+        ...(!isMobileDevice ? [{ id: 'public', label: 'Écran Public' }] : [])
+      ];
+    }
   } else if (event.type === 'install_fest_linux') {
     tabs = [
       { id: 'accueil', label: 'Accueil et suivi' },
       { id: 'techniciens', label: 'Bénévoles' },
-      { id: 'public', label: 'Écran public' }
+      ...(!isMobileDevice ? [{ id: 'public', label: 'Écran public' }] : [])
     ];
   } else if (event.type === 'kiosque_concours') {
-    tabs = [
-      { id: 'pistes', label: 'Pistes' },
-      { id: 'participants', label: 'Participants' },
-      { id: 'tirage', label: 'Tirage' },
-      { id: 'public', label: 'Écran public' }
-    ];
+    if (workRole === 'juge') {
+      tabs = [];
+    } else {
+      tabs = [
+        { id: 'pistes', label: 'Pistes' },
+        { id: 'participants', label: 'Participants' },
+        ...(workRole === 'admin' ? [{ id: 'tirage', label: 'Tirage' }] : []),
+        ...(!isMobileDevice ? [{ id: 'public', label: 'Écran public' }] : [])
+      ];
+    }
   } else {
     tabs = [
       { id: 'enregistrements', label: 'Présences & Inscriptions' },
       { id: 'bilan', label: 'Bilan & Évaluation' },
-      { id: 'public', label: 'Écran Public' }
+      ...(!isMobileDevice ? [{ id: 'public', label: 'Écran Public' }] : [])
     ];
   }
 
@@ -181,16 +228,40 @@ export default function DashboardShell({
     return (
       <div className="min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10">
         <header className="shrink-0 bg-app-header border-b-4 border-primary px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex items-center justify-between gap-4 shadow-lg">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <BrandLogo size="lg" />
-            <div className="min-w-0">
-              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-xl" title={event.name}>
-                {event.name}
-              </h1>
-              <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
+          {hideNavigation ? (
+            <div className="flex items-center gap-3.5 min-w-0">
+              <BrandLogo size="lg" />
+              <div className="min-w-0">
+                <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-xl" title={event.name}>
+                  {event.name}
+                </h1>
+                <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
+              </div>
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onLeaveEvent}
+              title="Menu principal"
+              aria-label="Menu principal"
+              className="flex items-center gap-3.5 min-w-0 text-left cursor-pointer hover:opacity-90 transition"
+            >
+              <BrandLogo size="lg" />
+              <div className="min-w-0">
+                <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-xl" title={event.name}>
+                  {event.name}
+                </h1>
+                <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
+              </div>
+            </button>
+          )}
           <div className="flex items-center gap-2 shrink-0">
+            {!hideNavigation && isMobileDevice && onOpenRolePicker && (
+              <Button size="sm" onClick={onOpenRolePicker} title="Changer de rôle">
+                <UserCheck size={14} className="text-primary" aria-hidden="true" />
+                <span>{WORK_ROLE_LABELS[workRole]}</span>
+              </Button>
+            )}
             <VolunteerSurveyButton eventId={event.id} />
             {modeControls}
           </div>
@@ -318,18 +389,38 @@ export default function DashboardShell({
           ref={adminHeaderRef}
           className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 shadow-xl backdrop-blur-xl transition-colors duration-300"
         >
-          {/* Identité visuelle */}
-          <div className="flex items-center gap-3.5 shrink-0">
-            <BrandLogo alt="Insertech Événements" />
-            <div>
-              <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
-                Insertech <span className="text-primary font-black">Événements</span>
-              </h1>
-              <p className="hidden lg:block text-micro text-app-text-muted font-semibold mt-1">
-                Tableau de bord autonome et 100% hors-ligne
-              </p>
+          {/* Identité visuelle (clic sur logo Insertech = Menu principal) */}
+          {hideNavigation ? (
+            <div className="flex items-center gap-3.5 shrink-0">
+              <BrandLogo alt="Insertech Événements" />
+              <div>
+                <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
+                  Insertech <span className="text-primary font-black">Événements</span>
+                </h1>
+                <p className="hidden lg:block text-micro text-app-text-muted font-semibold mt-1">
+                  Tableau de bord autonome et 100% hors-ligne
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onLeaveEvent}
+              title="Menu principal (l'activité reste enregistrée)"
+              aria-label="Menu principal"
+              className="flex items-center gap-3.5 shrink-0 text-left cursor-pointer hover:opacity-90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+            >
+              <BrandLogo alt="Insertech Événements" />
+              <div>
+                <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
+                  Insertech <span className="text-primary font-black">Événements</span>
+                </h1>
+                <p className="hidden lg:block text-micro text-app-text-muted font-semibold mt-1">
+                  Tableau de bord autonome et 100% hors-ligne
+                </p>
+              </div>
+            </button>
+          )}
 
           {/* Détails de l'événement actif (anti-doublon et largeur fluide) */}
           <div className="flex flex-wrap items-center gap-2.5 bg-app-input border border-app-card-border p-2 rounded-2xl flex-1 basis-[24rem] min-w-0 transition-colors duration-300 shadow-sm">
@@ -354,28 +445,44 @@ export default function DashboardShell({
             <EventMetaBadges date={event.date} location={event.location} partner={event.partner} />
           </div>
 
-          {/* Onglets de navigation et boutons d'actions */}
+          {/* Onglets de navigation et boutons d'actions épurés selon le rôle */}
           <div className="flex flex-wrap items-center gap-2.5 ml-auto justify-end">
-            <TabSwitcher
-              tabs={tabs.map((tab) => (tabBadges[tab.id] ? { ...tab, badge: tabBadges[tab.id] } : tab))}
-              currentTab={currentTab}
-              onTabChange={onTabChange}
-              ariaLabel="Navigation des vues de l'événement"
-            />
+            {tabs.length > 0 && (
+              <TabSwitcher
+                tabs={tabs.map((tab) => (tabBadges[tab.id] ? { ...tab, badge: tabBadges[tab.id] } : tab))}
+                currentTab={currentTab}
+                onTabChange={onTabChange}
+                ariaLabel="Navigation des vues de l'événement"
+              />
+            )}
 
             <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {modeControls}
+              {/* Un seul bouton de rôle sur mobile/tablette (aucun bouton Changer de mode) */}
+              {isMobileDevice && !hideNavigation && onOpenRolePicker && (
+                <Button
+                  size="sm"
+                  onClick={onOpenRolePicker}
+                  title="Changer de rôle ou d'activité"
+                >
+                  <UserCheck size={14} className="text-primary" aria-hidden="true" />
+                  <span>{WORK_ROLE_LABELS[workRole]}</span>
+                </Button>
+              )}
 
+              {/* Verrouillage PIN réservé uniquement au mode Kiosque d'inscription */}
+              {workRole === 'kiosque_formulaire' && modeControls}
+
+              {/* Icône de synchronisation seule (Bleu = synchronisé, Jaune = reconnexion/attente, Rouge = hors-ligne) */}
               {!hideNavigation && (
-              <Button
-                size="sm"
-                onClick={onOpenNetModal}
-                title={`Statut réseau : ${netStatus}`}
-                className={sessionCode ? '!bg-primary/20 text-primary !border-primary/50' : ''}
-              >
-                <Wifi size={13} aria-hidden="true" />
-                <span>{sessionCode ? sessionCode : 'Réseau LAN'}</span>
-              </Button>
+                <Button
+                  size="icon-sm"
+                  onClick={onOpenNetModal}
+                  aria-label={`Synchronisation réseau : ${SYNC_INDICATOR_LABELS[syncColor]} (${netStatus})`}
+                  title={`${SYNC_INDICATOR_LABELS[syncColor]} • ${sessionCode ? sessionCode : netStatus}`}
+                  className={SYNC_INDICATOR_STYLES[syncColor]}
+                >
+                  <Wifi size={16} aria-hidden="true" />
+                </Button>
               )}
 
               {mismatchedClientVersions.map((clientVer) => (
@@ -390,28 +497,32 @@ export default function DashboardShell({
                 </span>
               ))}
 
-              <VolunteerSurveyButton eventId={event.id} />
+              {/* Un réparateur ne doit jamais avoir de bouton de bénévolat dans l'en-tête */}
+              {workRole !== 'reparateur' && <VolunteerSurveyButton eventId={event.id} />}
 
-              <Button
-                size="sm"
-                onClick={onExportData}
-                data-testid="btn-open-impact-report"
-                title="Ouvrir le Centre de Rapport d'Impact (Excel, Markdown, LaTeX, CSV, JSON)"
-                className="!bg-primary/15 text-primary !border-primary/40"
-              >
-                <Download size={13} aria-hidden="true" />
-                <span>Rapport d'Impact</span>
-              </Button>
+              {/* Le Rapport d'Impact est réservé à l'Administrateur */}
+              {workRole === 'admin' && (
+                <Button
+                  size="sm"
+                  onClick={onExportData}
+                  data-testid="btn-open-impact-report"
+                  title="Ouvrir le Centre de Rapport d'Impact (Excel, Markdown, LaTeX, CSV, JSON)"
+                  className="!bg-primary/15 text-primary !border-primary/40"
+                >
+                  <Download size={13} aria-hidden="true" />
+                  <span>Rapport d'Impact</span>
+                </Button>
+              )}
 
-              {/* Commandes rares regroupées : projecteur, thème, sauvegardes */}
+              {/* Commandes rares regroupées : projecteur (Laptop uniquement), verrouillage Laptop, thème, sauvegardes */}
               <MoreMenu
                 alert={sqliteStatus === 'error' || fileBackupState === 'needs-permission'}
                 alertText={sqliteStatus === 'error' ? 'sauvegarde SQLite hors ligne' : 'fichier de secours à réactiver'}
               >
                 {(close) => (
                   <>
-                    {/* Une tablette ne pilote pas le projecteur : la fenêtre s'ouvre depuis le PC principal */}
-                    {!isNetworkClient && (
+                    {/* Affichage secondaire / projecteur : offert uniquement sur le Laptop, jamais sur mobile */}
+                    {!isMobileDevice && !isNetworkClient && (
                       <Button
                         size="sm"
                         onClick={() => {
@@ -426,23 +537,41 @@ export default function DashboardShell({
                       </Button>
                     )}
 
+                    {/* Verrouillage rapide du poste Laptop via code PIN (0000 par défaut) */}
+                    {!isMobileDevice && onLockScreen && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          close();
+                          onLockScreen();
+                        }}
+                        title="Verrouiller l'écran administrateur du Laptop (code 0000 par défaut)"
+                        className="w-full !justify-start"
+                      >
+                        <Lock size={13} className="text-primary" aria-hidden="true" />
+                        <span>Verrouiller le poste (PIN)</span>
+                      </Button>
+                    )}
+
                     <Button size="sm" onClick={onToggleTheme} className="w-full !justify-start">
                       {isLightTheme ? <Moon size={13} aria-hidden="true" /> : <Sun size={13} aria-hidden="true" />}
                       <span>{isLightTheme ? 'Passer au thème sombre' : 'Passer au thème clair'}</span>
                     </Button>
 
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        close();
-                        onExportData();
-                      }}
-                      title="Exporter une sauvegarde JSON de cet événement"
-                      className="w-full !justify-start"
-                    >
-                      <Download size={13} aria-hidden="true" />
-                      <span>Rapport d'Impact & Exports</span>
-                    </Button>
+                    {workRole === 'admin' && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          close();
+                          onExportData();
+                        }}
+                        title="Ouvrir le Centre de Rapport d'Impact et Exports"
+                        className="w-full !justify-start"
+                      >
+                        <Download size={13} aria-hidden="true" />
+                        <span>Rapport d'Impact & Exports</span>
+                      </Button>
+                    )}
 
                     {fileBackupState !== 'unsupported' && onFileBackupClick && (
                       <Button
@@ -501,13 +630,7 @@ export default function DashboardShell({
                 )}
               </MoreMenu>
 
-              {/* Les données restent enregistrées : l'activité se rouvre depuis l'historique du menu principal */}
-              {!hideNavigation && (
-              <Button size="sm" onClick={onLeaveEvent} title="Retourner au menu principal (l'activité reste enregistrée)">
-                <House size={13} aria-hidden="true" />
-                <span>Menu principal</span>
-              </Button>
-              )}
+              {/* Fin des actions d'en-tête (retour au menu principal via le logo Insertech) */}
             </div>
           </div>
         </header>

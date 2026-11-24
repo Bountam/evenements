@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { EventSettings, EventType } from './types';
+import { EventSettings, EventType, WorkRole } from './types';
 import { db, notifySync, registerSyncListener, clearAllData, seedDemoData, saveAutoSnapshot } from './db';
 import { SqliteBackupStatus, getSqliteBackupStatus, onSqliteBackupStatus, restoreFromSqliteIfEmpty, startSqliteBackup } from './utils/sqliteBackup';
 import { FileBackupState, buildEventBackup, enableFileBackup, getFileBackupName, getFileBackupState, requestPersistentStorage, writeFileBackup } from './utils/backupFile';
@@ -12,7 +12,8 @@ import {
   isReleaseDismissed,
   postponeRelease
 } from './utils/updateCheck';
-import { networkManager } from './network';
+import { networkManager, type SyncIndicatorColor } from './network';
+import { startScreenWakeLock } from './utils/wakeLock';
 import MatrixSelector from './components/MatrixSelector';
 import DashboardShell from './components/DashboardShell';
 import MultiEventControlBar from './components/shared/MultiEventControlBar';
@@ -39,11 +40,12 @@ import {
 } from './native/android';
 import { confirmDialog } from './components/shared/ConfirmDialog';
 import {
-  getDeviceRole, getEffectivePinLock, readEventPinLock, readLandscapeLock, readLocked, readSavedMode, saveLandscapeLock,
-  saveLocked, saveMode, storePinCopy,
-  tabForMode, NO_PIN_MESSAGE, type ModeUsage
+  canLockWorkRole, createDefaultPinLock, getDeviceRole, getEffectivePinLock, getOrCreateJudgeDeviceId,
+  readEventPinLock, readLandscapeLock, readLocked, readMobileOnboarded, readMobileTechId, readMobileVolunteerName,
+  readSavedMode, readSavedWorkRole, saveLandscapeLock, saveLocked, saveMobileOnboarded, saveMode, saveWorkRole,
+  storePinCopy, tabForMode, type ModeUsage
 } from './utils/modeLock';
-import ModePicker from './components/tablette/ModePicker';
+import MobileOnboardingWizard from './components/tablette/MobileOnboardingWizard';
 import ModeControls from './components/tablette/ModeControls';
 import PinDialog from './components/tablette/PinDialog';
 import TabletPinSettings from './components/tablette/TabletPinSettings';
@@ -92,11 +94,23 @@ export default function App() {
   const [isStandalonePwa, setIsStandalonePwa] = useState<boolean>(false);
   const [showMobileInstallModal, setShowMobileInstallModal] = useState<boolean>(false);
 
-  // Tablette : mode d'usage choisi et verrouillage, gardés au redémarrage
+  // Tablette / Mobile : onboarding 4 étapes, rôle actif et verrouillage Kiosque uniquement
   const [tabletMode, setTabletMode] = useState<ModeUsage | null>(() => (IS_TABLET ? readSavedMode() : null));
+  const [workRole, setWorkRole] = useState<WorkRole>(() => (IS_TABLET ? readSavedWorkRole('accueil') : 'admin'));
+  const [mobileOnboarded, setMobileOnboarded] = useState<boolean>(() => !IS_TABLET || readMobileOnboarded());
+  const [showRoleWizardStep, setShowRoleWizardStep] = useState<'event' | 'role' | null>(null);
+  const [mobileVolunteerName, setMobileVolunteerName] = useState<string>(() => readMobileVolunteerName());
+  const [mobileTechId, setMobileTechId] = useState<string>(() => readMobileTechId());
+  const [hostActiveEvents, setHostActiveEvents] = useState<EventSettings[]>(() => networkManager.getAvailableHostEvents());
   const [isModeLocked, setIsModeLocked] = useState<boolean>(() => IS_TABLET && readLocked());
   const [showPinDialog, setShowPinDialog] = useState(false);
+  const [isLaptopLocked, setIsLaptopLocked] = useState(false);
   const [isLandscapeLocked, setIsLandscapeLocked] = useState<boolean>(() => IS_TABLET && readLandscapeLock());
+  const effectiveWorkRole: WorkRole = IS_TABLET ? workRole : 'admin';
+  useEffect(() => {
+    if (IS_TABLET || IS_PUBLIC_WINDOW) return;
+    return startScreenWakeLock();
+  }, []);
 
   // Gestion de l'installation PWA Android / Tablette
   useEffect(() => {
@@ -280,6 +294,7 @@ export default function App() {
 
   // États du réseau P2P local
   const [netStatus, setNetStatus] = useState<string>('Local uniquement');
+  const [syncColor, setSyncColor] = useState<SyncIndicatorColor>(() => networkManager.getSyncIndicatorColor());
   const [sessionCode, setSessionCode] = useState<string>('');
   const [showNetModal, setShowNetModal] = useState(false);
   // Lien ?rejoindre=CODE ouvert sur une tablette : code proposé dans le formulaire « Rejoindre »
@@ -323,12 +338,13 @@ export default function App() {
     // S'abonner aux changements de statut réseau et aux versions des tablettes
     networkManager.onStatusChange = (status) => {
       setNetStatus(status);
+      setSyncColor(networkManager.getSyncIndicatorColor());
       setIsUpdateBlocked(networkManager.isUpdateBlocked());
     };
-    networkManager.onClientVersionsChange = (versions) => {
-      setMismatchedClientVersions(versions);
-    };
+    networkManager.onActiveEventsSync = (events) => setHostActiveEvents(events);
+    networkManager.onClientVersionsChange = (versions) => setMismatchedClientVersions(versions);
     networkManager.onActivityStateChange = () => {
+      setSyncColor(networkManager.getSyncIndicatorColor());
       setIsUpdateBlocked(networkManager.isUpdateBlocked());
     };
 
@@ -479,14 +495,16 @@ export default function App() {
       if (IS_PUBLIC_WINDOW) {
         if (currentTab !== 'public') setCurrentTab('public');
       } else if (modeTab) {
-        // Écran public ou kiosque formulaire : la tablette reste sur l'onglet de son mode
         if (currentTab !== modeTab) setCurrentTab(modeTab);
+      } else if (IS_TABLET && currentTab === 'public') {
+        setCurrentTab(defaultTabFor(activeEvent.type));
       } else if (activeEvent.type === 'reparothon' || activeEvent.type === 'install_fest_linux') {
         if (!['accueil', 'techniciens', 'public'].includes(currentTab)) {
           setCurrentTab('accueil');
         }
       } else if (activeEvent.type === 'kiosque_concours') {
-        if (!['pistes', 'participants', 'tirage', 'public'].includes(currentTab)) {
+        const allowed = effectiveWorkRole === 'admin' ? ['pistes', 'participants', 'tirage', 'public'] : ['pistes', 'participants'];
+        if (!allowed.includes(currentTab)) {
           setCurrentTab('pistes');
         }
       } else {
@@ -506,26 +524,14 @@ export default function App() {
   const defaultTabFor = (type: EventSettings['type']) =>
     type === 'reparothon' || type === 'install_fest_linux' ? 'accueil' : type === 'kiosque_concours' ? 'pistes' : 'enregistrements';
 
-  const handlePickMode = (mode: ModeUsage) => {
-    saveMode(mode);
-    setTabletMode(mode);
-    setCurrentTab(tabForMode(mode) || (activeEvent ? defaultTabFor(activeEvent.type) : 'accueil'));
-  };
-
-  const handleChangeMode = () => {
-    if (isModeLocked) return;
-    saveMode(null);
-    setTabletMode(null);
-  };
-
   const handleLockMode = () => {
-    if (!getEffectivePinLock(activeEvent)) {
-      showToast(NO_PIN_MESSAGE, 'warning');
+    if (!canLockWorkRole(effectiveWorkRole)) {
+      showToast("Seul le Kiosque d'inscription peut être verrouillé.", 'warning');
       return;
     }
     saveLocked(true);
     setIsModeLocked(true);
-    showToast('Mode verrouillé. Maintenez le cadenas 2 secondes pour le déverrouiller.', 'info');
+    showToast('Kiosque verrouillé (code 0000 par défaut). Maintenez le cadenas 2 secondes pour déverrouiller.', 'info');
   };
 
   // Tablette verrouillée : plein écran, écran toujours allumé et application épinglée (Retour et Accueil
@@ -721,8 +727,10 @@ export default function App() {
 
   // CRÉATION D'UN ÉVÉNEMENT
   const handleCreateEvent = async (settings: Omit<EventSettings, 'id' | 'createdAt'>) => {
+    const defaultLock = settings.extraData?.verrouillage ? settings.extraData.verrouillage : await createDefaultPinLock();
     const newEvent: EventSettings = {
       ...settings,
+      extraData: { ...(settings.extraData || {}), verrouillage: defaultLock },
       id: 'evt-' + Math.random().toString(36).substring(2, 11),
       createdAt: Date.now()
     };
@@ -1621,16 +1629,31 @@ export default function App() {
     );
   }
 
-  // Tablette : choisir le mode d'usage avant d'afficher l'activité du PC
-  if (activeEvent && IS_TABLET && !tabletMode) {
+  // Tablette / Mobile : onboarding guidé en 4 étapes (1. Événement si >1, 2. Rôle, 3. Fiche bénévole/réparateur, 4. Vue)
+  if (activeEvent && IS_TABLET && (!mobileOnboarded || showRoleWizardStep !== null)) {
+    const selectableEvents = hostActiveEvents.length > 0 ? hostActiveEvents : pastEvents.length > 0 ? pastEvents : [activeEvent];
     return (
       <>
-        <ModePicker
-          event={activeEvent}
-          onPick={handlePickMode}
-          onLeaveEvent={handleLeaveEvent}
-          landscapeLocked={isLandscapeLocked}
-          onLandscapeChange={handleLandscapeChange}
+        <MobileOnboardingWizard
+          activeEvents={selectableEvents}
+          selectedEvent={activeEvent}
+          onSelectEvent={(evt) => handleSelectPastEvent(evt)}
+          initialStep={showRoleWizardStep ?? undefined}
+          onComplete={({ event: chosenEvent, role, volunteerName, techId }) => {
+            handleSelectPastEvent(chosenEvent);
+            setWorkRole(role);
+            saveWorkRole(role);
+            setMobileVolunteerName(volunteerName);
+            if (techId) setMobileTechId(techId);
+            const nextMode: ModeUsage = role === 'kiosque_formulaire' ? 'kiosque_formulaire' : 'animateur';
+            saveMode(nextMode);
+            setTabletMode(nextMode);
+            setCurrentTab(role === 'kiosque_formulaire' ? 'formulaire' : defaultTabFor(chosenEvent.type));
+            saveMobileOnboarded(true);
+            setMobileOnboarded(true);
+            setShowRoleWizardStep(null);
+          }}
+          onLeaveSession={handleLeaveEvent}
         />
         {renderNetModal()}
       </>
@@ -1659,17 +1682,21 @@ export default function App() {
           onFileBackupClick={handleFileBackupClick}
           mismatchedClientVersions={mismatchedClientVersions}
           currentVersion={currentVersion}
-          isPublicWindow={IS_PUBLIC_WINDOW || (IS_TABLET && tabletMode === 'ecran_public')}
+          isPublicWindow={IS_PUBLIC_WINDOW}
           isNetworkClient={networkManager.role === 'client'}
           isLightTheme={isLightTheme}
           onToggleTheme={() => setIsLightTheme(!isLightTheme)}
+          workRole={effectiveWorkRole}
+          isMobileDevice={IS_TABLET}
+          syncColor={syncColor}
+          onOpenRolePicker={() => setShowRoleWizardStep(hostActiveEvents.length > 1 ? 'event' : 'role')}
+          onLockScreen={!IS_TABLET ? () => setIsLaptopLocked(true) : undefined}
           hideNavigation={IS_TABLET && isModeLocked}
           modeControls={
-            IS_TABLET && tabletMode ? (
+            IS_TABLET ? (
               <ModeControls
-                mode={tabletMode}
                 locked={isModeLocked}
-                onChangeMode={handleChangeMode}
+                canLock={canLockWorkRole(effectiveWorkRole)}
                 onLock={handleLockMode}
                 onRequestUnlock={() => setShowPinDialog(true)}
               />
@@ -1680,13 +1707,21 @@ export default function App() {
             <MultiEventControlBar activeEvent={activeEvent} onSelectEvent={handleSelectPastEvent} />
           )}
           {activeEvent.type === 'reparothon' && (
-            <ReparothonMatrix event={activeEvent} activeTab={currentTab as any} />
+            <ReparothonMatrix
+              event={activeEvent}
+              activeTab={currentTab as any}
+              workRole={effectiveWorkRole}
+              preselectedTechId={mobileTechId}
+            />
           )}
           {activeEvent.type === 'kiosque_concours' && (
             <TeardownMatrix
               key={activeEvent.id}
               event={activeEvent}
               activeTab={currentTab as any}
+              workRole={effectiveWorkRole}
+              judgeId={IS_TABLET ? getOrCreateJudgeDeviceId() : 'laptop-admin'}
+              judgeName={IS_TABLET ? (mobileVolunteerName || 'Animateur Juge') : 'Laptop Admin'}
               onTabChange={setCurrentTab}
               onTabBadgesChange={setTabBadges}
             />
@@ -1695,7 +1730,7 @@ export default function App() {
             <InstallFestMatrix key={activeEvent.id} event={activeEvent} activeTab={currentTab as any} />
           )}
           {!['reparothon', 'kiosque_concours', 'install_fest_linux'].includes(activeEvent.type) && (
-            <GenericMatrix event={activeEvent} activeTab={currentTab as any} />
+            <GenericMatrix event={activeEvent} activeTab={currentTab as any} workRole={effectiveWorkRole} />
           )}
         </DashboardShell>
         {renderNetModal()}
@@ -1705,14 +1740,22 @@ export default function App() {
           onClose={() => setShowImpactReportModal(false)}
           event={activeEvent}
         />
-        {IS_TABLET && (
-          <PinDialog
-            isOpen={showPinDialog}
-            pinLock={getEffectivePinLock(activeEvent)}
-            onClose={() => setShowPinDialog(false)}
-            onUnlocked={handleUnlocked}
-          />
-        )}
+        <PinDialog
+          isOpen={showPinDialog || isLaptopLocked}
+          pinLock={getEffectivePinLock(activeEvent)}
+          onClose={() => {
+            setShowPinDialog(false);
+            setIsLaptopLocked(false);
+          }}
+          onUnlocked={() => {
+            if (isLaptopLocked) {
+              setIsLaptopLocked(false);
+              showToast('Poste administrateur déverrouillé.', 'success');
+            } else {
+              handleUnlocked();
+            }
+          }}
+        />
       </>
     );
   }
