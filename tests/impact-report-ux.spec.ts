@@ -25,8 +25,7 @@ test('Audit UX & Centre de Rapport d\'Impact : Billet Peak-End, Formateur 1-tap,
   await page.getByRole('button', { name: /^Continuer/i }).click();
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
 
-  await page.locator('#rp-firstName').fill('Sophie');
-  await page.locator('#rp-lastName').fill('Côté');
+  await page.locator('#rp-displayName').fill('Sophie Côté');
   await page.locator('#rp-phone').fill('514 555-1234');
   await page.locator('#rp-consentActivity').check();
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();

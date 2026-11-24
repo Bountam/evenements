@@ -118,6 +118,7 @@ export default function JudgeConcoursCockpit({
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [contactDraft, setContactDraft] = useState<ContactDraft>(() => emptyContactDraft('contest'));
   const [contactErrors, setContactErrors] = useState<ContactErrors>({});
+  const [formResetKey, setFormResetKey] = useState(0);
   const [selectedPoolIds, setSelectedPoolIds] = useState<string[]>([]);
   const [joinedTrackIds, setJoinedTrackIds] = useState<number[]>([]);
   const [results, setResults] = useState<CompletedChallengeResult[]>([]);
@@ -197,7 +198,7 @@ export default function JudgeConcoursCockpit({
     setContactErrors(errors);
     const firstErr = firstContactError(errors);
     if (firstErr) {
-      document.getElementById(`juge-${firstErr === 'contact' ? 'email' : firstErr}`)?.focus();
+      document.getElementById(`juge-${firstErr === 'contact' ? 'phone' : firstErr}`)?.focus();
       return;
     }
     const now = Date.now();
@@ -221,6 +222,7 @@ export default function JudgeConcoursCockpit({
     await networkManager.writeToDatabase('participants', 'put', newParticipant);
     setContactDraft(emptyContactDraft('contest'));
     setContactErrors({});
+    setFormResetKey((k) => k + 1);
     setShowRegisterModal(false);
 
     if (assignToFreeTrack(newParticipant)) {
@@ -574,19 +576,23 @@ export default function JudgeConcoursCockpit({
           <ContactForm
             idPrefix="juge"
             mode="contest"
+            stepped
+            resetKey={formResetKey}
             value={contactDraft}
             onChange={(next) => {
               setContactDraft(next);
               setContactErrors({});
             }}
             errors={contactErrors}
+            renderSubmitActions={() => (
+              <button
+                type="submit"
+                className="min-h-12 px-5 py-2.5 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer"
+              >
+                Inscrire et placer devant moi
+              </button>
+            )}
           />
-          <button
-            type="submit"
-            className="w-full min-h-12 px-5 py-2.5 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer"
-          >
-            Inscrire et placer devant moi
-          </button>
         </form>
       </Modal>
     </div>

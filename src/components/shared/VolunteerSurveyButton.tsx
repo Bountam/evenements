@@ -47,6 +47,7 @@ export default function VolunteerSurveyButton({ eventId, className = '' }: Volun
   const [draft, setDraft] = useState(() => emptyContactDraft('volunteer'));
   const [errors, setErrors] = useState<ContactErrors>({});
   const [saving, setSaving] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
 
   const close = () => {
     setOpen(false);
@@ -59,7 +60,7 @@ export default function VolunteerSurveyButton({ eventId, className = '' }: Volun
     setErrors(found);
     const firstError = firstContactError(found);
     if (firstError) {
-      document.getElementById(`vol-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+      document.getElementById(`vol-${firstError === 'contact' ? 'phone' : firstError}`)?.focus();
       return;
     }
     setSaving(true);
@@ -79,7 +80,8 @@ export default function VolunteerSurveyButton({ eventId, className = '' }: Volun
       showToast('Merci ! Fiche bénévole enregistrée.', 'success');
       setDraft(emptyContactDraft('volunteer'));
       setErrors({});
-      document.getElementById('vol-firstName')?.focus();
+      setResetKey((k) => k + 1);
+      requestAnimationFrame(() => document.getElementById('vol-displayName')?.focus());
     } catch (err) {
       console.error('Erreur enregistrement fiche bénévole :', err);
       showToast("Impossible d'enregistrer la fiche bénévole.", 'error');
@@ -114,6 +116,8 @@ export default function VolunteerSurveyButton({ eventId, className = '' }: Volun
           <ContactForm
             idPrefix="vol"
             mode="volunteer"
+            stepped
+            resetKey={resetKey}
             value={draft}
             onChange={(next) => {
               setDraft(next);

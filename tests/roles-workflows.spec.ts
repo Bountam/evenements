@@ -29,8 +29,7 @@ test('Workflows par rôle sur mobile : Réparateur (Piste + Lexique + sans bén�
   await page.getByRole('button', { name: /^Continuer/i }).click();
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
 
-  await page.locator('#rp-firstName').fill('Sophie');
-  await page.locator('#rp-lastName').fill('Côté');
+  await page.locator('#rp-displayName').fill('Sophie Côté');
   await page.locator('#rp-phone').fill('514 555-1234');
   await page.locator('#rp-consentActivity').check();
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();
@@ -63,14 +62,10 @@ test('Workflows par rôle sur mobile : Réparateur (Piste + Lexique + sans bén�
   await expect(page.getByRole('heading', { name: /Lexique & Fiches/i })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // Changer de rôle via le bouton unique d'en-tête -> Animateur Assistant -> formulaire bénévole -> Cockpit Assistant
+  // Changer de rôle via le bouton unique d'en-tête -> Animateur Assistant -> identification rapide en 1 champ -> Cockpit Assistant
   await page.getByRole('button', { name: 'Animateur Réparateur' }).click();
   await page.getByRole('button', { name: /Animateur Assistant/i }).click();
-  await page.locator('#mob-vol-firstName').fill('Julie');
-  await page.locator('#mob-vol-lastName').fill('Martin');
-  await page.locator('#mob-vol-phone').fill('514 555-3333');
-  await page.getByLabel('Accueil', { exact: true }).check();
-  await page.locator('#mob-vol-consentVolunteer').check();
+  await page.locator('#mob-vol-displayName').fill('Julie');
   await page.getByRole('button', { name: /Confirmer et ouvrir mon espace/i }).click();
 
   await expect(page.getByText(/Demandes d'aide des réparateurs \(1\)/i)).toBeVisible();
@@ -110,8 +105,10 @@ test('Formateur sur tablette : évaluation Avant / Pendant / Après (+X niveaux 
   await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
   await page.getByRole('button', { name: "Créer l'activité" }).click();
 
-  await page.locator('#att-firstName').fill('Camille');
-  await page.locator('#att-lastName').fill('Bouchard');
+  await page.locator('#att-displayName').fill('Camille Bouchard');
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await page.locator('#att-phone').fill('514 555-4444');
+  await page.locator('#att-consentActivity').check();
   await page.locator('form button[type="submit"]').first().click();
   await expect(page.getByText('Camille Bouchard').first()).toBeVisible();
 

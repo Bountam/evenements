@@ -40,15 +40,11 @@ test('Kiosque-Concours Animateur Juge (2 joueurs max, départ commun, 2 arrêts 
   await page.getByRole('button', { name: 'Déverrouiller', exact: true }).click();
   await expect(page.getByText('Poste administrateur déverrouillé.')).toBeVisible();
 
-  // 3. Passer en Mobile/Tablette -> Onboarding 4 étapes -> Animateur Juge
+  // 3. Passer en Mobile/Tablette -> Onboarding 4 étapes -> Animateur Juge (1 seul champ surnom accepté même inconnu en BD)
   await page.addInitScript(SIMULATE_ANDROID);
   await page.reload();
   await page.getByRole('button', { name: /Animateur Juge/i }).click();
-  await page.locator('#mob-vol-firstName').fill('Marc');
-  await page.locator('#mob-vol-lastName').fill('Juge');
-  await page.locator('#mob-vol-phone').fill('514 555-8888');
-  await page.getByLabel('Animation', { exact: true }).check();
-  await page.locator('#mob-vol-consentVolunteer').check();
+  await page.locator('#mob-vol-displayName').fill('Marc Juge');
   await page.getByRole('button', { name: /Confirmer et ouvrir mon espace/i }).click();
 
   // En rôle Juge : pas d'Écran Public, pas de Tirage, pas de Rapport d'Impact, un seul bouton Rôle
@@ -57,17 +53,17 @@ test('Kiosque-Concours Animateur Juge (2 joueurs max, départ commun, 2 arrêts 
   await expect(page.getByTestId('btn-open-impact-report')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Animateur Juge' })).toBeVisible();
 
-  // 4. Inscrire 2 joueurs directement devant le juge
+  // 4. Inscrire 2 joueurs directement devant le juge (étapes 1 -> 2)
   await page.getByRole('button', { name: /Inscrire mon 1er joueur/i }).click();
-  await page.locator('#juge-firstName').fill('Alice');
-  await page.locator('#juge-lastName').fill('Roy');
+  await page.locator('#juge-displayName').fill('Alice Roy');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#juge-phone').fill('514 555-1111');
   await page.locator('#juge-consentActivity').check();
   await page.getByRole('button', { name: /Inscrire et placer devant moi/i }).click();
 
   await page.getByRole('button', { name: /\+ Inscrire un joueur devant moi/i }).click();
-  await page.locator('#juge-firstName').fill('Bob');
-  await page.locator('#juge-lastName').fill('Leduc');
+  await page.locator('#juge-displayName').fill('Bob Leduc');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#juge-phone').fill('514 555-2222');
   await page.locator('#juge-consentActivity').check();
   await page.getByRole('button', { name: /Inscrire et placer devant moi/i }).click();

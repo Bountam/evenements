@@ -78,6 +78,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
   // Formulaire d'inscription
   const [contactDraft, setContactDraft] = useState(() => emptyContactDraft('activity'));
   const [contactErrors, setContactErrors] = useState<ContactErrors>({});
+  const [formResetKey, setFormResetKey] = useState(0);
   const [category, setCategory] = useState<DeviceCategory>('laptop');
   const [brandModel, setBrandModel] = useState('');
   const [previousOS, setPreviousOS] = useState('windows_10');
@@ -177,7 +178,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
     setContactErrors(errors);
     const firstError = firstContactError(errors);
     if (firstError) {
-      document.getElementById(`if-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+      document.getElementById(`if-${firstError === 'contact' ? 'phone' : firstError}`)?.focus();
       return;
     }
     const chosenDistro = distro === OTHER_DISTRO ? otherDistro.trim() : distro;
@@ -219,6 +220,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
       await networkManager.writeToDatabase('tickets', 'put', ticket);
       setContactDraft(emptyContactDraft('activity'));
       setContactErrors({});
+      setFormResetKey((k) => k + 1);
       setBrandModel('');
       setOtherDistro('');
       setDualBoot(false);
@@ -577,6 +579,8 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
             <ContactForm
               idPrefix="if"
               mode="activity"
+              stepped
+              resetKey={formResetKey}
               value={contactDraft}
               onChange={(next) => {
                 setContactDraft(next);

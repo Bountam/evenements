@@ -24,6 +24,7 @@ import {
   emptyContactDraft,
   firstContactError,
   fullName,
+  resolveDraftDisplayName,
   validateContact,
   validateContactStep
 } from '../../utils/contact';
@@ -620,7 +621,7 @@ export default function ReparothonMatrix({
         setWizardScreen('participant');
       }
       requestAnimationFrame(() => {
-        document.getElementById(`rp-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+        document.getElementById(`rp-${firstError === 'contact' ? 'phone' : firstError}`)?.focus();
       });
       return;
     }
@@ -651,7 +652,7 @@ export default function ReparothonMatrix({
       if (COORDINATE_ERROR_KEYS.has(firstError)) {
         if (wizardScreen !== 'participant') setWizardScreen('participant');
         requestAnimationFrame(() => {
-          document.getElementById(`rp-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+          document.getElementById(`rp-${firstError === 'contact' ? 'phone' : firstError}`)?.focus();
         });
       } else {
         if (wizardScreen !== 'volunteer') setWizardScreen('volunteer');
@@ -2299,7 +2300,7 @@ export default function ReparothonMatrix({
                 <p className="text-xs text-app-text-muted font-sans">
                   Fiche de{' '}
                   <strong className="text-app-text">
-                    {[contactDraft.firstName.trim(), contactDraft.lastName.trim()].filter(Boolean).join(' ') || 'Participant'}
+                    {resolveDraftDisplayName(contactDraft) || 'Participant'}
                     {(() => {
                       const activePronouns =
                         contactDraft.pronouns === 'Autre'
@@ -2418,6 +2419,7 @@ export default function ReparothonMatrix({
             if (c) {
               setContactDraft({
                 ...emptyContactDraft('activity'),
+                displayName: fullName(c) || t.visitorName,
                 firstName: c.firstName || '',
                 lastName: c.lastName || '',
                 pronouns: c.pronouns || '',

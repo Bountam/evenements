@@ -65,9 +65,9 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
   await expect(page.getByRole('heading', { name: 'Quel est votre rôle aujourd\'hui ?' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Écran Public/i })).toHaveCount(0);
 
-  // Choisir Kiosque d'inscription (saute l'étape 3 bénévole et ouvre le formulaire visiteur)
+  // Choisir Kiosque d'inscription (saute l'étape 3 bénévole et ouvre le formulaire visiteur en étapes)
   await page.getByRole('button', { name: /Kiosque d'inscription/ }).click();
-  await expect(page.locator('#participant-firstName')).toBeVisible();
+  await expect(page.locator('#participant-displayName')).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Pistes' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Changer de mode' })).toHaveCount(0);
 
@@ -76,12 +76,12 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
   await expect(page.getByRole('button', { name: /Kiosque d'inscription/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Menu principal' })).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('#participant-firstName')).toBeVisible();
+  await expect(page.locator('#participant-displayName')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Déverrouiller (maintenir 2 secondes)' })).toBeVisible();
 
-  // Inscription depuis le kiosque
-  await page.locator('#participant-firstName').fill('Léa');
-  await page.locator('#participant-lastName').fill('Tremblay');
+  // Inscription depuis le kiosque (étapes 1 -> 2)
+  await page.locator('#participant-displayName').fill('Léa Tremblay');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#participant-email').fill('lea@example.com');
   await page.locator('#participant-consentActivity').check();
   await page.getByRole('button', { name: 'Inscrire le participant' }).click();
@@ -122,13 +122,9 @@ test('Tablette : code 0000 actif par défaut et aucun verrouillage pour le rôle
   await page.addInitScript(SIMULATE_ANDROID);
   await page.reload();
 
-  // Passer en Animateur d'Accueil via l'onboarding (étape 2 -> étape 3 formulaire bénévole)
+  // Passer en Animateur d'Accueil via l'onboarding (étape 2 -> étape 3 identification rapide 1 champ)
   await page.getByRole('button', { name: /Animateur d'Accueil/ }).click();
-  await page.locator('#mob-vol-firstName').fill('Sam');
-  await page.locator('#mob-vol-lastName').fill('Dufour');
-  await page.locator('#mob-vol-phone').fill('514 555-7777');
-  await page.getByLabel('Accueil', { exact: true }).check();
-  await page.locator('#mob-vol-consentVolunteer').check();
+  await page.locator('#mob-vol-displayName').fill('Sam Dufour');
   await page.getByRole('button', { name: /Confirmer et ouvrir mon espace/i }).click();
 
   // Aucun bouton de verrouillage en mode Accueil, ni Écran Public, ni Tirage

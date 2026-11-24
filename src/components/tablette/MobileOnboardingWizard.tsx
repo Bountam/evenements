@@ -23,21 +23,9 @@ import {
   saveMobileTechId,
   saveMobileVolunteerName
 } from '../../utils/modeLock';
-import {
-  ContactDraft,
-  ContactErrors,
-  buildContactInfo,
-  emptyContactDraft,
-  firstContactError,
-  fullName,
-  validateContact
-} from '../../utils/contact';
 import BrandLogo from '../shared/BrandLogo';
-import ContactForm from '../shared/ContactForm';
 import PinDialog from './PinDialog';
 import { showToast } from '../shared/Toast';
-
-const MOBILE_VOLUNTEER_DRAFT_KEY = 'insertech_mobile_volunteer_draft';
 
 interface MobileOnboardingWizardProps {
   activeEvents: EventSettings[];
@@ -88,21 +76,6 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
   ];
 }
 
-function loadSavedVolunteerDraft(): ContactDraft {
-  try {
-    const raw = localStorage.getItem(MOBILE_VOLUNTEER_DRAFT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        return { ...emptyContactDraft('volunteer'), ...parsed, wantsToVolunteer: true };
-      }
-    }
-  } catch {
-    // Ignorer brouillon corrompu
-  }
-  return emptyContactDraft('volunteer');
-}
-
 export default function MobileOnboardingWizard({
   activeEvents,
   selectedEvent,
@@ -119,13 +92,12 @@ export default function MobileOnboardingWizard({
   const [pendingRole, setPendingRole] = useState<WorkRole>('accueil');
   const [showAdminPin, setShowAdminPin] = useState(false);
 
-  // Formulaire bénévole complet partagé par tous les rôles sauf Réparateur
-  const [contactDraft, setContactDraft] = useState<ContactDraft>(() => loadSavedVolunteerDraft());
-  const [contactErrors, setContactErrors] = useState<ContactErrors>({});
+  // Identification rapide (1 seul champ Nom, prénom ou surnom) — accepté même si introuvable dans la BD
+  const [volunteerDisplayName, setVolunteerDisplayName] = useState(() => readMobileVolunteerName());
+  const [nameError, setNameError] = useState('');
 
-  // Fiche technique dédiée au Réparateur
+  // Fiche technique dédiée au Réparateur (Nom/surnom + Table + Capacités techniques)
   const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [techName, setTechName] = useState(() => readMobileVolunteerName());
   const [techTable, setTechTable] = useState<string>('');
   const [techSpecs, setTechSpecs] = useState<string[]>(['laptop']);
   const [techSoftwareSpecs, setTechSoftwareSpecs] = useState<string[]>(['windows']);
@@ -164,53 +136,23 @@ export default function MobileOnboardingWizard({
       return;
     }
     setPendingRole(role);
+    setNameError('');
     setStep('volunteer');
   };
 
-  const handleSubmitVolunteerForm = async (e: React.FormEvent) => {
+  const handleQuickVolunteerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const errors = validateContact(contactDraft, 'volunteer');
-    setContactErrors(errors);
-    const first = firstContactError(errors);
-    if (first) {
-      document.getElementById(`mob-vol-${first === 'contact' ? 'email' : first}`)?.focus();
+    const cleaned = volunteerDisplayName.trim().replace(/\s+/g, ' ');
+    if (!cleaned) {
+      setNameError('Indiquez votre nom, prénom ou surnom.');
+      document.getElementById('mob-vol-displayName')?.focus();
       return;
     }
-    const now = Date.now();
-    const contact = buildContactInfo(contactDraft, 'volunteer', 'sondage_benevole', now);
-    const displayName = fullName(contact);
-
-    try {
-      localStorage.setItem(MOBILE_VOLUNTEER_DRAFT_KEY, JSON.stringify(contactDraft));
-    } catch {
-      // Ignorer quota
-    }
-    saveMobileVolunteerName(displayName);
-
-    try {
-      await networkManager.writeToDatabase('attendees', 'put', {
-        id: 'att-' + Math.random().toString(36).substring(2, 11),
-        eventId: selectedEvent.id,
-        name: displayName,
-        email: contact.email || undefined,
-        presenceConfirmed: true,
-        registeredAt: now,
-        tags: ['Bénévole', WORK_ROLE_LABELS[pendingRole]],
-        extraData: {
-          source: 'sondage_benevole',
-          volunteerWorkRole: pendingRole,
-          contact,
-          ...(contact.consent.newsletter ? { consentContact: true, consentAt: contact.consent.newsletter } : {})
-        }
-      });
-    } catch (err) {
-      console.error(err);
-    }
-
+    saveMobileVolunteerName(cleaned);
     onComplete({
       event: selectedEvent,
       role: pendingRole,
-      volunteerName: displayName
+      volunteerName: cleaned
     });
   };
 
@@ -227,14 +169,16 @@ export default function MobileOnboardingWizard({
 
   const handleCreateTech = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!techName.trim()) {
-      showToast('Indiquez votre nom complet.', 'warning');
+    const cleaned = volunteerDisplayName.trim().replace(/\s+/g, ' ');
+    if (!cleaned) {
+      showToast('Indiquez votre nom, prénom ou surnom.', 'warning');
+      document.getElementById('mob-tech-name')?.focus();
       return;
     }
     const newTech: Technician = {
       id: 'tech-' + Math.random().toString(36).substring(2, 11),
       eventId: selectedEvent.id,
-      name: techName.trim(),
+      name: cleaned,
       specialties: techSpecs,
       softwareSpecialties: techSoftwareSpecs,
       tableNumber: techTable ? Number(techTable) : null,
@@ -259,7 +203,7 @@ export default function MobileOnboardingWizard({
           <BrandLogo />
           <div className="min-w-0">
             <p className="text-micro uppercase font-bold text-primary">
-              {step === 'event' ? 'Étape 1 • Événement' : step === 'role' ? 'Étape 2 • Votre rôle' : 'Étape 3 • Inscription bénévole'}
+              {step === 'event' ? 'Étape 1 • Événement' : step === 'role' ? 'Étape 2 • Votre rôle' : 'Étape 3 • Identification'}
             </p>
             <h1 className="font-display font-black uppercase text-base sm:text-lg truncate">
               {selectedEvent.name}
@@ -364,7 +308,7 @@ export default function MobileOnboardingWizard({
           </section>
         )}
 
-        {/* ÉTAPE 3A : FICHE RÉPARATEUR (Nom + Table + Spécialités) */}
+        {/* ÉTAPE 3A : FICHE RÉPARATEUR (Nom/surnom + Table + Capacités techniques) */}
         {step === 'volunteer' && pendingRole === 'reparateur' && (
           <section className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
             <div>
@@ -372,7 +316,7 @@ export default function MobileOnboardingWizard({
                 Profil Animateur Réparateur
               </span>
               <h2 className="font-display font-bold uppercase text-xl text-app-text">
-                Identifiez-vous pour filtrer les réparations compatibles
+                Votre nom et vos capacités techniques
               </h2>
             </div>
 
@@ -402,19 +346,19 @@ export default function MobileOnboardingWizard({
             )}
 
             <form onSubmit={handleCreateTech} className="space-y-4 pt-3 border-t border-app-card-border">
-              <p className="text-xs font-bold uppercase text-primary">Ou créer votre profil sur cet appareil</p>
+              <p className="text-xs font-bold uppercase text-primary">Ou entrer rapidement votre nom et capacités</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="mob-tech-name" className="text-micro font-bold uppercase text-app-text-muted block mb-1">
-                    Votre nom complet *
+                    Nom, prénom ou surnom *
                   </label>
                   <input
                     id="mob-tech-name"
                     type="text"
                     required
-                    value={techName}
-                    onChange={(e) => setTechName(e.target.value)}
-                    placeholder="Ex. Gabriel Roy"
+                    value={volunteerDisplayName}
+                    onChange={(e) => setVolunteerDisplayName(e.target.value)}
+                    placeholder="Ex. Gabriel Roy ou Gab"
                     className="w-full min-h-11 px-3 py-2 rounded-xl bg-app-input border border-app-input-border text-sm text-app-text"
                   />
                 </div>
@@ -497,46 +441,49 @@ export default function MobileOnboardingWizard({
           </section>
         )}
 
-        {/* ÉTAPE 3B : FORMULAIRE BÉNÉVOLE COMPLET POUR TOUS LES AUTRES RÔLES */}
+        {/* ÉTAPE 3B : IDENTIFICATION RAPIDE BÉNÉVOLE (1 seul champ Nom/surnom, même si introuvable en BD) */}
         {step === 'volunteer' && pendingRole !== 'reparateur' && (
-          <section className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="text-micro uppercase font-black tracking-widest text-primary block">
-                  Inscription Bénévole • {WORK_ROLE_LABELS[pendingRole]}
-                </span>
-                <h2 className="font-display font-bold uppercase text-xl text-app-text">
-                  Votre fiche animateur & capacités
-                </h2>
-              </div>
-              {pendingRole === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onComplete({
-                      event: selectedEvent,
-                      role: 'admin',
-                      volunteerName: readMobileVolunteerName() || 'Administrateur'
-                    })
-                  }
-                  className="min-h-11 px-3.5 py-2 rounded-xl bg-app-input border border-app-card-border text-xs font-bold text-app-text-muted hover:text-app-text cursor-pointer"
-                >
-                  Accès direct Admin →
-                </button>
-              )}
+          <section className="max-w-lg w-full mx-auto bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
+            <div>
+              <span className="text-micro uppercase font-black tracking-widest text-primary block">
+                Identification rapide • {WORK_ROLE_LABELS[pendingRole]}
+              </span>
+              <h2 className="font-display font-bold uppercase text-xl text-app-text">
+                Comment doit-on vous appeler aujourd'hui ?
+              </h2>
+              <p className="text-xs text-app-text-muted mt-1">
+                Entrez simplement votre nom, prénom ou surnom — aucune fiche complète requise.
+              </p>
             </div>
 
-            <form onSubmit={handleSubmitVolunteerForm} className="space-y-5" noValidate>
-              <ContactForm
-                idPrefix="mob-vol"
-                mode="volunteer"
-                value={contactDraft}
-                onChange={(next) => {
-                  setContactDraft(next);
-                  setContactErrors({});
-                }}
-                errors={contactErrors}
-              />
+            <form onSubmit={handleQuickVolunteerSubmit} className="space-y-4" noValidate>
+              <div>
+                <label
+                  htmlFor="mob-vol-displayName"
+                  className="text-micro font-bold uppercase tracking-wider text-app-text-muted block mb-1"
+                >
+                  Nom, prénom ou surnom *
+                </label>
+                <input
+                  id="mob-vol-displayName"
+                  type="text"
+                  autoComplete="name"
+                  autoFocus
+                  value={volunteerDisplayName}
+                  onChange={(e) => {
+                    setVolunteerDisplayName(e.target.value);
+                    setNameError('');
+                  }}
+                  placeholder="Ex. Marc ou Julie Martin"
+                  maxLength={100}
+                  className="w-full min-h-12 px-4 py-2.5 rounded-xl bg-app-input border border-app-input-border text-base text-app-text focus:outline-none focus:border-primary"
+                />
+                {nameError && (
+                  <p role="alert" className="text-xs font-bold text-danger mt-1">
+                    {nameError}
+                  </p>
+                )}
+              </div>
 
               <button
                 type="submit"
@@ -556,6 +503,7 @@ export default function MobileOnboardingWizard({
         onUnlocked={() => {
           setShowAdminPin(false);
           setPendingRole('admin');
+          setNameError('');
           setStep('volunteer');
         }}
       />

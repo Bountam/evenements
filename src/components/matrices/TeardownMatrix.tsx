@@ -150,6 +150,7 @@ export default function TeardownMatrix({
   // un rechargement, une fermeture ou une reconnexion ne fait plus perdre une saisie pas encore enregistrée
   const draftKey = `insertech_participant_draft_${event.id}`;
   const [contactDraft, setContactDraft] = useState(() => readParticipantDraft(draftKey));
+  const [formResetKey, setFormResetKey] = useState(0);
   useEffect(() => {
     writeParticipantDraft(draftKey, contactDraft);
   }, [draftKey, contactDraft]);
@@ -758,7 +759,7 @@ export default function TeardownMatrix({
     setContactErrors(errors);
     const firstError = firstContactError(errors);
     if (firstError) {
-      document.getElementById(`participant-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+      document.getElementById(`participant-${firstError === 'contact' ? 'phone' : firstError}`)?.focus();
       return;
     }
     const contact = buildContactInfo(contactDraft, 'contest', 'kiosque_concours', Date.now());
@@ -803,6 +804,7 @@ export default function TeardownMatrix({
       setParticipants((prev) => [newP, ...prev]);
       setContactDraft(emptyContactDraft('contest'));
       setContactErrors({});
+      setFormResetKey((k) => k + 1);
 
       if (autoAssignTrack) {
         const freeTrack = Object.values(tracks).find((t) => t.participantId === null);
@@ -1276,21 +1278,25 @@ export default function TeardownMatrix({
           <ContactForm
             idPrefix="participant"
             mode="contest"
+            stepped
+            resetKey={formResetKey}
             value={contactDraft}
             onChange={(next) => {
               setContactDraft(next);
               setContactErrors({});
             }}
             errors={contactErrors}
+            renderSubmitActions={() => (
+              <button
+                type="submit"
+                className="min-h-12 flex items-center justify-center gap-1.5 py-2.5 px-5 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm transition cursor-pointer shadow-sm"
+                aria-label="Inscrire le participant"
+              >
+                <UserPlus size={16} />
+                <span>M'inscrire</span>
+              </button>
+            )}
           />
-          <button
-            type="submit"
-            className="w-full min-h-12 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm transition cursor-pointer shadow-sm"
-            aria-label="Inscrire le participant"
-          >
-            <UserPlus size={16} />
-            <span>M'inscrire</span>
-          </button>
         </form>
       </KioskFormFrame>
     );
@@ -1429,37 +1435,40 @@ export default function TeardownMatrix({
               <ContactForm
                 idPrefix="participant"
                 mode="contest"
+                stepped
+                resetKey={formResetKey}
                 value={contactDraft}
                 onChange={(next) => {
                   setContactDraft(next);
                   setContactErrors({});
                 }}
                 errors={contactErrors}
+                renderSubmitActions={() => (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      className="min-h-[44px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-app-input border border-app-card-border text-app-text hover:border-primary text-xs font-bold font-display uppercase tracking-wider transition cursor-pointer"
+                      title="Inscrire [Entrée]"
+                      aria-label="Inscrire le participant"
+                    >
+                      <UserPlus size={14} />
+                      <span>Inscrire</span>
+                      <span className="text-micro text-app-text-muted font-mono hidden sm:inline">[↵]</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => addParticipant(e as any, true)}
+                      className="min-h-[44px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
+                      title="Inscrire et assigner directement à la première piste libre"
+                      aria-label="Inscrire et assigner à la première piste libre"
+                    >
+                      <Play size={14} fill="currentColor" />
+                      <span>+ Piste libre</span>
+                    </button>
+                  </div>
+                )}
               />
-
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="submit"
-                  className="min-h-[44px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-app-input border border-app-card-border text-app-text hover:border-primary text-xs font-bold font-display uppercase tracking-wider transition cursor-pointer"
-                  title="Inscrire [Entrée]"
-                  aria-label="Inscrire le participant"
-                >
-                  <UserPlus size={14} />
-                  <span>Inscrire</span>
-                  <span className="text-micro text-app-text-muted font-mono hidden sm:inline">[↵]</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => addParticipant(e as any, true)}
-                  className="min-h-[44px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer shadow-sm"
-                  title="Inscrire et assigner directement à la première piste libre"
-                  aria-label="Inscrire et assigner à la première piste libre"
-                >
-                  <Play size={14} fill="currentColor" />
-                  <span>+ Piste libre</span>
-                </button>
-              </div>
             </form>
           </div>
         </div>
@@ -2482,16 +2491,18 @@ function readParticipantDraft(key: string): ContactDraft {
   try {
     const saved = JSON.parse(localStorage.getItem(key) || 'null');
     if (!saved || typeof saved !== 'object') return empty;
-    if (typeof saved.firstName !== 'string') {
+    if (typeof saved.displayName !== 'string' && typeof saved.firstName !== 'string') {
       return {
         ...empty,
+        displayName: typeof saved.name === 'string' ? saved.name : '',
         firstName: typeof saved.name === 'string' ? saved.name : '',
         email: typeof saved.email === 'string' ? saved.email : '',
         postalCode: typeof saved.postal === 'string' ? saved.postal : '',
         consentActivity: saved.consent === true
       };
     }
-    return { ...empty, ...saved };
+    const mergedDisplay = saved.displayName || [saved.firstName || '', saved.lastName || ''].filter(Boolean).join(' ');
+    return { ...empty, ...saved, displayName: mergedDisplay };
   } catch (e) {
     return empty;
   }

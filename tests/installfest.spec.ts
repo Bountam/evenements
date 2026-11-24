@@ -22,8 +22,10 @@ test('Install Fest : inscription, assignation et installation terminée', async 
   await expect(page.getByText('0/2 ordinateurs')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Accueil et suivi' }).click();
-  await page.locator('#if-firstName').fill('Martine');
-  await page.locator('#if-lastName').fill('Bouchard');
+  await page.locator('#if-displayName').fill('Martine Bouchard');
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await page.locator('#if-phone').fill('514 555-1234');
+  await page.locator('#if-consentActivity').check();
   await page.getByLabel('Marque et modèle').fill('Lenovo T450');
   await page.getByLabel('OS précédent').selectOption('windows_7');
   await page.getByLabel('Distribution choisie').selectOption('Zorin OS');

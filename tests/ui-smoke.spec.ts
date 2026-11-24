@@ -76,19 +76,20 @@ for (const target of TARGETS) {
 
       // Régie en onglets : chaque onglet n'affiche que sa tâche
       await expect(page.getByRole('tab', { name: 'Pistes' })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.locator('#participant-firstName')).toHaveCount(0);
+      await expect(page.locator('#participant-displayName')).toHaveCount(0);
       await page.getByRole('tab', { name: 'Participants' }).click();
-      await expect(page.locator('#participant-firstName')).toBeVisible();
-      await page.locator('#participant-firstName').fill('Brouillon');
-      await page.locator('#participant-lastName').fill('conservé');
+      await expect(page.locator('#participant-displayName')).toBeVisible();
+      await page.locator('#participant-displayName').fill('Brouillon conservé');
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.locator('#participant-email').fill('brouillon@exemple.com');
       await page.locator('#participant-consentActivity').check();
       await page.getByRole('tab', { name: 'Tirage' }).click();
       await expect(page.locator('#launch-raffle')).toBeVisible();
       await page.getByRole('tab', { name: 'Participants' }).click();
-      await expect(page.locator('#participant-firstName')).toHaveValue('Brouillon');
+      await expect(page.locator('#participant-displayName')).toHaveValue('Brouillon conservé');
 
       // Pastille de file d'attente, puis envoi sur piste avec retour aux pistes depuis le toast
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.getByRole('button', { name: 'Inscrire le participant' }).click();
       await expect(page.getByRole('tab', { name: /Participants \(\d+ personnes? en attente\)/ })).toBeVisible();
 
@@ -97,8 +98,8 @@ for (const target of TARGETS) {
       await page.getByRole('button', { name: 'Saisir un temps' }).click();
       await expect(page.getByRole('button', { name: "Plus d'actions pour Brouillon conservé" })).toHaveAttribute('aria-expanded', 'false');
 
-      await page.locator('#participant-firstName').fill('Coureur');
-      await page.locator('#participant-lastName').fill('test');
+      await page.locator('#participant-displayName').fill('Coureur test');
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.locator('#participant-phone').fill('514-555-1234');
       await page.locator('#participant-consentActivity').check();
       await page.getByRole('button', { name: 'Inscrire et assigner à la première piste libre' }).click();

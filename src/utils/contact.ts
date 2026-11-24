@@ -1,6 +1,6 @@
 import type { ContactInfo, ContactMode, ContactSource, TechSkill, TshirtSize, VolunteerRole } from '../types';
 
-// Formulaire de contact commun : listes, normalisation, validation et colonnes d'export.
+// Formulaire de contact commun : listes, normalisation, validation canadienne et colonnes d'export.
 // Fonctions pures, sans React ni base de données.
 
 export const VOLUNTEER_ROLES: Array<{ id: VolunteerRole; label: string }> = [
@@ -26,6 +26,22 @@ export const TSHIRT_SIZES: TshirtSize[] = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3X
 
 export const PRONOUN_OPTIONS: string[] = ['Il / lui', 'Elle / elle', 'Iel / ellui', 'Autre'];
 
+// Indicatifs régionaux du Québec pour auto-complétion rapide en 1 tap
+export const QUEBEC_AREA_CODES: string[] = ['514', '438', '263', '450', '579', '418', '581', '819', '873'];
+
+// Domaines de courriel fréquents au Québec / Canada pour auto-complétion rapide
+export const EMAIL_DOMAIN_SUGGESTIONS: string[] = [
+  '@gmail.com',
+  '@hotmail.com',
+  '@hotmail.fr',
+  '@outlook.com',
+  '@yahoo.ca',
+  '@icloud.com',
+  '@proton.me',
+  '@videotron.ca',
+  '@bell.net'
+];
+
 export const MONTHS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
@@ -34,6 +50,7 @@ export const MONTHS = [
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 export interface ContactDraft {
+  displayName: string;
   firstName: string;
   lastName: string;
   pronouns: string;
@@ -60,11 +77,12 @@ export type ContactErrors = Partial<Record<ContactErrorKey, string>>;
 
 // Ordre d'affichage des champs, pour placer le focus sur la première erreur
 export const CONTACT_FIELD_ORDER: ContactErrorKey[] = [
-  'firstName', 'lastName', 'pronounsCustom', 'phone', 'email', 'contact', 'postalCode', 'roles',
+  'displayName', 'firstName', 'lastName', 'pronounsCustom', 'phone', 'email', 'contact', 'postalCode', 'roles',
   'dietaryRestrictions', 'birthDay', 'consentActivity', 'consentVolunteer'
 ];
 
 export const emptyContactDraft = (mode: ContactMode): ContactDraft => ({
+  displayName: '',
   firstName: '',
   lastName: '',
   pronouns: '',
@@ -88,30 +106,64 @@ export const emptyContactDraft = (mode: ContactMode): ContactDraft => ({
 
 const cleanName = (value: string) => value.trim().replace(/\s+/g, ' ');
 
-// Garde les chiffres ; retire l'indicatif 1 d'un numéro nord-américain à 11 chiffres
-export const normalizePhone = (value: string, outsideCanada = false): string => {
-  if (outsideCanada) return value.trim();
+export function splitDisplayName(raw: string): { firstName: string; lastName: string } {
+  const cleaned = cleanName(raw);
+  if (!cleaned) return { firstName: '', lastName: '' };
+  const space = cleaned.indexOf(' ');
+  if (space === -1) return { firstName: cleaned, lastName: '' };
+  return { firstName: cleaned.slice(0, space), lastName: cleaned.slice(space + 1) };
+}
+
+export function resolveDraftDisplayName(draft: Pick<ContactDraft, 'displayName' | 'firstName' | 'lastName'>): string {
+  const direct = cleanName(draft.displayName || '');
+  if (direct) return direct;
+  return cleanName([draft.firstName || '', draft.lastName || ''].filter(Boolean).join(' '));
+}
+
+// Garde les chiffres canadiens ; retire l'indicatif 1 d'un numéro nord-américain à 11 chiffres
+export const normalizePhone = (value: string, _outsideCanada = false): string => {
   const digits = value.replace(/\D/g, '');
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+};
+
+// Formatage progressif XXX XXX-XXXX pendant la frappe
+export const formatPhoneLive = (value: string): string => {
+  const normalized = normalizePhone(value).slice(0, 10);
+  if (normalized.length <= 3) return normalized;
+  if (normalized.length <= 6) return `${normalized.slice(0, 3)} ${normalized.slice(3)}`;
+  return `${normalized.slice(0, 3)} ${normalized.slice(3, 6)}-${normalized.slice(6)}`;
 };
 
 export const formatPhone = (phone: string): string =>
   /^\d{10}$/.test(phone) ? `${phone.slice(0, 3)} ${phone.slice(3, 6)}-${phone.slice(6)}` : phone;
 
-export const normalizePostal = (value: string, outsideCanada = false): string => {
-  if (outsideCanada) return value.trim();
-  const compact = value.toUpperCase().replace(/\s+/g, '');
-  return compact.length === 6 ? `${compact.slice(0, 3)} ${compact.slice(3)}` : compact;
+// Appliquer un indicatif régional QC (514, 438, etc.) tout en préservant les 7 chiffres déjà tapés le cas échéant
+export const applyQuebecAreaCode = (currentPhone: string, areaCode: string): string => {
+  const digits = normalizePhone(currentPhone);
+  const tail = digits.length > 3 ? digits.slice(3, 10) : '';
+  return formatPhoneLive(areaCode + tail);
+};
+
+export const normalizePostal = (value: string, _outsideCanada = false): string => {
+  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  return compact.length > 3 ? `${compact.slice(0, 3)} ${compact.slice(3)}` : compact;
 };
 
 export const normalizeEmail = (value: string): string => value.replace(/\s+/g, '').toLowerCase();
 
+export const applyEmailDomainSuggestion = (currentEmail: string, domain: string): string => {
+  const cleaned = normalizeEmail(currentEmail);
+  const atIndex = cleaned.indexOf('@');
+  const localPart = atIndex === -1 ? cleaned : cleaned.slice(0, atIndex);
+  if (!localPart) return cleaned;
+  return `${localPart}${domain}`;
+};
+
 const PHONE_CA = /^[2-9]\d{2}[2-9]\d{6}$/;
-const PHONE_INTL = /^\+?\d{7,15}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const POSTAL_CA = /^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z] \d[ABCEGHJ-NPRSTV-Z]\d$/;
 
-// La case de consentement « activité » est requise au kiosque, et ailleurs dès qu'une coordonnée est saisie
+// La case de consentement « activité » est requise au concours et dès qu'une coordonnée est saisie
 export const needsActivityConsent = (draft: ContactDraft, mode: ContactMode): boolean => {
   if (mode === 'volunteer') return false;
   if (mode === 'contest') return true;
@@ -120,43 +172,38 @@ export const needsActivityConsent = (draft: ContactDraft, mode: ContactMode): bo
 
 export const validateContact = (draft: ContactDraft, mode: ContactMode): ContactErrors => {
   const errors: ContactErrors = {};
-  const firstName = cleanName(draft.firstName);
-  const lastName = cleanName(draft.lastName);
-  if (!firstName) errors.firstName = 'Indiquez le prénom.';
-  else if (firstName.length > 60) errors.firstName = '60 caractères au maximum.';
-  if (!lastName) errors.lastName = 'Indiquez le nom de famille.';
-  else if (lastName.length > 60) errors.lastName = '60 caractères au maximum.';
+  const displayName = resolveDraftDisplayName(draft);
+  if (!displayName) {
+    errors.displayName = 'Indiquez le nom, prénom ou surnom.';
+  } else if (displayName.length > 100) {
+    errors.displayName = '100 caractères au maximum.';
+  }
 
   if (draft.pronouns === 'Autre' && draft.pronounsCustom.trim().length > 40) {
     errors.pronounsCustom = '40 caractères au maximum.';
   }
 
-  const phone = normalizePhone(draft.phone, draft.outsideCanada);
-  if (phone) {
-    if (draft.outsideCanada) {
-      if (!PHONE_INTL.test(phone.replace(/[\s().-]/g, ''))) errors.phone = 'Numéro de téléphone invalide.';
-    } else if (!PHONE_CA.test(phone)) {
-      errors.phone = 'Numéro à 10 chiffres attendu, par exemple 514 555-1234.';
-    }
+  const phone = normalizePhone(draft.phone, false);
+  if (phone && !PHONE_CA.test(phone)) {
+    errors.phone = 'Numéro à 10 chiffres attendu, par exemple 514 555-1234.';
   }
 
   const email = normalizeEmail(draft.email);
-  if (email && !EMAIL.test(email)) errors.email = 'Courriel invalide, par exemple nom@exemple.com.';
+  if (email && !EMAIL.test(email)) {
+    errors.email = 'Courriel invalide, par exemple nom@exemple.com.';
+  }
+
+  // Toujours demander les 2 champs, mais 1 seul des 2 est obligatoire pour pouvoir contacter la personne
+  if (!phone && !email) {
+    errors.contact = 'Indiquez un téléphone ou un courriel.';
+  }
+
+  const postal = normalizePostal(draft.postalCode, false);
+  if (postal && !POSTAL_CA.test(postal)) {
+    errors.postalCode = 'Code postal canadien attendu, par exemple H2W 1Y4.';
+  }
 
   const volunteering = mode === 'volunteer' || draft.wantsToVolunteer;
-  if ((mode === 'contest' || volunteering) && !phone && !email) {
-    errors.contact = 'Indiquez au moins un courriel ou un téléphone.';
-  }
-
-  const postal = normalizePostal(draft.postalCode, draft.outsideCanada);
-  if (postal) {
-    if (draft.outsideCanada) {
-      if (postal.length > 12) errors.postalCode = 'Code postal trop long.';
-    } else if (!POSTAL_CA.test(postal)) {
-      errors.postalCode = 'Code postal canadien attendu, par exemple H2W 1Y4.';
-    }
-  }
-
   if (volunteering) {
     if (draft.roles.length === 0) errors.roles = 'Choisissez au moins un rôle.';
     if (draft.dietaryRestrictions.trim().length > 200) errors.dietaryRestrictions = '200 caractères au maximum.';
@@ -174,8 +221,16 @@ export const validateContact = (draft: ContactDraft, mode: ContactMode): Contact
   return errors;
 };
 
+export const IDENTITY_ERROR_KEYS = new Set<ContactErrorKey>([
+  'displayName', 'firstName', 'lastName', 'pronounsCustom'
+]);
+
+export const CONTACT_ONLY_ERROR_KEYS = new Set<ContactErrorKey>([
+  'phone', 'email', 'contact', 'postalCode', 'consentActivity'
+]);
+
 export const COORDINATE_ERROR_KEYS = new Set<ContactErrorKey>([
-  'firstName', 'lastName', 'pronounsCustom', 'phone', 'email', 'contact', 'postalCode', 'consentActivity'
+  'displayName', 'firstName', 'lastName', 'pronounsCustom', 'phone', 'email', 'contact', 'postalCode', 'consentActivity'
 ]);
 
 export const VOLUNTEER_ERROR_KEYS = new Set<ContactErrorKey>([
@@ -185,10 +240,17 @@ export const VOLUNTEER_ERROR_KEYS = new Set<ContactErrorKey>([
 export const validateContactStep = (
   draft: ContactDraft,
   mode: ContactMode,
-  section: 'coordinates' | 'volunteer'
+  section: 'identity' | 'contact' | 'coordinates' | 'volunteer'
 ): ContactErrors => {
   const allErrors = validateContact(draft, mode);
-  const allowedKeys = section === 'coordinates' ? COORDINATE_ERROR_KEYS : VOLUNTEER_ERROR_KEYS;
+  const allowedKeys =
+    section === 'identity'
+      ? IDENTITY_ERROR_KEYS
+      : section === 'contact'
+        ? CONTACT_ONLY_ERROR_KEYS
+        : section === 'coordinates'
+          ? COORDINATE_ERROR_KEYS
+          : VOLUNTEER_ERROR_KEYS;
   const filtered: ContactErrors = {};
   for (const key of CONTACT_FIELD_ORDER) {
     if (allowedKeys.has(key) && allErrors[key]) {
@@ -205,14 +267,15 @@ export const firstContactError = (errors: ContactErrors): ContactErrorKey | unde
 export const buildContactInfo = (draft: ContactDraft, mode: ContactMode, source: ContactSource, now: number): ContactInfo => {
   const volunteering = mode === 'volunteer' || draft.wantsToVolunteer;
   const pronouns = draft.pronouns === 'Autre' ? cleanName(draft.pronounsCustom) : draft.pronouns.trim();
+  const { firstName, lastName } = splitDisplayName(resolveDraftDisplayName(draft));
   const contact: ContactInfo = {
-    firstName: cleanName(draft.firstName),
-    lastName: cleanName(draft.lastName),
+    firstName,
+    lastName,
     pronouns,
-    phone: normalizePhone(draft.phone, draft.outsideCanada),
+    phone: normalizePhone(draft.phone, false),
     email: normalizeEmail(draft.email),
-    postalCode: normalizePostal(draft.postalCode, draft.outsideCanada),
-    outsideCanada: draft.outsideCanada,
+    postalCode: normalizePostal(draft.postalCode, false),
+    outsideCanada: false,
     wantsToVolunteer: volunteering,
     consent: {
       activity: mode !== 'volunteer' && draft.consentActivity ? now : null,
@@ -252,15 +315,15 @@ export const readContact = (record: {
   if (stored && typeof stored.firstName === 'string') {
     return {
       ...stored,
+      outsideCanada: false,
       pronouns: typeof stored.pronouns === 'string' ? stored.pronouns : ''
     };
   }
-  const name = cleanName(record.name || record.visitorName || '');
-  const space = name.indexOf(' ');
+  const { firstName, lastName } = splitDisplayName(record.name || record.visitorName || '');
   const consentAt = record.extraData?.consentContact ? record.extraData?.consentAt ?? null : null;
   return {
-    firstName: space === -1 ? name : name.slice(0, space),
-    lastName: space === -1 ? '' : name.slice(space + 1),
+    firstName,
+    lastName,
     pronouns: '',
     phone: '',
     email: (record.email || record.visitorEmail || '').trim().toLowerCase(),
@@ -300,10 +363,10 @@ export const contactExportCells = (contact: ContactInfo): string[] => {
     contact.firstName,
     contact.lastName,
     contact.pronouns || '',
-    contact.outsideCanada ? contact.phone : formatPhone(contact.phone),
+    formatPhone(contact.phone),
     contact.email,
     contact.postalCode,
-    yes(contact.outsideCanada),
+    '',
     yes(contact.wantsToVolunteer),
     ...VOLUNTEER_ROLES.map((r) => yes(!!v?.roles.includes(r.id))),
     ...TECH_SKILLS.map((s) => yes(!!v?.techSkills.includes(s.id))),

@@ -25,6 +25,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
   // États Formulaires
   const [contactDraft, setContactDraft] = useState(() => emptyContactDraft('activity'));
   const [contactErrors, setContactErrors] = useState<ContactErrors>({});
+  const [formResetKey, setFormResetKey] = useState(0);
   const [newNote, setNewNote] = useState('');
   const [newPresence, setNewPresence] = useState(true);
   
@@ -103,7 +104,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
     setContactErrors(errors);
     const firstError = firstContactError(errors);
     if (firstError) {
-      document.getElementById(`att-${firstError === 'contact' ? 'email' : firstError}`)?.focus();
+      document.getElementById(`att-${firstError === 'contact' ? 'phone' : firstError}`)?.focus();
       return;
     }
     const contact = buildContactInfo(contactDraft, 'activity', 'activite', Date.now());
@@ -133,6 +134,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
       await networkManager.writeToDatabase('attendees', 'put', newAttendee);
       setContactDraft(emptyContactDraft('activity'));
       setContactErrors({});
+      setFormResetKey((k) => k + 1);
       setNewNote('');
       setNewPresence(true);
       await loadAttendees();
@@ -356,6 +358,8 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
             <ContactForm
               idPrefix="att"
               mode="activity"
+              stepped
+              resetKey={formResetKey}
               value={contactDraft}
               onChange={(next) => {
                 setContactDraft(next);
