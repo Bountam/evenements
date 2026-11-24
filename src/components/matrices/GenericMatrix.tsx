@@ -9,6 +9,11 @@ import {
 import { formatTime } from '../shared/Stopwatch';
 import { confirmDialog } from '../shared/ConfirmDialog';
 import ContactForm from '../shared/ContactForm';
+import FormateurEvaluationPanel from './generic/FormateurEvaluationPanel';
+import WorkRoleBar from '../tablette/WorkRoleBar';
+import type { ProgressionLevel, WorkRole } from '../../types';
+import { readSavedWorkRole, saveWorkRole } from '../../utils/modeLock';
+import { isAndroidApp } from '../../native/android';
 import { ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
 
 interface GenericMatrixProps {
@@ -29,6 +34,30 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   const [selectedAttendeeId, setSelectedAttendeeId] = useState<string | null>(null);
   const [feedbackScore, setFeedbackScore] = useState<number>(5);
   const [feedbackText, setFeedbackText] = useState('');
+  const [workRole, setWorkRole] = useState<WorkRole>(() => readSavedWorkRole());
+
+  const handleSelectWorkRole = (role: WorkRole) => {
+    setWorkRole(role);
+    saveWorkRole(role);
+  };
+
+  const setQuickBeforeLevel = async (id: string, level: ProgressionLevel) => {
+    try {
+      const att = await db.attendees.get(id);
+      if (!att) return;
+      att.extraData = {
+        ...(att.extraData || {}),
+        progression: {
+          ...(att.extraData?.progression || {}),
+          levelBefore: level
+        }
+      };
+      await networkManager.writeToDatabase('attendees', 'put', att);
+      await loadAttendees();
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Chronomètre de session locale (Fresque / Conférence)
   const [timerRunning, setTimerRunning] = useState(false);
@@ -236,17 +265,17 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
   if (activeTab === 'public') {
     return (
       <div className="space-y-8">
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl text-center space-y-4 max-w-3xl mx-auto shadow-lg">
-          <h2 className="text-3xl font-display font-bold text-white uppercase tracking-wider">
+        <div className="bg-app-card border border-app-card-border p-6 rounded-3xl text-center space-y-4 max-w-3xl mx-auto shadow-lg">
+          <h2 className="text-3xl font-display font-bold text-app-text uppercase tracking-wider">
             {event.name}
           </h2>
-          <div className="flex justify-center gap-6 text-sm text-slate-300 font-sans">
+          <div className="flex justify-center gap-6 text-sm text-app-text-muted font-sans">
             <div>Présents : <span className="text-primary font-bold">{presentCount}</span></div>
-            <div className="w-px bg-purple-950"></div>
+            <div className="w-px bg-app-input"></div>
             <div>Taux de présence : <span className="text-primary font-bold">{presenceRate}%</span></div>
             {feedbackList.length > 0 && (
               <>
-                <div className="w-px bg-purple-950"></div>
+                <div className="w-px bg-app-input"></div>
                 <div>Appréciation : <span className="text-primary font-bold">{averageFeedback}/5 ★</span></div>
               </>
             )}
@@ -256,17 +285,17 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
         {/* Chrono et animateurs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center max-w-4xl mx-auto">
           {/* Chronomètre de session */}
-          <div className="bg-[#24123d]/40 border border-purple-950/60 p-6 rounded-3xl text-center shadow-lg">
-            <h3 className="text-xs uppercase font-black text-slate-400 tracking-widest mb-3 font-sans">
+          <div className="bg-app-card border border-app-card-border p-6 rounded-3xl text-center shadow-lg">
+            <h3 className="text-xs uppercase font-black text-app-text-muted tracking-widest mb-3 font-sans">
               Durée de l'activité
             </h3>
-            <div className="font-mono text-5xl sm:text-6xl font-bold text-white tracking-widest tabular-nums mb-4">
+            <div className="font-mono text-5xl sm:text-6xl font-bold text-app-text tracking-widest tabular-nums mb-4">
               {formatTime(elapsedTime).split('.')[0]} {/* Pas de millisecondes pour la conférence */}
             </div>
             <div className="flex justify-center gap-2">
               <button
                 onClick={() => setTimerRunning(!timerRunning)}
-                className="px-4 py-2 rounded-xl bg-purple-950 border border-purple-900 text-xs font-bold font-display uppercase tracking-wider text-purple-300 hover:text-white cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-xs font-bold font-display uppercase tracking-wider text-app-text-muted hover:text-app-text cursor-pointer"
               >
                 {timerRunning ? 'Pause' : 'Démarrer'}
               </button>
@@ -275,7 +304,7 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                   setTimerRunning(false);
                   setElapsedTime(0);
                 }}
-                className="px-4 py-2 rounded-xl bg-purple-950 border border-purple-900 text-xs font-bold font-display uppercase tracking-wider text-purple-300 hover:text-white cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-xs font-bold font-display uppercase tracking-wider text-app-text-muted hover:text-app-text cursor-pointer"
               >
                 Reset
               </button>
@@ -283,28 +312,28 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
           </div>
 
           {/* Messages de remerciement et d'impact */}
-          <div className="bg-[#24123d]/40 border border-purple-950/60 p-6 rounded-3xl shadow-lg flex flex-col justify-center min-h-[190px]">
+          <div className="bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg flex flex-col justify-center min-h-[190px]">
             <h3 className="text-xs uppercase font-black text-primary tracking-widest mb-2 font-sans flex items-center gap-1.5">
               <Award size={14} />
               <span>Sensibilisation active</span>
             </h3>
             {event.type === 'fresque_numerique' && (
-              <p className="text-sm text-slate-300 font-sans leading-relaxed">
+              <p className="text-sm text-app-text-muted font-sans leading-relaxed">
                 Fresque collaborative : comprendre l'impact environnemental du matériel, de l'utilisation et de la fabrication afin d'imaginer ensemble des actions concrètes de sobriété !
               </p>
             )}
             {event.type === 'install_fest_linux' && (
-              <p className="text-sm text-slate-300 font-sans leading-relaxed">
+              <p className="text-sm text-app-text-muted font-sans leading-relaxed">
                 InstallFest Linux : donnez une seconde jeunesse à votre PC obsolète et reprenez le contrôle de vos données avec les logiciels libres !
               </p>
             )}
             {event.type === 'conference_pollution' && (
-              <p className="text-sm text-slate-300 font-sans leading-relaxed">
+              <p className="text-sm text-app-text-muted font-sans leading-relaxed">
                 Conférence pollution numérique : la sobriété est le premier pas vers un usage éclairé. Moins de terminaux neufs, plus de réemploi et de réparation locale !
               </p>
             )}
             {!['fresque_numerique', 'install_fest_linux', 'conference_pollution'].includes(event.type) && (
-              <p className="text-sm text-slate-300 font-sans leading-relaxed">
+              <p className="text-sm text-app-text-muted font-sans leading-relaxed">
                 Merci à tous les participants d'agir avec Insertech pour la prolongation de la durée de vie des appareils informatiques et la sobriété numérique !
               </p>
             )}
@@ -319,10 +348,17 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
     // Mode « Kiosque formulaire » d'une tablette : seul le formulaire reste affiché (voir .kiosk-form-only)
     const kioskForm = activeTab === 'formulaire';
     return (
-      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${kioskForm ? 'kiosk-form-only' : ''}`}>
+      <div className="space-y-6">
+        {!kioskForm && (
+          <WorkRoleBar event={event} activeRole={workRole} onSelectRole={handleSelectWorkRole} isTablet={isAndroidApp()} />
+        )}
+        {!kioskForm && workRole === 'formateur' && (
+          <FormateurEvaluationPanel attendees={attendees} onReload={loadAttendees} />
+        )}
+        <div className={`grid grid-cols-1 lg:grid-cols-12 gap-8 items-start ${kioskForm ? 'kiosk-form-only' : ''}`}>
         {/* Ajouter un inscrit */}
-        <div className="kiosk-keep lg:col-span-4 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-          <h3 className="text-base font-bold font-display text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="kiosk-keep lg:col-span-4 bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg">
+          <h3 className="text-base font-bold font-display text-app-text uppercase tracking-wider mb-4 flex items-center gap-2">
             <UserPlus size={18} className="text-primary" />
             <span>{kioskForm ? 'Inscription' : 'Nouvelle inscription'}</span>
           </h3>
@@ -340,13 +376,13 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
             />
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-slate-300 block">Notes rapides</label>
+              <label className="text-micro font-bold uppercase text-app-text-muted block">Notes rapides</label>
               <input
                 type="text"
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
                 placeholder="Ex. Intérêt pour Linux Mint"
-                className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition"
+                className="w-full bg-app-input border border-app-card-border rounded-xl px-3 py-2 text-app-text text-xs focus:outline-none focus:border-primary transition"
               />
             </div>
 
@@ -356,9 +392,9 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                 id="presenceCheck"
                 checked={newPresence}
                 onChange={(e) => setNewPresence(e.target.checked)}
-                className="w-4 h-4 rounded text-primary focus:ring-primary bg-[#180A2b]"
+                className="w-4 h-4 rounded text-primary focus:ring-primary bg-app-input"
               />
-              <label htmlFor="presenceCheck" className="text-xs font-semibold text-slate-300">
+              <label htmlFor="presenceCheck" className="text-xs font-semibold text-app-text-muted">
                 Confirmer la présence immédiatement
               </label>
             </div>
@@ -374,33 +410,33 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
         </div>
 
         {/* Liste des participants */}
-        <div className="lg:col-span-8 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-          <div className="flex items-center justify-between mb-4 pb-2 border-b border-purple-950/60">
-            <h3 className="text-base font-bold font-display text-white uppercase tracking-wider">
+        <div className="lg:col-span-8 bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg">
+          <div className="flex items-center justify-between mb-4 pb-2 border-b border-app-card-border">
+            <h3 className="text-base font-bold font-display text-app-text uppercase tracking-wider">
               Présences de la Session ({attendees.length})
             </h3>
-            <div className="text-xs text-slate-400 font-sans">
+            <div className="text-xs text-app-text-muted font-sans">
               Présents : {presentCount} / Inscrits : {totalRegistered} ({presenceRate}%)
             </div>
           </div>
 
           {attendees.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-12 font-sans">Aucun participant enregistré.</p>
+            <p className="text-xs text-app-text-muted text-center py-12 font-sans">Aucun participant enregistré.</p>
           ) : (
             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
               {attendees.map((a) => (
-                <div key={a.id} className="p-3.5 rounded-xl bg-[#180A2b]/60 border border-purple-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div key={a.id} className="p-3.5 rounded-xl bg-app-input border border-app-card-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-white text-sm">{a.name}</h4>
+                      <h4 className="font-bold text-app-text text-sm">{a.name}</h4>
                       {a.presenceConfirmed ? (
-                        <span className="text-[8px] bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full font-bold uppercase">Présent</span>
+                        <span className="text-micro bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full font-bold uppercase">Présent</span>
                       ) : (
-                        <span className="text-[8px] bg-purple-950/80 text-slate-500 border border-purple-900/30 px-2 py-0.5 rounded-full font-bold uppercase">Absent</span>
+                        <span className="text-micro bg-app-input text-app-text-muted border border-app-card-border px-2 py-0.5 rounded-full font-bold uppercase">Absent</span>
                       )}
                     </div>
-                    {a.email && <p className="text-xs text-slate-400 font-sans">{a.email}</p>}
-                    {a.notes && <p className="text-[11px] text-slate-400 font-sans italic bg-[#180A2b]/80 p-2 rounded-lg mt-1">{a.notes}</p>}
+                    {a.email && <p className="text-xs text-app-text-muted font-sans">{a.email}</p>}
+                    {a.notes && <p className="text-xs text-app-text-muted font-sans italic bg-app-input p-2 rounded-lg mt-1">{a.notes}</p>}
                     
                     {/* Tags dynamiques pour Linux InstallFest */}
                     {event.type === 'install_fest_linux' && (
@@ -411,15 +447,42 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                             <button
                               key={step}
                               onClick={() => setLinuxInstallTag(a.id, step as any)}
-                              className={`text-[8px] px-2 py-0.5 rounded font-bold uppercase border transition cursor-pointer ${
+                              className={`text-micro px-2 py-0.5 rounded font-bold uppercase border transition cursor-pointer ${
                                 isCurrent 
                                   ? step === 'Réussi' ? 'bg-primary text-secondary border-primary' :
-                                    step === 'Échec' ? 'bg-red-500 text-white border-red-500' :
+                                    step === 'Échec' ? 'bg-red-500 text-app-text border-red-500' :
                                     'bg-yellow-500 text-secondary border-yellow-500'
-                                  : 'bg-purple-950 text-slate-400 border-purple-900/30'
+                                  : 'bg-app-input text-app-text-muted border-app-card-border'
                               }`}
                             >
                               {step}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {a.presenceConfirmed && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className="text-micro font-bold uppercase text-app-text-muted mr-1">Niveau Avant :</span>
+                        {([
+                          { lvl: 1 as ProgressionLevel, label: '1 🌱' },
+                          { lvl: 2 as ProgressionLevel, label: '2 🔧' },
+                          { lvl: 3 as ProgressionLevel, label: '3 ⚡' },
+                          { lvl: 4 as ProgressionLevel, label: '4 🚀' }
+                        ]).map((opt) => {
+                          const active = a.extraData?.progression?.levelBefore === opt.lvl;
+                          return (
+                            <button
+                              key={opt.lvl}
+                              type="button"
+                              onClick={() => setQuickBeforeLevel(a.id, opt.lvl)}
+                              className={`min-h-11 min-h-11 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                                active
+                                  ? 'bg-primary text-secondary border-primary'
+                                  : 'bg-app-input text-app-text-muted border-app-card-border hover:border-primary/50'
+                              }`}
+                            >
+                              {opt.label}
                             </button>
                           );
                         })}
@@ -431,10 +494,10 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                     <button
                       onClick={() => togglePresence(a.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold font-display uppercase transition cursor-pointer ${
+                      className={`flex items-center gap-1.5 min-h-11 px-3 py-1.5 rounded-xl border text-micro font-bold font-display uppercase transition cursor-pointer ${
                         a.presenceConfirmed
                           ? 'bg-primary/20 text-primary border-primary/30'
-                          : 'bg-purple-950 text-slate-400 border-purple-900/40 hover:text-white'
+                          : 'bg-app-input text-app-text-muted border-app-card-border hover:text-app-text'
                       }`}
                     >
                       <Check size={12} />
@@ -444,10 +507,10 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                     {a.presenceConfirmed && (
                       <button
                         onClick={() => setSelectedAttendeeId(selectedAttendeeId === a.id ? null : a.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold font-display uppercase transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 min-h-11 px-3 py-1.5 rounded-xl border text-micro font-bold font-display uppercase transition cursor-pointer ${
                           a.feedbackScore !== undefined
                             ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                            : 'bg-purple-950 text-slate-400 border-purple-900/40 hover:text-white'
+                            : 'bg-app-input text-app-text-muted border-app-card-border hover:text-app-text'
                         }`}
                       >
                         <Star size={12} />
@@ -457,7 +520,7 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
 
                     <button
                       onClick={() => handleDeleteAttendee(a.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 cursor-pointer"
+                      className="min-h-11 min-w-11 flex items-center justify-center rounded-xl text-app-text-muted hover:text-red-400 hover:bg-red-500/10 cursor-pointer"
                     >
                       <Trash2 size={13} />
                     </button>
@@ -470,15 +533,15 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
 
         {/* Modal d'évaluation du participant selectionné */}
         {selectedAttendeeId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#180A2b]/80 backdrop-blur-xs">
-            <div className="bg-[#24123d] border border-purple-900/60 p-6 rounded-3xl max-w-md w-full mx-4 space-y-4">
-              <h3 className="text-lg font-bold font-display text-white uppercase tracking-wider">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-app-input backdrop-blur-xs">
+            <div className="bg-app-card border border-app-card-border p-6 rounded-3xl max-w-md w-full mx-4 space-y-4">
+              <h3 className="text-lg font-bold font-display text-app-text uppercase tracking-wider">
                 Avis de {attendees.find(a => a.id === selectedAttendeeId)?.name}
               </h3>
 
               <form onSubmit={handleSaveFeedback} className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-300 block">Note globale de satisfaction</label>
+                  <label className="text-micro font-bold uppercase text-app-text-muted block">Note globale de satisfaction</label>
                   <div className="flex items-center gap-2">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
@@ -494,13 +557,13 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-300 block">Commentaire de satisfaction / Avis</label>
+                  <label className="text-micro font-bold uppercase text-app-text-muted block">Commentaire de satisfaction / Avis</label>
                   <textarea
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
                     placeholder="Ex. Superbe présentation, très clair !"
                     rows={3}
-                    className="w-full bg-[#180A2b]/80 border border-purple-900/60 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-primary transition resize-none"
+                    className="w-full bg-app-input border border-app-card-border rounded-xl px-3 py-2 text-app-text text-xs focus:outline-none focus:border-primary transition resize-none"
                   />
                 </div>
 
@@ -508,7 +571,7 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
                   <button
                     type="button"
                     onClick={() => setSelectedAttendeeId(null)}
-                    className="px-4 py-2 rounded-xl bg-purple-950 text-slate-400 text-xs font-bold font-display uppercase border border-purple-900/40 hover:text-white cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-app-input text-app-text-muted text-xs font-bold font-display uppercase border border-app-card-border hover:text-app-text cursor-pointer"
                   >
                     Annuler
                   </button>
@@ -523,31 +586,34 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   }
 
-  // Rendu de l'onglet Bilan & Évaluation
+  // Rendu de l'onglet Bilan & Évaluation (inclut l'évaluation Formateur Avant / Pendant / Après)
   return (
     <div className="space-y-8">
+      <FormateurEvaluationPanel attendees={attendees} onReload={loadAttendees} />
+
       {/* Cards de Bilan rapide adaptatives */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-          <span className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-sans block mb-1">
+        <div className="bg-app-card border border-app-card-border p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
+          <span className="text-micro uppercase font-black tracking-widest text-app-text-muted font-sans block mb-1">
             Total Inscrits
           </span>
-          <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-white">{totalRegistered}</div>
+          <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-app-text">{totalRegistered}</div>
         </div>
 
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-          <span className="text-[10px] uppercase font-black tracking-widest text-primary font-sans block mb-1">
+        <div className="bg-app-card border border-app-card-border p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
+          <span className="text-micro uppercase font-black tracking-widest text-primary font-sans block mb-1">
             Présence Effective
           </span>
           <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-primary">{presentCount} ({presenceRate}%)</div>
         </div>
 
-        <div className="bg-[#24123d]/60 border border-purple-900/40 p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
-          <span className="text-[10px] uppercase font-black tracking-widest text-yellow-500 font-sans block mb-1">
+        <div className="bg-app-card border border-app-card-border p-3.5 sm:p-5 rounded-2xl text-center shadow-lg">
+          <span className="text-micro uppercase font-black tracking-widest text-yellow-500 font-sans block mb-1">
             Satisfaction Moyenne
           </span>
           <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-yellow-500">
@@ -559,28 +625,28 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
       {/* Graphiques et Liste de Feedbacks */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-8">
         {/* Liste des avis formulés */}
-        <div className="lg:col-span-6 bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-          <h3 className="text-base font-bold font-display text-white uppercase tracking-wider mb-4 pb-2 border-b border-purple-950/60">
+        <div className="lg:col-span-6 bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg">
+          <h3 className="text-base font-bold font-display text-app-text uppercase tracking-wider mb-4 pb-2 border-b border-app-card-border">
             Avis & Remarques du Public
           </h3>
 
           {feedbackList.filter(a => a.feedbackText).length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-12 font-sans">Aucun commentaire textuel formulé.</p>
+            <p className="text-xs text-app-text-muted text-center py-12 font-sans">Aucun commentaire textuel formulé.</p>
           ) : (
             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
               {feedbackList
                 .filter(a => a.feedbackText)
                 .map((a) => (
-                  <div key={a.id} className="p-3 rounded-xl bg-[#180A2b]/60 border border-purple-950 space-y-1.5">
+                  <div key={a.id} className="p-3 rounded-xl bg-app-input border border-app-card-border space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white">{a.name}</h4>
+                      <h4 className="text-xs font-bold text-app-text">{a.name}</h4>
                       <div className="flex items-center text-yellow-500">
                         {Array.from({ length: a.feedbackScore! }).map((_, i) => (
                           <Star key={i} size={10} fill="currentColor" />
                         ))}
                       </div>
                     </div>
-                    <p className="text-xs text-slate-300 font-sans italic">"{a.feedbackText}"</p>
+                    <p className="text-xs text-app-text-muted font-sans italic">"{a.feedbackText}"</p>
                   </div>
                 ))}
             </div>
@@ -589,12 +655,12 @@ export default function GenericMatrix({ event, activeTab }: GenericMatrixProps) 
 
         {/* Graphiques de satisfaction */}
         <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-            <h4 className="text-xs font-bold font-display text-white uppercase tracking-wider mb-4 text-center">Taux d'émargement</h4>
+          <div className="bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg">
+            <h4 className="text-xs font-bold font-display text-app-text uppercase tracking-wider mb-4 text-center">Taux d'émargement</h4>
             <DoughnutChart data={presenceData} />
           </div>
-          <div className="bg-[#24123d]/60 border border-purple-900/40 p-6 rounded-3xl shadow-lg">
-            <h4 className="text-xs font-bold font-display text-white uppercase tracking-wider mb-4 text-center">Scores d'appréciation</h4>
+          <div className="bg-app-card border border-app-card-border p-6 rounded-3xl shadow-lg">
+            <h4 className="text-xs font-bold font-display text-app-text uppercase tracking-wider mb-4 text-center">Scores d'appréciation</h4>
             <BarChart data={feedbackData} />
           </div>
         </div>

@@ -28,8 +28,8 @@ export type NetworkMessage =
 
 const OUTBOX_KEY = 'insertech_net_outbox';
 const HEARTBEAT_MS = 4000;
-const HOST_SILENCE_MS = 12000;
-const CLIENT_SILENCE_MS = 20000;
+const HOST_SILENCE_MS = 30000;
+const CLIENT_SILENCE_MS = 45000;
 const SESSION_KEY_KEY = 'insertech_net_session_key';
 const TABLET_NAME_KEY = 'insertech_net_tablet_name';
 const EVENT_NAME_KEY = 'insertech_net_event_nom';
@@ -90,6 +90,7 @@ class P2PNetworkManager {
 
   // Battement de cœur : une liaison peut mourir sans événement « close » (veille, Wi-Fi)
   private heartbeatInterval: any = null;
+  private stopVisibilityListener: (() => void) | null = null;
   private lastHostMessageAt = 0;
   private hostAnswersPing = false;
   private lastClientPingAt = new Map<string, number>();
@@ -373,8 +374,20 @@ class P2PNetworkManager {
   // il les rappellera au tour suivant et le nombre d'appareils affiché reste juste
   private startHostWatchdog() {
     this.stopHeartbeat();
+    let lastTickAt = Date.now();
     this.heartbeatInterval = setInterval(() => {
       const now = Date.now();
+      const gap = now - lastTickAt;
+      lastTickAt = now;
+      if (gap > HEARTBEAT_MS * 3) {
+        // L'onglet PC a été ralenti ou suspendu : accorder une période de grâce plutôt que couper d'un coup
+        for (const conn of this.connections) {
+          if (this.lastClientPingAt.has(conn.connectionId)) {
+            this.lastClientPingAt.set(conn.connectionId, now);
+          }
+        }
+        return;
+      }
       for (const conn of this.connections) {
         const last = this.lastClientPingAt.get(conn.connectionId);
         if (last !== undefined && now - last > CLIENT_SILENCE_MS) {
@@ -394,6 +407,8 @@ class P2PNetworkManager {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+    this.stopVisibilityListener?.();
+    this.stopVisibilityListener = null;
   }
 
   // Traiter les messages d'une liaison dans leur ordre d'arrivée, un à la fois
@@ -533,10 +548,17 @@ class P2PNetworkManager {
 
   private startClientHeartbeat(conn: Lien) {
     this.stopHeartbeat();
+    let lastTickAt = Date.now();
     this.heartbeatInterval = setInterval(() => {
       if (this.connections[0] !== conn) return;
-      // Un PC principal d'une version antérieure ne répond pas : ne pas couper sa liaison pour autant
-      if (this.hostAnswersPing && Date.now() - this.lastHostMessageAt > HOST_SILENCE_MS) {
+      const now = Date.now();
+      const gap = now - lastTickAt;
+      lastTickAt = now;
+      if (gap > HEARTBEAT_MS * 3) {
+        // Reprise après veille ou suspension WebView : vérifier par un PING avant de déclarer le PC perdu
+        this.lastHostMessageAt = now;
+      } else if (this.hostAnswersPing && now - this.lastHostMessageAt > HOST_SILENCE_MS) {
+        // Un PC principal d'une version antérieure ne répond pas : ne pas couper sa liaison pour autant
         this.handleLostHost(conn);
         return;
       }
@@ -548,6 +570,23 @@ class P2PNetworkManager {
         }
       }
     }, HEARTBEAT_MS);
+
+    if (typeof document !== 'undefined') {
+      const onVisibility = () => {
+        if (document.visibilityState === 'visible' && this.connections[0] === conn && conn.open) {
+          const now = Date.now();
+          lastTickAt = now;
+          this.lastHostMessageAt = now;
+          try {
+            conn.send({ type: 'PING' });
+          } catch (e) {
+            this.handleLostHost(conn);
+          }
+        }
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      this.stopVisibilityListener = () => document.removeEventListener('visibilitychange', onVisibility);
+    }
   }
 
   // QUITTER LA SESSION RÉSEAU (Retour au mode standalone)

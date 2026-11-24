@@ -190,7 +190,10 @@ export default function DashboardShell({
               <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">{modeControls}</div>
+          <div className="flex items-center gap-2 shrink-0">
+            <VolunteerSurveyButton eventId={event.id} />
+            {modeControls}
+          </div>
         </header>
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-8">{children}</main>
       </div>
@@ -212,7 +215,7 @@ export default function DashboardShell({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-md bg-primary/20 text-primary border border-primary/40 text-kiosk-caption font-black uppercase font-display tracking-widest shrink-0">
-                  {event.type === 'install_fest_linux' ? 'Install Fest Linux' : 'Concours Insertech'}
+                  {matrixInfo.title}
                 </span>
                 <h1
                   className="text-app-text font-black tracking-tight uppercase font-display line-clamp-1 sm:line-clamp-2"
@@ -389,6 +392,17 @@ export default function DashboardShell({
 
               <VolunteerSurveyButton eventId={event.id} />
 
+              <Button
+                size="sm"
+                onClick={onExportData}
+                data-testid="btn-open-impact-report"
+                title="Ouvrir le Centre de Rapport d'Impact (Excel, Markdown, LaTeX, CSV, JSON)"
+                className="!bg-primary/15 text-primary !border-primary/40"
+              >
+                <Download size={13} aria-hidden="true" />
+                <span>Rapport d'Impact</span>
+              </Button>
+
               {/* Commandes rares regroupées : projecteur, thème, sauvegardes */}
               <MoreMenu
                 alert={sqliteStatus === 'error' || fileBackupState === 'needs-permission'}
@@ -427,7 +441,7 @@ export default function DashboardShell({
                       className="w-full !justify-start"
                     >
                       <Download size={13} aria-hidden="true" />
-                      <span>Sauvegarder (JSON)</span>
+                      <span>Rapport d'Impact & Exports</span>
                     </Button>
 
                     {fileBackupState !== 'unsupported' && onFileBackupClick && (

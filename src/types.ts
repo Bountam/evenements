@@ -148,6 +148,7 @@ export interface VolunteerProfile {
 export interface ContactInfo {
   firstName: string;
   lastName: string;
+  pronouns?: string; // ex. « Il / lui », « Elle / elle », « Iel / ellui » ou texte libre ; vide si non précisé
   phone: string; // 10 chiffres sans séparateur au Canada ; texte libre si outsideCanada
   email: string; // en minuscules
   postalCode: string; // « H2W 1Y4 » au Canada ; texte libre si outsideCanada
@@ -157,6 +158,64 @@ export interface ContactInfo {
   consent: { activity: number | null; volunteer: number | null; newsletter: number | null }; // horodatage ms ou null
   source: ContactSource;
   updatedAt: number;
+}
+
+export type WorkRole =
+  | 'admin'
+  | 'accueil'
+  | 'reparateur'
+  | 'assistant'
+  | 'formateur'
+  | 'kiosque_formulaire'
+  | 'ecran_public';
+
+export type RepairStage = 'accueil_table' | 'diagnostic' | 'reparation' | 'rapport';
+export type FollowUpType = 'aucune' | 'piece_rechange' | 'boutique_insertech' | 'recyclage';
+export type ProgressionLevel = 1 | 2 | 3 | 4;
+export type LearnerCoachStatus = 'a_aider' | 'en_bonne_voie' | 'maitrise';
+
+export interface HelpRequestState {
+  active: boolean;
+  reason: string;
+  requestedAt: number;
+  helperName?: string;
+}
+
+export interface RepairTicketExtraData {
+  contact?: ContactInfo;
+  consentContact?: boolean;
+  consentAt?: number;
+  batchId?: string;
+  deviceIndex?: number;
+  deviceTotal?: number;
+  brand?: string;
+  model?: string;
+  symptoms?: string[];
+  assignedAt?: number;
+  serviceStartedAt?: number;
+  completedAt?: number;
+  tableNumber?: number | null;
+  priority?: boolean;
+  repairStage?: RepairStage;
+  checkedDiagSteps?: string[];
+  actionsPerformed?: string[];
+  followUpType?: FollowUpType;
+  followUpPart?: string;
+  followUpDetail?: string;
+  helpRequest?: HelpRequestState | null;
+  tableCallAt?: number | null;
+  companionInstalledAt?: number | null;
+  [key: string]: any;
+}
+
+export interface LearnerProgression {
+  levelBefore?: ProgressionLevel;
+  milestonesDuring?: string[];
+  coachStatus?: LearnerCoachStatus;
+  levelAfter?: ProgressionLevel;
+  readyForReparothon?: boolean;
+  evaluatedBeforeAt?: number;
+  evaluatedAfterAt?: number;
 }
 
 // Système de synchronisation local et réseau P2P
@@ -171,7 +230,24 @@ export type SyncMessage =
   | { type: 'DB_UPDATE'; timestamp: number }
   | { type: 'PEER_CELEBRATION'; payload: any }
   | { type: 'TRACK_ASSIGN'; trackId: number; participantId: string | null; participantName: string | null; eventId?: string }
-  | { type: 'TRACKS_STATE_SYNC'; tracks: Record<number, TrackState> };
+  | { type: 'TRACKS_STATE_SYNC'; tracks: Record<number, TrackState> }
+  | {
+      type: 'PUBLIC_CALL_TABLE';
+      ticketId: string;
+      visitorShortName: string;
+      objectName: string;
+      tableNumber: number | null;
+      techName: string;
+      timestamp: number;
+      eventId?: string;
+    }
+  | {
+      type: 'PUBLIC_FLASH_MESSAGE';
+      text: string;
+      tone: 'info' | 'celebration' | 'warning';
+      eventId: string;
+      timestamp: number;
+    };
 
 // Sauvegarde automatique locale (Snapshots d'urgence et périodiques)
 export interface BackupSnapshot {

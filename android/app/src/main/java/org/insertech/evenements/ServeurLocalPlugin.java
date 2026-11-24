@@ -1,6 +1,8 @@
 package org.insertech.evenements;
 
+import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 
 import com.getcapacitor.JSObject;
@@ -39,6 +41,7 @@ public class ServeurLocalPlugin extends Plugin {
     private static final int CONNEXIONS_MAX = 8;
 
     private Serveur serveur;
+    private WifiManager.WifiLock wifiLock;
     private volatile String nom = "Tablette";
     private volatile String session = null;
     private final Map<String, WebSocket> connexions = new ConcurrentHashMap<>();
@@ -51,7 +54,8 @@ public class ServeurLocalPlugin extends Plugin {
         Serveur(int port) {
             super(new InetSocketAddress(port));
             setReuseAddr(true);
-            setConnectionLostTimeout(20);
+            setTcpNoDelay(true);
+            setConnectionLostTimeout(60);
         }
 
         @Override
@@ -151,10 +155,41 @@ public class ServeurLocalPlugin extends Plugin {
         return repli;
     }
 
+    private void acquerirWifiLock() {
+        try {
+            if (wifiLock == null) {
+                WifiManager wm = (WifiManager) getContext().getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                if (wm != null) {
+                    int mode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                        ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                        : WifiManager.WIFI_MODE_FULL_HIGH_PERF;
+                    wifiLock = wm.createWifiLock(mode, "InsertechEvenements:ServeurLocal");
+                    wifiLock.setReferenceCounted(false);
+                }
+            }
+            if (wifiLock != null && !wifiLock.isHeld()) {
+                wifiLock.acquire();
+            }
+        } catch (Exception ignore) {
+            // Non bloquant sur certains appareils ou émulateurs
+        }
+    }
+
+    private void libererWifiLock() {
+        try {
+            if (wifiLock != null && wifiLock.isHeld()) {
+                wifiLock.release();
+            }
+        } catch (Exception ignore) {
+            // Déjà libéré
+        }
+    }
+
     private void arreterServeur() {
         Serveur s = serveur;
         serveur = null;
         connexions.clear();
+        libererWifiLock();
         if (s != null) {
             try {
                 s.stop(500);
@@ -181,6 +216,7 @@ public class ServeurLocalPlugin extends Plugin {
             }
             if (s.erreurDemarrage == null) {
                 serveur = s;
+                acquerirWifiLock();
                 JSObject ret = new JSObject();
                 ret.put("port", port);
                 ret.put("ip", adresseWifi());

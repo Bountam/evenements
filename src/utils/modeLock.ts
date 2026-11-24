@@ -1,4 +1,4 @@
-import type { EventSettings } from '../types';
+import type { EventSettings, WorkRole } from '../types';
 import { isAndroidApp } from '../native/android';
 
 // Rôle de l'appareil, modes d'usage des tablettes et code de déverrouillage à 4 chiffres.
@@ -225,4 +225,46 @@ export function formatWait(ms: number): string {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return minutes > 0 ? `${minutes} min ${String(seconds).padStart(2, '0')} s` : `${seconds} s`;
+}
+
+// --- Rôles terrain & anonymisation Loi 25 ---
+
+export const WORK_ROLE_STORAGE_KEY = 'insertech_work_role';
+
+export const WORK_ROLES: WorkRole[] = [
+  'admin',
+  'accueil',
+  'reparateur',
+  'assistant',
+  'formateur',
+  'kiosque_formulaire',
+  'ecran_public'
+];
+
+export const WORK_ROLE_LABELS: Record<WorkRole, string> = {
+  admin: 'Administrateur (God Mode)',
+  accueil: "Animateur d'Accueil",
+  reparateur: 'Animateur Réparateur',
+  assistant: 'Animateur Assistant',
+  formateur: 'Formateur',
+  kiosque_formulaire: 'Kiosque Visiteur',
+  ecran_public: 'Écran Public'
+};
+
+export function readSavedWorkRole(defaultRole: WorkRole = 'admin'): WorkRole {
+  const saved = readStorage(WORK_ROLE_STORAGE_KEY);
+  return WORK_ROLES.includes(saved as WorkRole) ? (saved as WorkRole) : defaultRole;
+}
+
+export function saveWorkRole(role: WorkRole) {
+  writeStorage(WORK_ROLE_STORAGE_KEY, role);
+}
+
+// Loi 25 : sur l'Écran Public, n'afficher que le prénom et l'initiale du nom de famille (« Sophie C. »)
+export function formatPublicShortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'Visiteur';
+  if (parts.length === 1) return parts[0];
+  const initial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return initial ? `${parts[0]} ${initial}.` : parts[0];
 }

@@ -38,8 +38,10 @@ export class PoigneeTablette {
     const msg = lire(texte);
     if (!msg || msg.type !== 'PREUVE' || typeof msg.nonce !== 'string' || msg.nonce.length < 16) return null;
     if (!(await verifierPreuve(this.cle, this.nonceTablette, `${this.code}|pc`, msg.preuve))) return null;
-    this.envoyer(JSON.stringify({ type: 'PREUVE', preuve: await preuve(this.cle, msg.nonce, `${this.code}|tablette`) }));
-    return cleDeSession(this.cle, msg.nonce, this.nonceTablette);
+    const cle = await cleDeSession(this.cle, msg.nonce, this.nonceTablette);
+    const reponse = await preuve(this.cle, msg.nonce, `${this.code}|tablette`);
+    this.envoyer(JSON.stringify({ type: 'PREUVE', preuve: reponse }));
+    return cle;
   }
 }
 

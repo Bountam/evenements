@@ -5,6 +5,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 const FILES = [
   'src/components/matrices/TeardownMatrix.tsx',
   'src/components/matrices/InstallFestMatrix.tsx',
+  'src/components/matrices/GenericMatrix.tsx',
+  'src/components/matrices/ReparothonMatrix.tsx',
   'src/components/DashboardShell.tsx',
   'src/components/shared/Button.tsx',
   'src/components/shared/ConfirmDialog.tsx',

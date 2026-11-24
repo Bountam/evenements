@@ -15,6 +15,7 @@ import {
 import { networkManager } from './network';
 import MatrixSelector from './components/MatrixSelector';
 import DashboardShell from './components/DashboardShell';
+import MultiEventControlBar from './components/shared/MultiEventControlBar';
 import ReparothonMatrix from './components/matrices/ReparothonMatrix';
 import TeardownMatrix from './components/matrices/TeardownMatrix';
 import type { TabBadge } from './components/shared/TabSwitcher';
@@ -24,6 +25,7 @@ import { INSTALL_FEST_EXPORT_HEADER, installFestExportRows } from './utils/insta
 import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
 import UpdateModal from './components/shared/UpdateModal';
+import ImpactReportModal from './components/shared/ImpactReportModal';
 import Modal from './components/shared/Modal';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
@@ -805,236 +807,12 @@ export default function App() {
     }
   };
 
-  // EXPORTER LES DONNÉES DANS DIFFÉRENTS FORMATS (JSON, CSV, MD, LaTeX, Excel)
-  const handleExportData = async () => {
+  const [showImpactReportModal, setShowImpactReportModal] = useState(false);
+
+  // EXPORTER LES DONNÉES : ouvre le Centre de Rapport d'Impact (remplace window.prompt)
+  const handleExportData = () => {
     if (!activeEvent) return;
-
-    const format = prompt("Entrez le format d'exportation souhaité (json, csv, md, tex, xlsx) :", "json")?.toLowerCase().trim();
-    if (!format) return;
-    if (!['json', 'csv', 'md', 'tex', 'xlsx'].includes(format)) {
-      showToast("Format non supporté. Veuillez choisir parmi : json, csv, md, tex, xlsx.", "warning");
-      return;
-    }
-
-    try {
-      const eventId = activeEvent.id;
-      const tickets = await db.tickets.where('eventId').equals(eventId).toArray();
-      const technicians = await db.technicians.where('eventId').equals(eventId).toArray();
-      const participants = await db.participants.where('eventId').equals(eventId).toArray();
-      const attendees = await db.attendees.where('eventId').equals(eventId).toArray();
-
-      // Kiosque-concours : lignes triées par classement, temps lisible et résultat du tirage.
-      // La colonne « Temps (ms) » est conservée pour la réimportation.
-      const contestHeader = ['Rang', ...CONTACT_EXPORT_HEADER, 'Meilleur chrono', 'Temps (ms)', 'Tirage au sort'];
-      const raffleDraws = getRaffleDraws((await db.events.get(eventId)) || activeEvent);
-      const contestRows: Array<Array<string | number>> = [...participants]
-        .sort((a, b) => {
-          const aTime = a.timeMs && a.timeMs > 0 ? a.timeMs : Infinity;
-          const bTime = b.timeMs && b.timeMs > 0 ? b.timeMs : Infinity;
-          return aTime !== bTime ? aTime - bTime : a.registeredAt - b.registeredAt;
-        })
-        .map((p, idx) => {
-          const hasTime = typeof p.timeMs === 'number' && p.timeMs > 0;
-          const draw = [...raffleDraws].reverse().find(d => d.participantId === p.id);
-          return [
-            hasTime ? idx + 1 : '',
-            ...contactExportCells(readContact(p)),
-            hasTime ? formatTime(p.timeMs!) : '',
-            hasTime ? p.timeMs! : '',
-            draw ? (draw.status === 'gagnant' ? 'Gagnant' : 'Absent') : ''
-          ];
-        });
-
-      // Fiches « Devenir bénévole » remplies pendant l'activité : ajoutées à la fin de chaque export,
-      // colonnes propres à l'activité laissées vides
-      const volunteerSurveys = attendees.filter(a => a.extraData?.source === 'sondage_benevole');
-      const surveyRows = (header: string[], contactStart: number) =>
-        volunteerSurveys.map(a => {
-          const row: Array<string | number> = new Array(header.length).fill('');
-          row.splice(contactStart, CONTACT_EXPORT_HEADER.length, ...contactExportCells(readContact(a)));
-          return row;
-        });
-      contestRows.push(...surveyRows(contestHeader, 1));
-
-      // Install Fest : une ligne par ordinateur, champs lisibles (distribution, OS précédent, double démarrage)
-      const installHeader = INSTALL_FEST_EXPORT_HEADER;
-      const installRows: Array<Array<string | number>> = [...installFestExportRows(tickets), ...surveyRows(INSTALL_FEST_EXPORT_HEADER, 0)];
-
-      // Map technicien ID → numéro de table (pour l'export des tickets)
-      const techTableMap = new Map(technicians.map(t => [t.id, t.tableNumber ?? '']));
-
-      // Réparothon et autres activités (CSV et xlsx) : colonnes du formulaire de contact commun en tête
-      const repairHeader = [...CONTACT_EXPORT_HEADER, "Nom de l'appareil", 'Catégorie', "Système d'exploitation", 'Diagnostic', 'Technicien', 'Table Technicien', 'Statut', 'Remarques de résolution', 'Poids (kg)'];
-      const repairRows: Array<Array<string | number>> = tickets.map(t => [
-        ...contactExportCells(readContact(t)),
-        t.objectName,
-        t.objectCategory,
-        t.operatingSystem,
-        t.initialDiagnosis || '',
-        t.assignedTechName || '',
-        t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : '',
-        t.status,
-        t.resultRemarks || '',
-        t.weightKg || ''
-      ]);
-      repairRows.push(...surveyRows(repairHeader, 0));
-      const attendeeHeader = [...CONTACT_EXPORT_HEADER, 'Présent', 'Notes', 'Note de satisfaction', 'Commentaire'];
-      const attendeeRows: Array<Array<string | number>> = attendees.map(a => [
-        ...contactExportCells(readContact(a)),
-        a.presenceConfirmed ? 'Oui' : 'Non',
-        a.notes || '',
-        a.feedbackScore || '',
-        a.feedbackText || ''
-      ]);
-
-      let content = '';
-      let mimeType = 'text/plain';
-      let fileName = `insertech_export_${activeEvent.type}_${activeEvent.date}.${format}`;
-
-      if (format === 'json') {
-        content = JSON.stringify(await buildEventBackup(eventId), null, 2);
-        mimeType = 'application/json';
-      } else if (format === 'csv') {
-        mimeType = 'text/csv;charset=utf-8;';
-        if (activeEvent.type === 'reparothon') {
-          content = repairHeader.join(';') + "\n";
-          content += repairRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
-        } else if (activeEvent.type === 'install_fest_linux') {
-          content = installHeader.join(';') + "\n";
-          content += installRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
-        } else if (activeEvent.type === 'kiosque_concours') {
-          content = contestHeader.join(';') + "\n";
-          content += contestRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
-        } else {
-          content = attendeeHeader.join(';') + "\n";
-          content += attendeeRows.map(row => row.map(cell => escapeCsvCell(cell)).join(';')).join('\n');
-        }
-      } else if (format === 'md') {
-        mimeType = 'text/markdown';
-        content = `# Export Événement : ${activeEvent.name}\n`;
-        content += `**Date :** ${activeEvent.date}\n`;
-        content += `**Lieu :** ${activeEvent.location}\n`;
-        content += `**Lieu spécifique :** ${activeEvent.place || ''}\n`;
-        content += `**Partenaire :** ${activeEvent.partner || ''}\n`;
-        content += `**Type :** ${activeEvent.type}\n\n`;
-
-        if (activeEvent.type === 'reparothon') {
-          content += "| Nom visiteur | Courriel visiteur | Nom de l'appareil | Catégorie | Système d'exploitation | Diagnostic | Technicien | Table Technicien | Statut | Remarques de résolution | Poids (kg) |\n";
-          content += "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n";
-          content += tickets.map(t => `| ${t.visitorName} | ${t.visitorEmail || ''} | ${t.objectName} | ${t.objectCategory} | ${t.operatingSystem} | ${t.initialDiagnosis || ''} | ${t.assignedTechName || ''} | ${t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''} | ${t.status} | ${t.resultRemarks || ''} | ${t.weightKg || ''} |`).join('\n');
-        } else if (activeEvent.type === 'install_fest_linux') {
-          content += `| ${installHeader.join(' | ')} |\n`;
-          content += `|${installHeader.map(() => ' :--- ').join('|')}|\n`;
-          content += installRows.map(row => `| ${row.join(' | ')} |`).join('\n');
-        } else if (activeEvent.type === 'kiosque_concours') {
-          content += `| ${contestHeader.join(' | ')} |\n`;
-          content += `|${contestHeader.map(() => ' :--- ').join('|')}|\n`;
-          content += contestRows.map(row => `| ${row.join(' | ')} |`).join('\n');
-        } else {
-          content += "| Nom | Courriel | Présent | Notes | Note de satisfaction | Commentaire |\n";
-          content += "| :--- | :--- | :--- | :--- | :--- | :--- |\n";
-          content += attendees.map(a => `| ${a.name} | ${a.email || ''} | ${a.presenceConfirmed ? 'Oui' : 'Non'} | ${a.notes || ''} | ${a.feedbackScore || ''} | ${a.feedbackText || ''} |`).join('\n');
-        }
-      } else if (format === 'tex') {
-        mimeType = 'application/x-tex';
-        content = `\\documentclass{article}\n\\begin{document}\n\\title{Export Événement : ${escapeLatex(activeEvent.name)}}\n\\date{${escapeLatex(activeEvent.date)}}\n`;
-        content += `\\section{Lieu : ${escapeLatex(activeEvent.location)}, Lieu spécifique : ${escapeLatex(activeEvent.place || '')}, Partenaire : ${escapeLatex(activeEvent.partner || '')}}\n\n`;
-        if (activeEvent.type === 'reparothon') {
-          content += "\\begin{tabular}{l l l l l l l l l l l}\n";
-          content += tickets.map(t => [
-            escapeLatex(t.visitorName),
-            escapeLatex(t.visitorEmail || ''),
-            escapeLatex(t.objectName),
-            escapeLatex(t.objectCategory),
-            escapeLatex(t.operatingSystem),
-            escapeLatex(t.initialDiagnosis || ''),
-            escapeLatex(t.assignedTechName || ''),
-            escapeLatex(t.assignedTechId ? techTableMap.get(t.assignedTechId) ?? '' : ''),
-            escapeLatex(t.status),
-            escapeLatex(t.resultRemarks || ''),
-            escapeLatex(t.weightKg || '')
-          ].join(' & ') + ' \\\\').join('\n');
-          content += "\n\\end{tabular}\n";
-        } else if (activeEvent.type === 'install_fest_linux') {
-          content += `\\begin{tabular}{${installHeader.map(() => 'l').join(' ')}}\n`;
-          content += installRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
-          content += "\n\\end{tabular}\n";
-        } else if (activeEvent.type === 'kiosque_concours') {
-          content += `\\begin{tabular}{${contestHeader.map(() => 'l').join(' ')}}\n`;
-          content += contestRows.map(row => row.map(cell => escapeLatex(cell)).join(' & ') + ' \\\\').join('\n');
-          content += "\n\\end{tabular}\n";
-        } else {
-          content += "\\begin{tabular}{l l l l l l}\n";
-          content += attendees.map(a => [
-            escapeLatex(a.name),
-            escapeLatex(a.email || ''),
-            escapeLatex(a.presenceConfirmed ? 'Oui' : 'Non'),
-            escapeLatex(a.notes || ''),
-            escapeLatex(a.feedbackScore || ''),
-            escapeLatex(a.feedbackText || '')
-          ].join(' & ') + ' \\\\').join('\n');
-          content += "\n\\end{tabular}\n";
-        }
-        content += "\n\\end{document}\n";
-      } else if (format === 'xlsx') {
-        try {
-          let ws_data: any[][] = [];
-          if (activeEvent.type === 'reparothon') {
-            ws_data = [
-              repairHeader,
-              ...repairRows.map(row => row.map(cell => protectFormula(cell)))
-            ];
-          } else if (activeEvent.type === 'install_fest_linux') {
-            ws_data = [
-              installHeader,
-              ...installRows.map(row => row.map(cell => protectFormula(cell)))
-            ];
-          } else if (activeEvent.type === 'kiosque_concours') {
-            ws_data = [
-              contestHeader,
-              ...contestRows.map(row => row.map(cell => protectFormula(cell)))
-            ];
-          } else {
-            ws_data = [
-              attendeeHeader,
-              ...attendeeRows.map(row => row.map(cell => protectFormula(cell)))
-            ];
-          }
-
-          // Chargée à la demande : xlsx pèse près d'un tiers du JavaScript de l'application
-          const XLSX = await import('xlsx');
-          const wb = XLSX.utils.book_new();
-          const ws = XLSX.utils.aoa_to_sheet(ws_data);
-          // Filtre automatique : « Technique = Oui » en deux clics dans Excel
-          if (ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
-          XLSX.utils.book_append_sheet(wb, ws, "Export");
-          const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
-
-          const s2ab = (s: string) => {
-            const buf = new ArrayBuffer(s.length);
-            const view = new Uint8Array(buf);
-            for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
-            return buf;
-          };
-
-          const blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
-          const saved = await saveFile(fileName, blob);
-          if (saved === 'enregistre' && !isAndroidApp()) showToast(`Exportation Excel (${fileName}) terminée !`, "success");
-          return;
-        } catch (err) {
-          console.error(err);
-          showToast("Erreur lors de la génération du fichier Excel.", "error");
-          return;
-        }
-      }
-
-      const blob = new Blob([content], { type: mimeType });
-      const saved = await saveFile(fileName, blob);
-      if (saved === 'enregistre' && !isAndroidApp()) showToast(`Exportation (${fileName}) terminée !`, "success");
-    } catch (e) {
-      console.error(e);
-      showToast("Erreur lors de la génération du fichier d'exportation.", "error");
-    }
+    setShowImpactReportModal(true);
   };
 
   // IMPORTER LES DONNÉES DEPUIS UN FICHIER JSON
@@ -1898,6 +1676,9 @@ export default function App() {
             ) : null
           }
         >
+          {!IS_PUBLIC_WINDOW && currentTab !== 'public' && currentTab !== 'formulaire' && !IS_TABLET && (
+            <MultiEventControlBar activeEvent={activeEvent} onSelectEvent={handleSelectPastEvent} />
+          )}
           {activeEvent.type === 'reparothon' && (
             <ReparothonMatrix event={activeEvent} activeTab={currentTab as any} />
           )}
@@ -1919,6 +1700,11 @@ export default function App() {
         </DashboardShell>
         {renderNetModal()}
         {renderImportValidationModal()}
+        <ImpactReportModal
+          isOpen={showImpactReportModal}
+          onClose={() => setShowImpactReportModal(false)}
+          event={activeEvent}
+        />
         {IS_TABLET && (
           <PinDialog
             isOpen={showPinDialog}
@@ -1936,13 +1722,16 @@ export default function App() {
     return (
       <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
         <main className="flex-1 w-full max-w-xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-6">
-          <div className="flex items-center gap-3.5 justify-center">
-            <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-[#180A2b]">
-              <img src={logoImage} alt="" className="w-full h-full object-cover" />
+          <div className="flex items-center justify-between gap-3.5">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-[#180A2b]">
+                <img src={logoImage} alt="" className="w-full h-full object-cover" />
+              </div>
+              <h1 className="text-app-text font-bold text-xl tracking-tight uppercase font-display leading-none">
+                Insertech <span className="text-primary font-black">Événements</span>
+              </h1>
             </div>
-            <h1 className="text-app-text font-bold text-xl tracking-tight uppercase font-display leading-none">
-              Insertech <span className="text-primary font-black">Événements</span>
-            </h1>
+            <VolunteerSurveyButton />
           </div>
           <section aria-labelledby="join-title" className="bg-app-card border border-app-card-border rounded-3xl p-6 sm:p-8 space-y-4 text-center shadow-lg">
             <h2 id="join-title" className="font-display font-black uppercase tracking-wider text-lg">Rejoindre un événement</h2>

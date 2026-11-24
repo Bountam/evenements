@@ -92,7 +92,7 @@ export default function VolunteerSurveyButton({ eventId, className = '' }: Volun
     <>
       <Button size="sm" onClick={() => setOpen(true)} aria-label="Devenir bénévole" title="Remplir une fiche bénévole" className={className}>
         <HandHeart size={14} className="text-primary" aria-hidden="true" />
-        <span className="hidden md:inline">Devenir bénévole</span>
+        <span>Devenir bénévole</span>
       </Button>
       <Modal
         isOpen={open}

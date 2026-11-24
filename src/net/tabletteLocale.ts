@@ -58,6 +58,7 @@ interface Connexion {
   poignee: PoigneeTablette;
   lien: LienChiffre | null;
   delai: ReturnType<typeof setTimeout>;
+  chaine: Promise<void>;
 }
 
 export async function demarrerServeurTablette(
@@ -103,30 +104,44 @@ export async function demarrerServeurTablette(
       const delai = setTimeout(() => {
         if (!connexions.get(id)?.lien) echec(id);
       }, DELAI_POIGNEE_MS);
-      connexions.set(id, { poignee, lien: null, delai });
+      connexions.set(id, { poignee, lien: null, delai, chaine: Promise.resolve() });
       poignee.ouvrir();
     }),
-    await serveur.addListener('message', async ({ id, texte }) => {
+    await serveur.addListener('message', ({ id, texte }) => {
       const c = connexions.get(id);
       if (!c) return;
       if (c.lien) {
         c.lien.recevoirTexte(texte);
         return;
       }
-      const cleSession = await c.poignee.recevoir(texte);
-      if (!cleSession) {
-        echec(id);
-        return;
-      }
-      clearTimeout(c.delai);
-      echecs = 0;
-      const lien = new LienChiffre('PC hôte', cleSession, (t) => serveur.envoyer({ id, texte: t }).catch(() => lien.transportFerme()), () => fermer(id));
-      c.lien = lien;
-      // Un seul PC à la fois : une nouvelle liaison remplace les autres
-      for (const [autreId, autre] of connexions) {
-        if (autreId !== id && autre.lien) autre.lien.close();
-      }
-      onLien(lien);
+      c.chaine = c.chaine.then(async () => {
+        const courant = connexions.get(id);
+        if (!courant) return;
+        if (courant.lien) {
+          courant.lien.recevoirTexte(texte);
+          return;
+        }
+        const cleSession = await courant.poignee.recevoir(texte);
+        if (!cleSession) {
+          echec(id);
+          return;
+        }
+        if (!connexions.has(id)) return;
+        clearTimeout(courant.delai);
+        echecs = 0;
+        const lien = new LienChiffre(
+          'PC hôte',
+          cleSession,
+          (t) => serveur.envoyer({ id, texte: t }).catch(() => lien.transportFerme()),
+          () => fermer(id)
+        );
+        courant.lien = lien;
+        // Un seul PC à la fois : une nouvelle liaison remplace les autres
+        for (const [autreId, autre] of connexions) {
+          if (autreId !== id && autre.lien) autre.lien.close();
+        }
+        onLien(lien);
+      });
     }),
     await serveur.addListener('deconnexion', ({ id }) => {
       const c = connexions.get(id);

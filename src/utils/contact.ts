@@ -24,6 +24,8 @@ export const TECH_SKILLS: Array<{ id: TechSkill; label: string }> = [
 
 export const TSHIRT_SIZES: TshirtSize[] = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 
+export const PRONOUN_OPTIONS: string[] = ['Il / lui', 'Elle / elle', 'Iel / ellui', 'Autre'];
+
 export const MONTHS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
@@ -34,6 +36,8 @@ const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export interface ContactDraft {
   firstName: string;
   lastName: string;
+  pronouns: string;
+  pronounsCustom: string;
   phone: string;
   email: string;
   postalCode: string;
@@ -56,13 +60,15 @@ export type ContactErrors = Partial<Record<ContactErrorKey, string>>;
 
 // Ordre d'affichage des champs, pour placer le focus sur la première erreur
 export const CONTACT_FIELD_ORDER: ContactErrorKey[] = [
-  'firstName', 'lastName', 'phone', 'email', 'contact', 'postalCode', 'roles',
+  'firstName', 'lastName', 'pronounsCustom', 'phone', 'email', 'contact', 'postalCode', 'roles',
   'dietaryRestrictions', 'birthDay', 'consentActivity', 'consentVolunteer'
 ];
 
 export const emptyContactDraft = (mode: ContactMode): ContactDraft => ({
   firstName: '',
   lastName: '',
+  pronouns: '',
+  pronounsCustom: '',
   phone: '',
   email: '',
   postalCode: '',
@@ -121,6 +127,10 @@ export const validateContact = (draft: ContactDraft, mode: ContactMode): Contact
   if (!lastName) errors.lastName = 'Indiquez le nom de famille.';
   else if (lastName.length > 60) errors.lastName = '60 caractères au maximum.';
 
+  if (draft.pronouns === 'Autre' && draft.pronounsCustom.trim().length > 40) {
+    errors.pronounsCustom = '40 caractères au maximum.';
+  }
+
   const phone = normalizePhone(draft.phone, draft.outsideCanada);
   if (phone) {
     if (draft.outsideCanada) {
@@ -164,15 +174,41 @@ export const validateContact = (draft: ContactDraft, mode: ContactMode): Contact
   return errors;
 };
 
+export const COORDINATE_ERROR_KEYS = new Set<ContactErrorKey>([
+  'firstName', 'lastName', 'pronounsCustom', 'phone', 'email', 'contact', 'postalCode', 'consentActivity'
+]);
+
+export const VOLUNTEER_ERROR_KEYS = new Set<ContactErrorKey>([
+  'roles', 'dietaryRestrictions', 'birthDay', 'consentVolunteer'
+]);
+
+export const validateContactStep = (
+  draft: ContactDraft,
+  mode: ContactMode,
+  section: 'coordinates' | 'volunteer'
+): ContactErrors => {
+  const allErrors = validateContact(draft, mode);
+  const allowedKeys = section === 'coordinates' ? COORDINATE_ERROR_KEYS : VOLUNTEER_ERROR_KEYS;
+  const filtered: ContactErrors = {};
+  for (const key of CONTACT_FIELD_ORDER) {
+    if (allowedKeys.has(key) && allErrors[key]) {
+      filtered[key] = allErrors[key];
+    }
+  }
+  return filtered;
+};
+
 export const firstContactError = (errors: ContactErrors): ContactErrorKey | undefined =>
   CONTACT_FIELD_ORDER.find((key) => errors[key]);
 
 // Les réponses cachées (bénévolat décoché, Technique décoché) ne sont jamais conservées
 export const buildContactInfo = (draft: ContactDraft, mode: ContactMode, source: ContactSource, now: number): ContactInfo => {
   const volunteering = mode === 'volunteer' || draft.wantsToVolunteer;
+  const pronouns = draft.pronouns === 'Autre' ? cleanName(draft.pronounsCustom) : draft.pronouns.trim();
   const contact: ContactInfo = {
     firstName: cleanName(draft.firstName),
     lastName: cleanName(draft.lastName),
+    pronouns,
     phone: normalizePhone(draft.phone, draft.outsideCanada),
     email: normalizeEmail(draft.email),
     postalCode: normalizePostal(draft.postalCode, draft.outsideCanada),
@@ -213,13 +249,19 @@ export const readContact = (record: {
   extraData?: Record<string, any>;
 }): ContactInfo => {
   const stored = record.extraData?.contact as ContactInfo | undefined;
-  if (stored && typeof stored.firstName === 'string') return stored;
+  if (stored && typeof stored.firstName === 'string') {
+    return {
+      ...stored,
+      pronouns: typeof stored.pronouns === 'string' ? stored.pronouns : ''
+    };
+  }
   const name = cleanName(record.name || record.visitorName || '');
   const space = name.indexOf(' ');
   const consentAt = record.extraData?.consentContact ? record.extraData?.consentAt ?? null : null;
   return {
     firstName: space === -1 ? name : name.slice(0, space),
     lastName: space === -1 ? '' : name.slice(space + 1),
+    pronouns: '',
     phone: '',
     email: (record.email || record.visitorEmail || '').trim().toLowerCase(),
     postalCode: record.postalCode || '',
@@ -244,7 +286,7 @@ const isoDate = (ms: number | null) => (ms ? new Date(ms).toISOString().slice(0,
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export const CONTACT_EXPORT_HEADER = [
-  'Prénom', 'Nom', 'Téléphone', 'Courriel', 'Code postal', 'Hors Canada', 'Bénévole',
+  'Prénom', 'Nom', 'Pronoms', 'Téléphone', 'Courriel', 'Code postal', 'Hors Canada', 'Bénévole',
   ...VOLUNTEER_ROLES.map((r) => r.label),
   ...TECH_SKILLS.map((s) => s.label),
   'Véhicule', 'Taille t-shirt', 'Restrictions alimentaires', 'Anniversaire',
@@ -257,6 +299,7 @@ export const contactExportCells = (contact: ContactInfo): string[] => {
   return [
     contact.firstName,
     contact.lastName,
+    contact.pronouns || '',
     contact.outsideCanada ? contact.phone : formatPhone(contact.phone),
     contact.email,
     contact.postalCode,

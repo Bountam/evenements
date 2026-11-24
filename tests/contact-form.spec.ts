@@ -93,16 +93,22 @@ test('Formulaire de contact : réparothon et activité générique', async ({ pa
   await page.locator('#eventName').fill('Réparothon CI');
   await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
   await page.getByRole('button', { name: "Créer l'activité" }).click();
+  await page.getByRole('group', { name: "Catégorie d'appareil" }).getByRole('button', { name: 'Cellulaire' }).click();
+  await page.getByRole('group', { name: "Marque de l'appareil" }).getByRole('button', { name: 'Samsung' }).click();
+  await page.getByRole('group', { name: 'Gamme ou modèle' }).getByRole('button', { name: 'Galaxy S' }).click();
+  await page.getByRole('group', { name: 'Domaine du problème' }).getByRole('button', { name: /Problème Matériel/i }).click();
+  await page.getByRole('group', { name: "Symptômes de l'appareil" }).getByRole('button', { name: /Écran \/ Clavier \/ Boîtier/i }).click();
+  await page.getByRole('button', { name: /^Continuer/i }).click();
+  await page.getByRole('button', { name: /Inscrire le participant/i }).click();
   await page.locator('#rp-firstName').fill('Sophie');
   await page.locator('#rp-lastName').fill('Côté');
   await page.locator('#rp-phone').fill('438 555 9876');
-  await page.getByPlaceholder('Ex. Asus ZenBook 14 ou Samsung S21').fill('Samsung S20');
-  await page.getByPlaceholder("Ex. L'ordinateur surchauffe et s'éteint après 5 minutes de jeu.").fill('Écran fissuré');
   await page.locator('form button[type="submit"]').first().click();
   await expect(page.getByText('Cochez ce consentement ou retirez les coordonnées.')).toBeVisible();
   await page.locator('#rp-consentActivity').check();
   await page.locator('form button[type="submit"]').first().click();
-  await expect(page.getByRole('heading', { name: 'Sophie Côté' }).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Gestion Techniciens' }).click();
+  await expect(page.getByText('Sophie Côté').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Menu principal' }).click();
   await page.getByRole('radio', { name: /Fresque du Numérique/ }).click();
@@ -158,6 +164,7 @@ test('Exporter tous les contacts : un onglet, colonnes de ciblage', async ({ pag
   const dialog = page.getByRole('dialog', { name: 'Devenir bénévole' });
   await dialog.locator('#vol-firstName').fill('Nadia');
   await dialog.locator('#vol-lastName').fill('Pelletier');
+  await dialog.getByRole('button', { name: 'Iel / ellui' }).click();
   await dialog.locator('#vol-phone').fill('5145551234');
   await dialog.getByLabel('Technique', { exact: true }).check();
   await dialog.getByLabel('Linux', { exact: true }).check();
@@ -181,10 +188,102 @@ test('Exporter tous les contacts : un onglet, colonnes de ciblage', async ({ pag
     Source: 'Sondage bénévole',
     Prénom: 'Nadia',
     Nom: 'Pelletier',
+    Pronoms: 'Iel / ellui',
     Téléphone: '514 555-1234',
     Bénévole: 'Oui',
     Technique: 'Oui',
     Linux: 'Oui',
     Accueil: ''
   });
+});
+
+// Réparothon : 1 question par écran, problèmes allégés avec icônes, sobriété Étape 3 et Étape 4 Bénévolat conditionnelle
+test("Réparothon : Étape 4 bénévolat conditionnelle et sobriété de l'Étape 3", async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.setViewportSize({ width: 800, height: 1280 });
+  await page.goto(URL);
+
+  await page.getByRole('radio', { name: /^Réparothon/ }).click();
+  await page.locator('#eventName').fill('Réparothon Étape 4 CI');
+  await page.getByPlaceholder('Ex. Montréal, QC').fill('Montréal');
+  await page.getByRole('button', { name: "Créer l'activité" }).click();
+
+  // 1 seule question affichée à la fois : Catégorie d'abord (Marque/Modèle/Problème masqués)
+  await expect(page.getByRole('group', { name: "Catégorie d'appareil" })).toBeVisible();
+  await expect(page.getByRole('group', { name: "Marque de l'appareil" })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Gamme ou modèle' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Domaine du problème' })).toHaveCount(0);
+
+  // Enchaînement automatique : Catégorie -> Marque -> Modèle -> Domaine -> 4 cartes Problème
+  await page.getByRole('group', { name: "Catégorie d'appareil" }).getByRole('button', { name: 'Portable' }).click();
+  await expect(page.getByRole('group', { name: "Catégorie d'appareil" })).toHaveCount(0);
+  await page.getByRole('group', { name: "Marque de l'appareil" }).getByRole('button', { name: 'Lenovo' }).click();
+  await page.getByRole('group', { name: 'Gamme ou modèle' }).getByRole('button', { name: 'ThinkPad' }).click();
+  await page.getByRole('group', { name: 'Domaine du problème' }).getByRole('button', { name: /Problème Matériel/i }).click();
+
+  // Exactement 4 cartes de problèmes matériels affichées, multi-sélection possible
+  const symptomButtons = page.getByRole('group', { name: "Symptômes de l'appareil" }).getByRole('button');
+  await expect(symptomButtons).toHaveCount(4);
+  await page.getByRole('button', { name: /Alimentation \/ Batterie/i }).click();
+  await page.getByRole('button', { name: /Surchauffe \/ Nettoyage/i }).click();
+  await page.getByRole('button', { name: /^Continuer/i }).click();
+
+  // Écran dédié « Avez-vous un autre appareil à inscrire ? » (OS modifiable discrètement ici)
+  await expect(page.getByRole('heading', { name: /Avez-vous un autre appareil à inscrire/i })).toBeVisible();
+  await expect(page.getByLabel(/Système d'exploitation de/i)).toHaveValue('windows');
+  await expect(page.getByRole('button', { name: /\+ Ajouter un autre appareil/ })).toHaveCount(1);
+  await page.getByRole('button', { name: /Inscrire le participant/i }).click();
+
+  // Étape 3 : formulaire Participant seul à l'écran, sans panier empilé ni questions dépliées
+  await expect(page.getByRole('heading', { name: /3\. Inscription d'un participant/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Avez-vous un autre appareil/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Devenir bénévole' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Étape 4/ })).toHaveCount(0);
+
+  // Cocher « Je souhaite donner des heures de bénévolat » ajoute l'Étape 4 sans déplier les questions sur l'Étape 3
+  await page.getByLabel('Je souhaite donner des heures de bénévolat').check();
+  await expect(page.getByRole('button', { name: /Étape 4\s+Bénévolat/i })).toBeVisible();
+  await expect(page.getByText('Comment aimeriez-vous aider ? *')).toHaveCount(0);
+
+  const nextStep4Btn = page.getByRole('button', { name: /Étape 4 : Questions bénévolat/i });
+  await expect(nextStep4Btn).toBeVisible();
+
+  // La validation Loi 25 des coordonnées bloque le passage vers l'Étape 4 si incomplet
+  await nextStep4Btn.click();
+  await expect(page.getByText('Indiquez le prénom.')).toBeVisible();
+  await expect(page.getByText('Indiquez le nom de famille.')).toBeVisible();
+  await expect(page.getByText('Indiquez au moins un courriel ou un téléphone.')).toBeVisible();
+  await expect(page.getByText('Comment aimeriez-vous aider ? *')).toHaveCount(0);
+
+  // Remplir les coordonnées + pronoms inclusifs + consentement activité puis passer à l'Étape 4
+  await page.locator('#rp-firstName').fill('Marc');
+  await page.locator('#rp-lastName').fill('Lavoie');
+  await page.getByRole('button', { name: 'Autre', exact: true }).click();
+  await page.locator('#rp-pronounsCustom').fill('il / iel');
+  await page.locator('#rp-phone').fill('514 555-2468');
+  await nextStep4Btn.click();
+  await expect(page.getByText('Cochez ce consentement ou retirez les coordonnées.')).toBeVisible();
+  await page.locator('#rp-consentActivity').check();
+  await nextStep4Btn.click();
+
+  // Étape 4 : questions de bénévolat en gros boutons tactiles
+  await expect(page.getByRole('heading', { name: /4\. Questions de bénévolat Insertech/i })).toBeVisible();
+  await expect(page.getByText('Marc Lavoie (il / iel)')).toBeVisible();
+  await expect(page.getByText('Comment aimeriez-vous aider ? *')).toBeVisible();
+  await page.getByLabel('Technique', { exact: true }).check();
+  await page.getByLabel('Linux', { exact: true }).check();
+  await page.getByLabel("J'ai un véhicule").check();
+  await page.getByRole('button', { name: 'M', exact: true }).click();
+  await page.locator('#rp-consentVolunteer').check();
+
+  await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();
+  await expect(page.getByText('Appareil enregistré pour Marc Lavoie !')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Gestion Techniciens' }).click();
+  await expect(page.getByText('Marc Lavoie').first()).toBeVisible();
+  await expect(page.getByText('(il / iel)').first()).toBeVisible();
+  await expect(page.getByText('Futur bénévole').first()).toBeVisible();
+
+  expect(errors).toEqual([]);
 });

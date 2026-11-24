@@ -12,8 +12,32 @@ import { PORT_TABLETTE } from './tabletteLocale';
 const TOUR_MS = 2000;
 const PAUSE_APRES_REFUS_MS = 10_000;
 const DELAI_CONNEXION_MS = 5000;
-const SONDE_MANUELLE_MS = 10_000;
+const SONDE_MANUELLE_MS = 4_000;
 const MANUELLES_KEY = 'insertech_tablettes_manuelles';
+
+// Horloge exécutée dans un Web Worker quand le navigateur l'autorise : évite le ralentissement
+// à 1×/min imposé par Chrome/Edge lorsque l'onglet du PC hôte passe en arrière-plan.
+function creerHorloge(ms: number, cb: () => void): () => void {
+  try {
+    if (typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && typeof URL?.createObjectURL === 'function') {
+      const code = `setInterval(() => postMessage(0), ${ms});`;
+      const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
+      const worker = new Worker(url);
+      worker.onmessage = () => cb();
+      worker.onerror = () => {
+        // Repli géré seulement si la création échoue ; en erreur d'exécution, on garde un intervalle sûr
+      };
+      return () => {
+        worker.terminate();
+        URL.revokeObjectURL(url);
+      };
+    }
+  } catch {
+    // Repli ci-dessous (ex. origine file:// ou navigateur restreint)
+  }
+  const timer = setInterval(cb, ms);
+  return () => clearInterval(timer);
+}
 
 export interface FicheTablette {
   app: 'insertech';
@@ -125,7 +149,9 @@ export function adresseValide(ip: string): boolean {
 }
 
 export class HoteLocal {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private arretHorloge: (() => void) | null = null;
+  private arretEvenements: (() => void) | null = null;
+  private enTour = false;
   private candidats = new Map<string, Candidat>();
   private vues = new Map<string, TabletteVue>();
   private liens = new Map<string, LienChiffre>();
@@ -144,14 +170,35 @@ export class HoteLocal {
   ) {}
 
   demarrer() {
-    if (this.timer) return;
-    this.tour();
-    this.timer = setInterval(() => this.tour(), TOUR_MS);
+    if (this.arretHorloge) return;
+    void this.tour();
+    this.arretHorloge = creerHorloge(TOUR_MS, () => {
+      void this.tour();
+    });
+    if (typeof window !== 'undefined') {
+      const relancer = () => {
+        this.derniereSonde = 0;
+        void this.tour();
+      };
+      const onVisibility = () => {
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') relancer();
+      };
+      document?.addEventListener?.('visibilitychange', onVisibility);
+      window.addEventListener('focus', relancer);
+      window.addEventListener('online', relancer);
+      this.arretEvenements = () => {
+        document?.removeEventListener?.('visibilitychange', onVisibility);
+        window.removeEventListener('focus', relancer);
+        window.removeEventListener('online', relancer);
+      };
+    }
   }
 
   arreter() {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    this.arretHorloge?.();
+    this.arretHorloge = null;
+    this.arretEvenements?.();
+    this.arretEvenements = null;
     for (const lien of this.liens.values()) lien.close();
     this.liens.clear();
   }
@@ -233,7 +280,7 @@ export class HoteLocal {
         const adresse = `${ip}:${port}`;
         if (this.liens.has(adresse)) return;
         try {
-          const fiche = await lireFiche(ip, port, 1500);
+          const fiche = await lireFiche(ip, port, 3000);
           this.candidats.set(adresse, { ip, port, fiche, manuelle: true, vuA: Date.now() });
         } catch {
           // Pas de réponse : elle garde son dernier état
@@ -267,22 +314,28 @@ export class HoteLocal {
   }
 
   private async tour() {
-    await Promise.all([this.lireLanceur(), this.sonderManuelles()]);
-    for (const [adresse, c] of this.candidats) {
-      if (this.liens.has(adresse) || this.enCours.has(adresse)) continue;
-      const precedente = this.vues.get(adresse);
-      if (c.fiche.session === null) {
-        this.majVue(adresse, { etat: precedente?.etat === 'perdue' ? 'perdue' : 'sans_session' });
-        continue;
+    if (this.enTour) return;
+    this.enTour = true;
+    try {
+      await Promise.all([this.lireLanceur(), this.sonderManuelles()]);
+      for (const [adresse, c] of this.candidats) {
+        if (this.liens.has(adresse) || this.enCours.has(adresse)) continue;
+        const precedente = this.vues.get(adresse);
+        if (c.fiche.session === null) {
+          this.majVue(adresse, { etat: precedente?.etat === 'perdue' ? 'perdue' : 'sans_session' });
+          continue;
+        }
+        if (c.fiche.session !== this.code) {
+          this.majVue(adresse, { etat: 'autre_session' });
+          continue;
+        }
+        if ((this.pauseJusqua.get(adresse) ?? 0) > Date.now()) continue;
+        this.appeler(adresse, c);
       }
-      if (c.fiche.session !== this.code) {
-        this.majVue(adresse, { etat: 'autre_session' });
-        continue;
-      }
-      if ((this.pauseJusqua.get(adresse) ?? 0) > Date.now()) continue;
-      this.appeler(adresse, c);
+      this.notifier();
+    } finally {
+      this.enTour = false;
     }
-    this.notifier();
   }
 
   private appeler(adresse: string, c: Candidat) {
@@ -301,7 +354,8 @@ export class HoteLocal {
     let preuveEnvoyee = false;
     const poignee = new PoigneeHote(this.cle, this.code, (texte) => {
       envoiPreuveA = performance.now();
-      ws.send(texte);
+      if (ws.readyState === WebSocket.OPEN) ws.send(texte);
+      else ws.close();
     });
     const delai = setTimeout(() => {
       if (!lien) ws.close();
@@ -336,7 +390,10 @@ export class HoteLocal {
         lien = new LienChiffre(
           c.fiche.nom || adresse,
           resultat,
-          (t) => ws.send(t),
+          (t) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(t);
+            else ws.close();
+          },
           () => ws.close()
         );
         this.liens.set(adresse, lien);
