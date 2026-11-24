@@ -46,6 +46,13 @@ VIAddVersionKey "LegalCopyright" "Copyright © 2026 Insertech"
 !insertmacro MUI_LANGUAGE "French"
 
 Section "Installer"
+  ; Fermer toute instance en cours (y compris le compagnon SQLite qui reste actif 2 min
+  ; en arrière-plan après la fermeture de la fenêtre) afin de libérer le verrou sur l'exécutable.
+  DetailPrint "Fermeture des instances en cours de ${APP_NAME}..."
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM InsertechEvenements.exe'
+  Pop $0
+  Sleep 800
+
   SetOutPath "$INSTDIR"
   File "/oname=InsertechEvenements.exe" "${EXE}"
   WriteUninstaller "$INSTDIR\Desinstaller.exe"
@@ -66,6 +73,11 @@ SectionEnd
 ; Les données (événements, participants, tirages) restent dans %LOCALAPPDATA%\InsertechEvenements :
 ; la désinstallation ne les efface pas.
 Section "Uninstall"
+  DetailPrint "Fermeture des instances en cours de ${APP_NAME}..."
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM InsertechEvenements.exe'
+  Pop $0
+  Sleep 800
+
   Delete "$INSTDIR\InsertechEvenements.exe"
   Delete "$INSTDIR\Desinstaller.exe"
   RMDir "$INSTDIR"
