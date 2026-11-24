@@ -1,6 +1,6 @@
 # GEMINI.md — Guide Architecture & Conventions (`insertech-tableau-evenements`)
 
-Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.5.0.
+Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.6.0.
 
 ---
 
