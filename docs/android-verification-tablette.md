@@ -37,21 +37,22 @@ Deux listes : la **première fois** qu'on installe une nouvelle version (une seu
 - [ ] Une inscription faite sur une tablette apparaît sur le PC en moins d'une seconde.
 - [ ] Couper le Wi-Fi d'une tablette 30 secondes puis le remettre : elle est rappelée seule et ses saisies arrivent.
 
-### Modes et verrouillage
+### Rôles, onboarding et verrouillage Kiosque
 
-- [ ] Choisir **Kiosque formulaire**, verrouiller, fermer puis rouvrir l'application : elle reste dans le formulaire.
+- [ ] Après le scan QR, le parcours guidé demande l'événement (sauté s'il n'y en a qu'un seul), le rôle, puis **1 seul champ** `Nom, prénom ou surnom *` (ou Nom + Table + Spécialités pour **Animateur Réparateur**).
+- [ ] Choisir **Kiosque d'inscription**, cliquer **Verrouiller le kiosque**, fermer puis rouvrir l'application : elle reste verrouillée dans le formulaire.
+- [ ] Maintenir le petit **cadenas (`🔒`) 2 secondes** en haut à droite ouvre la demande de code PIN (**`0000`** par défaut).
 - [ ] Le bon code déverrouille ; trois mauvais codes bloquent 30 secondes.
 - [ ] Changer le code sur le PC change celui des tablettes connectées.
 - [ ] Verrouillée en kiosque, 30 minutes sans toucher : l'écran reste allumé.
 - [ ] Verrouillée : les barres du haut et du bas sont cachées ; Retour et Accueil ne sortent pas de l'application.
 - [ ] Le bon code déverrouille et rend la tablette à la normale (barres visibles, épinglage retiré).
-- [ ] En mode libre, Retour ferme une fenêtre, puis revient au choix du mode, puis demande avant de quitter.
+- [ ] En mode libre (Accueil, Réparateur, Assistant, Formateur, Juge), aucun bouton de verrouillage ni d'Écran Public n'apparaît ; le logo Insertech ramène au menu principal où les **sessions actives** restent accessibles en 1 tap.
 
-### Écran public et téléviseur
+### Écran public (Laptop hôte)
 
-- [ ] Mode **Écran public** : plein écran, paysage, l'écran ne se met pas en veille.
-- [ ] Smart View vers le Chromecast ou le téléviseur, données mobiles coupées (noter le résultat dans [ecran-public-chromecast.md](ecran-public-chromecast.md), même un échec).
-- [ ] Sur le téléviseur, le chrono et le tirage suivent en direct.
+- [ ] L'**Écran Public** s'ouvre uniquement depuis le **PC Laptop hôte** (jamais sur tablette/cellulaire) : vérifier HDMI ou Caster vers le téléviseur (voir [ecran-public-chromecast.md](ecran-public-chromecast.md)).
+- [ ] Sur le téléviseur, les noms sont anonymisés (Loi 25 : ex. « Sophie C. ») et les chronos/tirages suivent en direct.
 
 ### Mise à jour envoyée par le PC
 
@@ -70,7 +71,7 @@ Deux listes : la **première fois** qu'on installe une nouvelle version (une seu
 - [ ] Même version de l'application sur toutes les tablettes et le PC (numéro en bas de l'accueil).
 - [ ] Hotspot du cellulaire allumé, **données mobiles coupées**, tablettes et PC sur ce Wi-Fi.
 - [ ] Ouvrir l'application et rejoindre l'événement (QR du PC).
-- [ ] Choisir le mode de chaque tablette, puis **Verrouiller ce mode**.
+- [ ] Choisir le rôle de chaque tablette (Accueil, Réparateur, Assistant, Formateur, Juge, Administrateur ou Kiosque d'inscription) ; cliquer **Verrouiller le kiosque** uniquement pour les tablettes en libre-service visiteur.
 - [ ] Faire une inscription d'essai sur chaque tablette et la voir arriver sur le PC, puis la supprimer.
 - [ ] Faire une sauvegarde JSON du PC.
 

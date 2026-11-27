@@ -1,7 +1,6 @@
 # Écran public sur un téléviseur ou un Chromecast
 
-L'écran public (chronos en direct, classement, tirage) peut s'afficher sur un grand écran **sans internet** et
-**sans que le PC hôte écoute sur le réseau** : aucune fenêtre du pare-feu Windows, aucun droit administrateur.
+L'écran public (chronos en direct, classement, tirage, file Réparothon anonymisée Loi 25) s'affiche depuis le **PC Laptop hôte** sur un grand écran **sans internet** et **sans que le PC hôte écoute sur le réseau** : aucune fenêtre du pare-feu Windows, aucun droit administrateur. *(Depuis la version 1.7.0, l'Écran Public est réservé au Laptop hôte et n'est plus proposé sur mobile/tablette afin d'épurer les interfaces terrain.)*
 
 Trois voies, de la plus sûre à la moins sûre :
 

@@ -1,6 +1,7 @@
 # 📋 Insertech — Tableau de bords événementiel
 
-> **Documentation complète · Version 1.1.0 · Rédigée en français (Canada)**
+> **Documentation complète · Version 1.7.2 · Rédigée en français (Canada)**
+> Voir aussi [CHANGELOG.md](CHANGELOG.md) pour l'historique détaillé des versions depuis la `1.4.0`.
 
 ---
 
@@ -93,15 +94,15 @@ Insertech - Tableau de bords événementiel/
     ├── App.tsx                   → Composant racine : navigation, import/export, événements
     ├── net/                      → Réseau local : appel des tablettes, poignée de main, chiffrement, mises à jour
     ├── native/android.ts         → Appels aux plugins Android (plein écran, épinglage, liens, mise à jour)
-    ├── utils/                    → Exports (saveFile.ts), verrouillage des modes (modeLock.ts), lien du QR…
+    ├── utils/                    → Contact & Loi 25 (contact.ts), rapports d'impact (impactReport.ts), lexique réparation (repairLexicon.ts), anti-veille (wakeLock.ts), exports (saveFile.ts), verrouillage/rôles (modeLock.ts), lien du QR…
     │
     └── components/
-        ├── DashboardShell.tsx    → Coquille du tableau de bord (en-tête + onglets)
+        ├── DashboardShell.tsx    → Coquille du tableau de bord (en-têtes épurés par appareil/rôle, logo = menu principal, icône synchro seule)
         ├── MatrixSelector.tsx    → Écran de création/sélection d'un événement
-        ├── matrices/             → Modules par type d'événement (Réparothon, Kiosque-Concours, Install Fest, générique)
+        ├── matrices/             → Modules par type d'événement : Réparothon (+ ReparateurCockpit, AssistantCockpit, AdminMapAndGodMode), Kiosque-Concours (+ JudgeConcoursCockpit 2 joueurs / 10 pistes), Install Fest, Générique (+ FormateurEvaluationPanel)
         ├── reseau/               → Fenêtres Réseau local du PC et de la tablette, mise à jour des tablettes
-        ├── tablette/             → Rejoindre un événement, choix et verrouillage du mode de la tablette
-        └── shared/               → Composants réutilisables (graphiques, chrono, classement, tirage, QR…)
+        ├── tablette/             → Rejoindre un événement, onboarding mobile 4 étapes (MobileOnboardingWizard), PIN & verrouillage kiosque (ModeControls, PinDialog)
+        └── shared/               → Composants réutilisables (ContactForm 1-2-3, ImpactReportModal, MultiEventControlBar, VolunteerSurveyButton, graphiques, chrono, classement, tirage, QR…)
 ```
 
 ### 📝 Description de chaque fichier
@@ -2169,7 +2170,7 @@ npm run build:linux
 Cela génère le binaire portable `InsertechEvenements-linux-x64` à la racine (idéal pour les *Install Fest Linux* ou les postes sous Debian/Ubuntu/Mint). Au premier lancement (`./InsertechEvenements-linux-x64`), il extrait automatiquement le logo du chapiteau magique et enregistre un raccourci Freedesktop (`~/.local/share/applications/insertech-evenements.desktop`) sans demander de mot de passe administrateur (`sudo`).
 
 **Installeurs.** La CI produit aussi, à partir des mêmes exécutables :
-- `InsertechEvenements-Setup-<version>.exe` (NSIS, `packaging/windows/installer.nsi`) : installation sans droits administrateur dans `%LOCALAPPDATA%\Programs`, raccourcis menu Démarrer et bureau, désinstallation depuis les paramètres Windows. Les données (`%LOCALAPPDATA%\InsertechEvenements`) sont conservées à la désinstallation.
+- `InsertechEvenements-Setup-<version>.exe` (NSIS, `packaging/windows/installer.nsi`) : installation sans droits administrateur dans `%LOCALAPPDATA%\Programs`, fermeture automatique de toute instance en arrière-plan de `InsertechEvenements.exe` avant l'installation ou la désinstallation, raccourcis menu Démarrer et bureau. Les données (`%LOCALAPPDATA%\InsertechEvenements`) sont conservées à la désinstallation.
 - `insertech-evenements_<version>_amd64.deb` (`packaging/linux/build-deb.sh`) : `sudo apt install ./insertech-evenements_<version>_amd64.deb`, puis lancer « Insertech Événements » depuis le menu ou `insertech-evenements`.
 
 Le lanceur affiche toujours l'interface embarquée dans l'exécutable : un `index.html` posé à côté est ignoré. Pour tester un autre bundle, définir `INSERTECH_DEV_HTML=/chemin/vers/index.html`.
@@ -2228,8 +2229,12 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 
 1. Installer l'APK sur chaque tablette (voir la [section 22](#22-application-android)) et la brancher sur le même hotspot.
 2. Ouvrir l'application, puis **Scanner le QR du PC** (ou viser le QR avec l'appareil photo Samsung).
-3. La tablette apparaît dans la liste du PC, qui l'appelle ; elle reçoit toutes les données de l'activité.
-4. Choisir le mode de la tablette (**Animateur**, **Écran public** ou **Kiosque formulaire**), puis **Verrouiller ce mode**.
+3. La tablette apparaît dans la liste du PC, qui l'appelle ; elle reçoit toutes les données de l'activité et lance le parcours guidé en **4 étapes** (`MobileOnboardingWizard`) :
+   - **1. Événement actif** *(sauté automatiquement s'il n'y en a qu'un seul)* ;
+   - **2. Rôle** adapté à l'événement (Accueil, Réparateur, Assistant, Formateur, Juge, Administrateur, Kiosque d'inscription — jamais d'Écran Public sur mobile) ;
+   - **3. Identification rapide** en **1 seul champ** `Nom, prénom ou surnom *` (accepté même si le bénévole est introuvable en base), ou profil technique (Nom + Table + Spécialités) pour le Réparateur ;
+   - **4. Espace dédié** avec en-tête épuré (logo Insertech = Menu principal, icône synchro seule Bleu/Jaune/Rouge, 1 seul bouton de rôle).
+4. Pour une tablette en libre-service visiteur (**Kiosque d'inscription**), cliquer sur **Verrouiller le kiosque** (maintenir le cadenas discret 2 secondes + code PIN **`0000`** par défaut pour déverrouiller). Si l'utilisateur revient au menu principal, les **sessions actives** restent accessibles directement en 1 tap.
 
 > [!NOTE]
 > Tablettes et PC doivent être sur le **même Wi-Fi**, et le hotspot ne doit pas isoler les appareils. Aucun accès à internet n'est nécessaire. Liste à cocher la veille : [docs/android-verification-tablette.md](docs/android-verification-tablette.md).
@@ -2285,22 +2290,19 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
 | Spécialités logicielles | ❌ | Cases à cocher multiples : `windows`, `mac`, `linux`, `autre` |
 | Numéro de table | ❌ | Nombre entier (ex: `3`) |
 
-### 19.4 Formulaire de participant (Kiosque-Concours)
+### 19.4 Formulaire de contact uniformisé en étapes `1 - 2 - (3)` (`ContactForm.tsx`)
 
-| Champ | Obligatoire | Valeurs / Format |
-|---|---|---|
-| Nom complet | ✅ | Texte libre |
-| Courriel | ✅ | Format courriel |
-| Code postal | ❌ | Ex: `H2W 1Y4` |
+Utilisé sur le Kiosque-Concours, le Cockpit Juge, l'Install Fest, les activités génériques, le sondage « Devenir bénévole » et (en étapes 3–4) le Réparothon :
 
-### 19.5 Formulaire d'inscrit générique
-
-| Champ | Obligatoire | Valeurs / Format |
-|---|---|---|
-| Nom complet | ✅ | Texte libre |
-| Courriel | ❌ | Format courriel |
-| Présence confirmée | ❌ | Booléen (coché par défaut) |
-| Notes | ❌ | Texte libre |
+| Étape | Champ | Obligatoire | Valeurs / Format |
+|---|---|---|---|
+| **1. Identité** | Nom, prénom ou surnom | ✅ | Champ unique (ex. `Alex` ou `Sophie Côté`, découpé automatiquement pour les exports Excel/CSV et l'anonymisation Loi 25) |
+| **1. Identité** | Pronoms | ❌ | Petites bulles neutres sans icône genrée (`Il / lui`, `Elle / elle`, `Iel / ellui`, `Autre`) |
+| **2. Contact** | Téléphone | ✅ *(1 des 2)* | Formatage live `XXX XXX-XXXX` + puces 1-tap indicatifs Québec (`514`, `438`, `263`, `450`, `579`, `418`, `581`, `819`, `873`) |
+| **2. Contact** | Courriel | ✅ *(1 des 2)* | Puces 1-tap domaines fréquents (`@gmail.com`, `@hotmail.com`, `@hotmail.fr`, `@outlook.com`, `@yahoo.ca`, `@icloud.com`, `@proton.me`, `@videotron.ca`, `@bell.net`), filtrées après `@` |
+| **2. Contact** | Code postal (Canada) | ❌ | Format canadien `A1A 1A1` (marché canadien uniquement, aucune option *Hors Canada*) |
+| **2. Contact** | Consentement Loi 25 | ✅ *(si contact)* | Requis pour enregistrer les coordonnées |
+| **3. Bénévolat** *(conditionnel)* | Rôles, compétences, véhicule, t-shirt, consentement bénévole | ✅ *(si coché)* | Affiché uniquement si le participant souhaite devenir bénévole (ou via le bouton *Devenir bénévole*) |
 
 ---
 
@@ -2478,11 +2480,9 @@ faut désinstaller (exporter les données avant).
 
 ### Rejoindre un événement
 
-1. Sur le PC : ouvrir l'activité, puis la fenêtre **Réseau local**. Elle affiche un QR (`insertech://rejoindre?code=…&cle=…`).
-2. Sur la tablette : **Scanner le QR du PC** dans l'application, ou viser le QR avec l'appareil photo Samsung.
-   Sans appareil photo, taper le code et la clé à la main.
-3. Choisir le mode de la tablette (kiosque, écran public…) et, si besoin, **Verrouiller ce mode** avec le code
-   à 4 chiffres réglé sur le PC.
+1. Sur le PC (toujours en mode Administrateur avec anti-veille automatique) : ouvrir l'activité, puis la fenêtre **Réseau local**. Elle affiche un QR (`insertech://rejoindre?code=…&cle=…`).
+2. Sur la tablette : **Scanner le QR du PC** dans l'application, ou viser le QR avec l'appareil photo Samsung. Sans appareil photo, taper le code et la clé à la main.
+3. Suivre le parcours guidé en 4 étapes (événement → rôle → identification rapide en 1 champ ou profil Réparateur → vue du rôle). Le verrouillage (**Verrouiller le kiosque**) est réservé au rôle **Kiosque d'inscription** (maintenir le cadenas discret 2 secondes + code PIN **`0000`** par défaut pour déverrouiller). En revenant au menu principal (clic sur le logo Insertech), les **sessions actives** apparaissent directement pour y retourner en 1 tap.
 
 ### Déboguer
 
@@ -2527,4 +2527,4 @@ du navigateur. L'écran allumé et le paysage passent par `@capacitor-community/
 
 ---
 
-*Tableau de bords événementiel — Insertech · Documentation à jour pour la version 1.4.0 et l'application Android native · Novembre 2026*
+*Tableau de bords événementiel — Insertech · Documentation à jour pour la version 1.7.2+ (voir [CHANGELOG.md](CHANGELOG.md)) · Novembre 2026*
