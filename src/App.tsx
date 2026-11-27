@@ -773,7 +773,9 @@ export default function App() {
   const handleSelectPastEvent = (event: EventSettings) => {
     localStorage.setItem('insertech_active_event_id', event.id);
     setActiveEvent(event);
-    if (event.type === 'reparothon' || event.type === 'install_fest_linux') {
+    if (IS_TABLET && workRole === 'kiosque_formulaire') {
+      setCurrentTab('formulaire');
+    } else if (event.type === 'reparothon' || event.type === 'install_fest_linux') {
       setCurrentTab('accueil');
     } else if (event.type === 'kiosque_concours') {
       setCurrentTab('pistes');
@@ -1762,12 +1764,45 @@ export default function App() {
 
   // Tablette : l'accueil sert seulement à rejoindre l'activité du PC hôte (ni création, ni import, ni suppression)
   if (IS_TABLET) {
+    const availableEvents = hostActiveEvents.length > 0 ? hostActiveEvents : pastEvents;
+    const renderReturnToEvents = (label: string) =>
+      availableEvents.length > 0 ? (
+        <div className="space-y-2 text-left pt-1">
+          <p className="text-micro font-bold uppercase tracking-wider text-app-text-muted text-center">
+            {label}
+          </p>
+          <div className="space-y-2">
+            {availableEvents.map((evt) => (
+              <button
+                key={evt.id}
+                type="button"
+                onClick={() => {
+                  setShowRoleWizardStep(null);
+                  handleSelectPastEvent(evt);
+                }}
+                className="w-full min-h-14 px-4 py-3 rounded-xl bg-primary text-secondary font-display font-black uppercase tracking-wide text-sm flex items-center justify-between gap-3 shadow-sm hover:opacity-95 transition cursor-pointer text-left"
+              >
+                <div className="min-w-0">
+                  <div className="truncate">{evt.name}</div>
+                  {(evt.date || evt.location) && (
+                    <div className="text-micro font-sans font-semibold normal-case opacity-80 truncate">
+                      {[evt.date, evt.location].filter(Boolean).join(' • ')}
+                    </div>
+                  )}
+                </div>
+                <ArrowRight size={18} className="shrink-0" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null;
+
     return (
       <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
         <main className="flex-1 w-full max-w-xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-6">
           <div className="flex items-center justify-between gap-3.5">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-[#180A2b]">
+              <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-secondary">
                 <img src={logoImage} alt="" className="w-full h-full object-cover" />
               </div>
               <h1 className="text-app-text font-bold text-xl tracking-tight uppercase font-display leading-none">
@@ -1784,22 +1819,36 @@ export default function App() {
             {sessionCode ? (
               <>
                 <p role="status" className="text-sm font-bold text-primary">
-                  Connectée à la session {sessionCode}. En attente de l'activité du PC hôte…
+                  {availableEvents.length > 0
+                    ? `Connectée à la session ${sessionCode}. Choisissez une activité active pour y revenir :`
+                    : `Connectée à la session ${sessionCode}. En attente de l'activité du PC hôte…`}
                 </p>
+                {renderReturnToEvents(
+                  availableEvents.length > 1 ? 'Sessions actives sur le PC hôte' : 'Session active sur le PC hôte'
+                )}
                 <button
                   type="button"
                   onClick={() => setShowNetModal(true)}
-                  className="w-full min-h-12 flex items-center justify-center gap-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm cursor-pointer"
+                  className={
+                    availableEvents.length > 0
+                      ? 'w-full min-h-11 flex items-center justify-center gap-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-bold font-display uppercase tracking-wider text-xs hover:border-primary/60 transition cursor-pointer'
+                      : 'w-full min-h-12 flex items-center justify-center gap-2 rounded-xl bg-primary text-secondary font-black font-display uppercase tracking-wider text-sm cursor-pointer'
+                  }
                 >
                   <Wifi size={16} aria-hidden="true" />
                   <span>Voir la connexion</span>
                 </button>
               </>
             ) : (
-              <RejoindreEvenement codePropose={proposedJoinCode} onJoined={(code) => setSessionCode(code)} />
+              <>
+                {renderReturnToEvents(
+                  availableEvents.length > 1 ? 'Revenir dans une activité active' : 'Revenir dans l’activité active'
+                )}
+                <RejoindreEvenement codePropose={proposedJoinCode} onJoined={(code) => setSessionCode(code)} />
+              </>
             )}
           </section>
-          <p className="text-center text-[10px] text-app-text-muted">v{currentVersion}</p>
+          <p className="text-center text-micro text-app-text-muted">v{currentVersion}</p>
         </main>
         {renderNetModal()}
       </div>

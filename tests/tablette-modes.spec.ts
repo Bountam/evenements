@@ -114,6 +114,10 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
   await expect(page.getByRole('heading', { name: 'Rejoindre un événement' })).toBeVisible();
   await expect(page.getByRole('button', { name: "Créer l'activité" })).toHaveCount(0);
 
+  // Possibilité de revenir directement dans l'activité active sans rester bloqué sur l'écran d'accueil tablette
+  await page.getByRole('button', { name: /Kiosque tablette CI/i }).click();
+  await expect(page.getByRole('button', { name: /Kiosque d'inscription/ })).toBeVisible();
+
   expect(errors).toEqual([]);
 });
 
