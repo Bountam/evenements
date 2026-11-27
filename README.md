@@ -121,7 +121,7 @@ Toutes les variables CSS du thème (couleurs, typographie) et les classes utilit
 Le "dictionnaire" du projet. Il définit la forme exacte de toutes les données : un ticket de réparation, un technicien, un participant, etc. TypeScript utilise ces définitions pour détecter les erreurs de code avant même de lancer l'application.
 
 #### `src/db.ts`
-Le "cerveau de stockage". Il définit les 5 tables de la base de données locale et expose les fonctions pour les manipuler. Utilise **Dexie.js**, une bibliothèque qui simplifie l'utilisation d'IndexedDB.
+Le "cerveau de stockage". Il définit les 8 tables de la base de données locale (`events`, `tickets`, `technicians`, `participants`, `attendees`, `snapshots`, `ifixitCache`, `repairGuides`, schéma Dexie v3) et expose les fonctions pour les manipuler. Utilise **Dexie.js**, une bibliothèque qui simplifie l'utilisation d'IndexedDB.
 
 #### `src/network.ts`
 Le "cerveau réseau". Gère la communication entre le PC hôte et les tablettes, uniquement sur le réseau local : le PC appelle les tablettes, qui écoutent (voir la section 6).
@@ -547,35 +547,50 @@ export type SyncMessage =
 
 IndexedDB, c'est comme une petite base de données SQL, mais elle vit **directement dans ton navigateur** ! Pas besoin de serveur. Les données survivent même si tu fermes et rouvres l'onglet. La bibliothèque **Dexie.js** est utilisée pour simplifier les requêtes, car IndexedDB brut est assez compliqué.
 
-### 5.1 Schéma Dexie — Les 5 tables
+### 5.1 Schéma Dexie — Les 8 tables (version 3)
 
 ```typescript
 class InsertechDatabase extends Dexie {
-  // Table des événements
-  events!: Table<EventSettings>;
-
-  // Table des tickets de réparation (Réparothon)
-  tickets!: Table<RepairTicket>;
-
-  // Table des techniciens (Réparothon)
-  technicians!: Table<Technician>;
-
-  // Table des participants au concours (Kiosque-Concours)
-  participants!: Table<Participant>;
-
-  // Table des présents aux autres événements (Générique)
-  attendees!: Table<GenericAttendee>;
+  events!: Table<EventSettings>;           // Événements
+  tickets!: Table<RepairTicket>;           // Tickets de réparation (Réparothon)
+  technicians!: Table<Technician>;         // Techniciens (Réparothon)
+  participants!: Table<Participant>;       // Participants au concours (Kiosque-Concours)
+  attendees!: Table<GenericAttendee>;      // Présences aux autres activités (Générique)
+  snapshots!: Table<BackupSnapshot>;       // Sauvegardes de secours automatiques
+  ifixitCache!: Table<IfixitCacheEntry>;   // Cache local iFixit (recherches & guides, TTL 7 jours)
+  repairGuides!: Table<OfflineRepairGuide>;// Bibliothèque hors-ligne de guides (Laptop → tablettes)
 
   constructor() {
     super('insertech_events_db'); // Nom de la base IndexedDB
 
     this.version(1).stores({
-      // Format : 'clé primaire, index1, index2, ...'
       events:       'id, name, type, date',
       tickets:      'id, eventId, status, visitorName, assignedTechId',
       technicians:  'id, eventId, name, status',
       participants: 'id, eventId, name, email, timeMs, registeredAt',
-      attendees:    'id, eventId, name, presenceConfirmed, registeredAt'
+      attendees:    'id, eventId, name, presenceConfirmed, registeredAt',
+      snapshots:    'id, eventId, timestamp'
+    });
+
+    this.version(2).stores({
+      events:       'id, name, type, date',
+      tickets:      'id, eventId, status, visitorName, assignedTechId',
+      technicians:  'id, eventId, name, status',
+      participants: 'id, eventId, name, email, timeMs, registeredAt',
+      attendees:    'id, eventId, name, presenceConfirmed, registeredAt',
+      snapshots:    'id, eventId, timestamp',
+      ifixitCache:  'key, kind, updatedAt'
+    });
+
+    this.version(3).stores({
+      events:       'id, name, type, date',
+      tickets:      'id, eventId, status, visitorName, assignedTechId',
+      technicians:  'id, eventId, name, status',
+      participants: 'id, eventId, name, email, timeMs, registeredAt',
+      attendees:    'id, eventId, name, presenceConfirmed, registeredAt',
+      snapshots:    'id, eventId, timestamp',
+      ifixitCache:  'key, kind, updatedAt',
+      repairGuides: 'id, source, lang, updatedAt'
     });
   }
 }
@@ -583,13 +598,16 @@ class InsertechDatabase extends Dexie {
 
 **Pourquoi des index ?** Les colonnes listées dans les stores permettent de faire des recherches rapides. Par exemple, `where('eventId').equals('evt-123')` est ultra-rapide car `eventId` est indexé.
 
-| Table | Clé primaire | Colonnes indexées |
-|---|---|---|
-| `events` | `id` | `name`, `type`, `date` |
-| `tickets` | `id` | `eventId`, `status`, `visitorName`, `assignedTechId` |
-| `technicians` | `id` | `eventId`, `name`, `status` |
-| `participants` | `id` | `eventId`, `name`, `email`, `timeMs`, `registeredAt` |
-| `attendees` | `id` | `eventId`, `name`, `presenceConfirmed`, `registeredAt` |
+| Table | Clé primaire | Colonnes indexées | Rôle |
+|---|---|---|---|
+| `events` | `id` | `name`, `type`, `date` | Fiches des événements |
+| `tickets` | `id` | `eventId`, `status`, `visitorName`, `assignedTechId` | Appareils du Réparothon |
+| `technicians` | `id` | `eventId`, `name`, `status` | Techniciens bénévoles |
+| `participants` | `id` | `eventId`, `name`, `email`, `timeMs`, `registeredAt` | Participants au Kiosque-Concours |
+| `attendees` | `id` | `eventId`, `name`, `presenceConfirmed`, `registeredAt` | Participants aux activités génériques |
+| `snapshots` | `id` | `eventId`, `timestamp` | 3 instantanés de secours par événement |
+| `ifixitCache` | `key` | `kind`, `updatedAt` | Cache local iFixit (TTL 7 jours, exclu des mutations SQLite) |
+| `repairGuides` | `id` | `source`, `lang`, `updatedAt` | Bibliothèque hors-ligne distribuée en LAN avec les tickets |
 
 ### 5.2 `notifySync()` — Le système d'alerte inter-onglets
 
@@ -1420,6 +1438,25 @@ const playCelebrationSound = () => {
 ```
 
 L'animation de célébration déclenche aussi des confettis avec les couleurs d'Insertech (vert lime `#9ecd33` et violet `#480A94`).
+
+### 10.11 Cockpit Réparateur (`ReparateurCockpit`), Diagnostic hors-ligne & Bibliothèque de guides
+
+Lorsque l'animateur **Réparateur** prend un appareil en charge dans `src/components/matrices/reparothon/ReparateurCockpit.tsx`, la fiche du ticket actif propose **3 onglets** :
+
+| Onglet | Composant / Service | Fonctionnement |
+|---|---|---|
+| **`[Fiche]`** | `ReparateurCockpit.tsx` | Piste Temps Réel en 4 étapes (`1. Accueil` → `2. Diagnostic` → `3. Réparation` → `4. Rapport final`), appel à la table sur Écran Public, demande d'Assistant et tiroir Lexique. |
+| **`[Diagnostic]`** | `TicketDiagnosticPanel.tsx` + `src/utils/repairLexicon.ts` | Moteur de règles **100 % hors-ligne** (`DIAGNOSTIC_CHECKLIST_RULES`, `getDiagnosticSuggestions`) adapté au triage (`objectName`, catégorie, OS, `initialDiagnosis`) : affiche questions à poser (avec conseils techniques) et points de contrôle cochables en 1 tap (persistés dans `ticket.extraData.diagnosticChecks`). |
+| **`[Guides iFixit]`** | `IfixitGuidesPanel.tsx` + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Combine les guides hors-ligne ciblés, le relais LAN vers le Laptop serveur (`REQUEST_GUIDE_SEARCH`) et, si en ligne, l'API iFixit v2.0 (priorité `fr.ifixit.com`, repli automatique `www.ifixit.com` si `< 3` résultats FR, cache `db.ifixitCache` TTL 7 jours). Lecteur pas à pas intégré dans l'application (outils, pièces, difficulté, étapes, avertissements) avec **clic sur miniature pour ouvrir l'image pleine résolution si disponible** (sinon la miniature reste inchangée). |
+
+#### Bibliothèque locale hors-ligne & distribution LAN avec le participant
+
+- **Gestionnaire sur Laptop (`OfflineGuidesLibraryModal.tsx`) :** accessible aux administrateurs via **Plus → Bibliothèque de guides hors-ligne** :
+  - **9 fiches maison Insertech** pré-incluses (`BUILTIN_REPAIR_GUIDES` dans `src/utils/offlineGuideLibrary.ts`).
+  - **Pré-téléchargement iFixit** depuis le PC serveur (avec votre clé API stockée uniquement hors Git dans `.env.local`, secret CI `VITE_IFIXIT_API_KEY` ou `localStorage`), compressant 1 miniature par étape (via le relais local `/image` de `launcher/StorageCompanion.cs`) tout en conservant `fullResUrl`.
+  - Création de **fiches maison** personnalisées et **import / export JSON** d'un pack de guides.
+- **Filtrage strict selon l'inscription (`matchOfflineGuidesForTicket`) :** exclut automatiquement toute fiche dont la **marque**, la **catégorie**, l'**OS** ou les **symptômes** ne correspondent pas au ticket (ex. un guide batterie Dell n'apparaît jamais pour un PC Lenovo sous Linux lent).
+- **Distribution LAN ciblée (`src/network.ts`) :** dès l'inscription ou la mise à jour d'un ticket (et à `INITIAL_SYNC`), le PC hôte pousse automatiquement uniquement les guides pertinents vers les tablettes via `GUIDES_SYNC`, sans alourdir chaque delta de ticket.
 
 ---
 
@@ -2357,7 +2394,9 @@ Utilisé sur le Kiosque-Concours, le Cockpit Juge, l'Install Fest, les activité
 **Oui, totalement.** Une fois le fichier `dist/index.html` ouvert dans Chrome, aucune connexion Internet n'est requise pour utiliser les fonctionnalités de base (créer des tickets, gérer des techniciens, voir les statistiques). La synchronisation entre le PC et les tablettes passe **uniquement par le réseau local** (le hotspot du cellulaire, données mobiles coupées), jamais par internet.
 
 > [!NOTE]
-> Les seuls boutons qui utilisent internet sont sur le PC : chercher une nouvelle version sur GitHub et « Télécharger depuis GitHub » l'APK des tablettes. On peut s'en passer en apportant les fichiers sur une clé USB.
+> Les seuls usages optionnels d'internet sont :
+> - **Sur le PC (préparation / mises à jour) :** rechercher une nouvelle version sur GitHub, « Télécharger depuis GitHub » l'APK des tablettes, ou pré-télécharger des guides iFixit (avec miniatures) dans la **Bibliothèque de guides hors-ligne** avant l'événement.
+> - **En option pendant l'événement (si une connexion est disponible sur le PC ou une tablette) :** interroger l'API iFixit v2.0 en complément de la bibliothèque locale et afficher les photos d'étapes en pleine résolution au clic. Sans internet, le diagnostic local, les fiches maison et tous les guides distribués ou en cache restent **100 % utilisables**.
 
 ---
 
