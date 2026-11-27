@@ -62,7 +62,29 @@ Définis dans `src/types.ts` et gérés par `src/utils/modeLock.ts` + `src/compo
 
 ---
 
-## 4. Garde-fous du Design System (`scripts/check-design-tokens.js`)
+## 4. Fonctionnement des Mises à Jour & Releases
+
+- **Source unique de version (`package.json` + `scripts/sync-version.js`) :**
+  - `package.json` (`version` `X.Y.Z`) est la seule source de vérité.
+  - `node scripts/sync-version.js` propage automatiquement la version vers `launcher/InsertechLauncher.csproj` (`Version`, `FileVersion`, `AssemblyVersion`), `app.manifest` (`X.Y.Z.0`) et `android/app/build.gradle` (`versionName` + `versionCode = major * 10000 + minor * 100 + patch`, strictement croissant pour permettre à Android la mise à jour par-dessus).
+  - `npm run lint` échoue si une cible est désynchronisée (`scripts/sync-version.js --check`).
+- **Pipeline de publication GitHub Actions (`.github/workflows/ci-cd.yml` + `build.yml`) :**
+  - Pousser un tag `vX.Y.Z` correspondant exactement à `package.json` déclenche un build multiplateforme depuis un unique `dist/` : PWA/Web, `InsertechEvenements.exe`, `InsertechEvenements-linux-x64`, `InsertechEvenements-Android.apk`, installeur Windows NSIS (`InsertechEvenements-Setup-X.Y.Z.exe`) et `.deb`, puis publie la GitHub Release avec `SHA256SUMS.txt`.
+  - Les binaires ne sont pas committés dans Git (ignorés par `.gitignore`) ; ils sont publiés sur **GitHub Releases**.
+- **Détection & installation sur le poste PC (`src/utils/updateCheck.ts`, `src/components/shared/UpdateModal.tsx`) :**
+  - Requête légère JSON vers `https://api.github.com/repos/Bountam/evenements/releases/latest` (aucun téléchargement automatique d'exécutable).
+  - Affiche une pastille `Nouvelle version (X.Y.Z)` avec notes de version et liens vérifiés vers GitHub Releases ; options *Plus tard* (24 h, `insertech_update_postponed`) ou *Ignorer cette version* (`insertech_update_ignored`).
+  - Vérification bloquée pendant un chronomètre en cours ou une session hôte active ; `sauvegarderMaintenant()` (`src/utils/sqliteBackup.ts`) force la sauvegarde SQLite avant mise à jour.
+  - Sur Windows, l'installeur NSIS (`packaging/windows/installer.nsi`) ferme automatiquement `InsertechEvenements.exe` (y compris le compagnon SQLite actif 2 min en arrière-plan) avant d'écraser l'exécutable ; les données utilisateur dans `%LOCALAPPDATA%\InsertechEvenements` sont préservées.
+- **Mise à jour des tablettes Android par le PC en réseau local (`src/net/miseAJour.ts`, `VerificationMaj.java`, `InsertechNatifPlugin.java`) :**
+  - Depuis la fenêtre *Réseau local* du PC (**Mettre à jour les tablettes**), le PC sélectionne un `.apk` local (ou le télécharge depuis GitHub avec contrôle `SHA256SUMS.txt`) et le pousse vers les tablettes connectées sur la liaison chiffrée LAN, sans internet ni Play Store sur les tablettes.
+  - Transfert par morceaux de `64 Ko` avec reprise après coupure (`MAJ_PROPOSEE` → `MAJ_ACCEPTEE` `{ depuis }` → `MAJ_MORCEAU` / `MAJ_MORCEAU_OK` → `MAJ_FIN` → `MAJ_VERIFIEE`).
+  - Avant l'installation Android (`PackageInstaller`, avec confirmation utilisateur), la tablette vérifie SHA-256, nom du paquet, `versionCode` supérieur et **même certificat de signature** (`android/app/debug.keystore` en debug, ou keystore release via secrets CI). Une tablette verrouillée refuse tant qu'elle n'est pas déverrouillée.
+  - En cas d'écart de version entre le PC et une tablette connectée, un bandeau d'avertissement s'affiche dans l'en-tête (`mismatchedClientVersions`) tout en maintenant la synchronisation.
+
+---
+
+## 5. Garde-fous du Design System (`scripts/check-design-tokens.js`)
 
 Toujours respecter ces règles dans `src/` :
 - **Interdit :** `text-[...px]`, couleurs hexadécimales `[#...]`, espacements `p-0.2` / `m-0.2`, variantes `dark:`, et classes Tailwind dynamiques (`bg-${color}`).
@@ -70,7 +92,7 @@ Toujours respecter ces règles dans `src/` :
 
 ---
 
-## 5. Commandes de Validation & Build
+## 6. Commandes de Validation & Build
 
 ```powershell
 # 1. Types, design system et synchronisation de version
