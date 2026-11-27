@@ -27,6 +27,7 @@ import { showToast } from './components/shared/Toast';
 import MobileInstallModal from './components/shared/MobileInstallModal';
 import UpdateModal from './components/shared/UpdateModal';
 import ImpactReportModal from './components/shared/ImpactReportModal';
+import OfflineGuidesLibraryModal from './components/shared/OfflineGuidesLibraryModal';
 import Modal from './components/shared/Modal';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
@@ -93,6 +94,7 @@ export default function App() {
   const [deferredPwaPrompt, setDeferredPwaPrompt] = useState<any>(null);
   const [isStandalonePwa, setIsStandalonePwa] = useState<boolean>(false);
   const [showMobileInstallModal, setShowMobileInstallModal] = useState<boolean>(false);
+  const [showGuidesLibraryModal, setShowGuidesLibraryModal] = useState<boolean>(false);
 
   // Tablette / Mobile : onboarding 4 étapes, rôle actif et verrouillage Kiosque uniquement
   const [tabletMode, setTabletMode] = useState<ModeUsage | null>(() => (IS_TABLET ? readSavedMode() : null));
@@ -1693,6 +1695,7 @@ export default function App() {
           syncColor={syncColor}
           onOpenRolePicker={() => setShowRoleWizardStep(hostActiveEvents.length > 1 ? 'event' : 'role')}
           onLockScreen={!IS_TABLET ? () => setIsLaptopLocked(true) : undefined}
+          onOpenGuidesLibrary={!IS_TABLET ? () => setShowGuidesLibraryModal(true) : undefined}
           hideNavigation={IS_TABLET && isModeLocked}
           modeControls={
             IS_TABLET ? (
@@ -1741,6 +1744,10 @@ export default function App() {
           isOpen={showImpactReportModal}
           onClose={() => setShowImpactReportModal(false)}
           event={activeEvent}
+        />
+        <OfflineGuidesLibraryModal
+          isOpen={showGuidesLibraryModal}
+          onClose={() => setShowGuidesLibraryModal(false)}
         />
         <PinDialog
           isOpen={showPinDialog || isLaptopLocked}

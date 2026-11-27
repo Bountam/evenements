@@ -1,6 +1,6 @@
 # GEMINI.md — Guide Architecture & Conventions (`insertech-tableau-evenements`)
 
-Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.7.2.
+Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.8.0.
 
 ---
 
@@ -8,10 +8,11 @@ Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC
 
 - **Frontend :** React 19 + TypeScript + Tailwind CSS v4 + Vite (`vite-plugin-singlefile` générant `dist/index.html`).
 - **Base locale & Synchro :**
-  - `Dexie.js` (IndexedDB) dans `src/db.ts` (`events`, `tickets`, `technicians`, `participants`, `attendees`).
-  - Sauvegarde persistante SQLite hors navigateur (`src/utils/sqliteBackup.ts`) via le lanceur PC ou `InsertechStockage` sur Android.
-  - Synchronisation LAN chiffrée PC ↔ Tablettes Android via `P2PNetworkManager` (`src/network.ts`, `src/net/`) et `ServeurLocalPlugin.java` (WebSocket sur port `47630` avec `WifiLock` basse latence).
+  - `Dexie.js` (IndexedDB v3) dans `src/db.ts` (`events`, `tickets`, `technicians`, `participants`, `attendees`, `snapshots`, `ifixitCache`, `repairGuides`).
+  - Sauvegarde persistante SQLite hors navigateur (`src/utils/sqliteBackup.ts`) via le lanceur PC (`StorageCompanion.cs` inclut aussi le relais local `/image` allowlisté pour compresser les miniatures iFixit) ou `InsertechStockage` sur Android.
+  - Synchronisation LAN chiffrée PC ↔ Tablettes Android via `P2PNetworkManager` (`src/network.ts`, `src/net/`) et `ServeurLocalPlugin.java` (WebSocket sur port `47630` avec `WifiLock` basse latence) + distribution ciblée des guides hors-ligne (`GUIDES_SYNC`, `REQUEST_GUIDE_SEARCH`).
   - Synchronisation inter-onglets locale via `BroadcastChannel` (ex. fenêtre Écran Public `?vue=public`).
+  - Clé API iFixit optionnelle lue depuis `.env.local` (`VITE_IFIXIT_API_KEY`, ignoré par Git), le secret CI ou `localStorage`, jamais versionnée dans le dépôt.
 
 ---
 
@@ -36,7 +37,7 @@ Définis dans `src/types.ts` et gérés par `src/utils/modeLock.ts` + `src/compo
    - Assistant **1 question par écran** dans `src/components/matrices/ReparothonMatrix.tsx` : `Catégorie` → `Marque` → `Modèle` → `Matériel / Logiciel` → `4 cartes à icônes` → `Panier (Un autre appareil ?)` → `3. Inscription d'un participant` (`ContactForm` Loi 25 + pronoms) → `4. Questions de bénévolat Insertech` (conditionnel).
    - Bouton permanent `Devenir bénévole` dans l'en-tête (`VolunteerSurveyButton.tsx`).
 3. **`reparateur` (Animateur Réparateur) :**
-   - `src/components/matrices/reparothon/ReparateurCockpit.tsx` : file d'attente intelligente (`Recommandé pour toi`), **Piste Temps Réel en 4 étapes** (`1. Accueil` → `2. Diagnostic` → `3. Réparation` → `4. Rapport final en 3 écrans`), appel de table sur l'Écran Public, demande d'Assistant, et tiroir **Lexique hors-ligne** (`src/utils/repairLexicon.ts`) pour les 8 catégories de pannes.
+   - `src/components/matrices/reparothon/ReparateurCockpit.tsx` : file d'attente intelligente (`Recommandé pour toi`), 3 onglets sur le ticket actif (**`[Fiche]`** avec Piste Temps Réel en 4 étapes, **`[Diagnostic]`** local hors-ligne dans `TicketDiagnosticPanel.tsx` via `src/utils/repairLexicon.ts`, et **`[Guides iFixit]`** via `IfixitGuidesPanel.tsx` / `IfixitGuideViewer.tsx` combinant la bibliothèque locale `src/utils/offlineGuideLibrary.ts` à filtrage strict marque/catégorie/OS/symptômes, le relais LAN Laptop et l'API iFixit `src/services/ifixitService.ts` avec zoom image pleine résolution au clic si disponible), appel de table sur l'Écran Public et demande d'Assistant. Gestionnaire Laptop `OfflineGuidesLibraryModal.tsx` accessible depuis `MoreMenu` (**Bibliothèque de guides hors-ligne**).
 4. **`assistant` (Animateur Assistant) :**
    - `src/components/matrices/reparothon/AssistantCockpit.tsx` : réception des alertes `Demander Assistant`, accompagnement des visiteurs appelés aux tables et orientation de sortie (pièce de rechange / boutique Insertech).
 5. **`formateur` (Formateur) :**

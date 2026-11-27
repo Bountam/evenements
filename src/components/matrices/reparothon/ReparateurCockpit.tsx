@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Wrench, BookOpen, HandHeart, Megaphone, Check, CheckCircle, ArrowRight, ArrowLeft, Plus, Star
+  Wrench, BookOpen, HandHeart, Megaphone, Check, CheckCircle, ArrowRight, ArrowLeft, Plus, Star,
+  FileText, Stethoscope, BookOpenCheck
 } from 'lucide-react';
 import type { EventSettings, FollowUpType, RepairStage, RepairTicket, Technician, TicketStatus } from '../../../types';
 import { networkManager } from '../../../network';
@@ -8,10 +9,13 @@ import {
   FOLLOW_UP_LABELS,
   REPAIR_ACTIONS_CATALOG,
   REPLACEMENT_PARTS_OPTIONS,
+  getDiagnosticSuggestions,
   getLexiconEntriesForSymptoms
 } from '../../../utils/repairLexicon';
 import Modal from '../../shared/Modal';
 import { showToast } from '../../shared/Toast';
+import TicketDiagnosticPanel from './TicketDiagnosticPanel';
+import IfixitGuidesPanel from './IfixitGuidesPanel';
 
 interface ReparateurCockpitProps {
   event: EventSettings;
@@ -48,6 +52,7 @@ export default function ReparateurCockpit({
     }
   }, [preselectedTechId, technicians]);
   const [activeTicketId, setActiveTicketId] = useState<string>('');
+  const [activeSubTab, setActiveSubTab] = useState<'fiche' | 'diagnostic' | 'ifixit'>('fiche');
   const [showLexicon, setShowLexicon] = useState(false);
 
   // Création rapide de profil si besoin
@@ -75,6 +80,10 @@ export default function ReparateurCockpit({
 
   const activeTicket =
     myActiveTickets.find((t) => t.id === activeTicketId) || myActiveTickets[0] || null;
+
+  useEffect(() => {
+    setActiveSubTab('fiche');
+  }, [activeTicket?.id]);
 
   const isCompatible = (t: RepairTicket, tech: Technician) => {
     if (tech.specialties.includes(t.objectCategory)) return true;
@@ -168,6 +177,22 @@ export default function ReparateurCockpit({
       ...activeTicket,
       updatedAt: Date.now(),
       extraData: { ...activeTicket.extraData, checkedDiagSteps: next }
+    });
+    await onReload();
+  };
+
+  const toggleDiagnosticCheck = async (checkId: string) => {
+    if (!activeTicket) return;
+    const current = Array.isArray(activeTicket.extraData?.diagnosticChecks)
+      ? activeTicket.extraData.diagnosticChecks
+      : [];
+    const next = current.includes(checkId)
+      ? current.filter((id: string) => id !== checkId)
+      : [...current, checkId];
+    await networkManager.writeToDatabase('tickets', 'put', {
+      ...activeTicket,
+      updatedAt: Date.now(),
+      extraData: { ...activeTicket.extraData, diagnosticChecks: next }
     });
     await onReload();
   };
@@ -422,6 +447,16 @@ export default function ReparateurCockpit({
   const checkedSteps: string[] = Array.isArray(activeTicket.extraData?.checkedDiagSteps)
     ? activeTicket.extraData.checkedDiagSteps
     : [];
+  const diagnosticChecks: string[] = Array.isArray(activeTicket.extraData?.diagnosticChecks)
+    ? activeTicket.extraData.diagnosticChecks
+    : [];
+  const diagnosticSuggestions = getDiagnosticSuggestions(activeTicket);
+  const totalDiagItems =
+    diagnosticSuggestions.questions.length + diagnosticSuggestions.quickChecks.length;
+  const doneDiagItems = [
+    ...diagnosticSuggestions.questions.map((q) => q.id),
+    ...diagnosticSuggestions.quickChecks.map((c) => c.id)
+  ].filter((id) => diagnosticChecks.includes(id)).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -476,26 +511,105 @@ export default function ReparateurCockpit({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {STAGES.map((st) => (
-            <button
-              key={st.id}
-              type="button"
-              onClick={() => updateStage(st.id)}
-              className={`min-h-11 px-3 py-2 rounded-xl font-display font-bold uppercase text-xs cursor-pointer border ${
-                currentStage === st.id
-                  ? 'bg-primary text-secondary border-primary'
-                  : 'bg-app-input text-app-text-muted border-app-card-border'
+        {/* Navigation par onglets du ticket actif : [Fiche], [Diagnostic], [Guides iFixit] */}
+        <div
+          role="tablist"
+          aria-label="Vues du ticket actif"
+          className="grid grid-cols-3 gap-2 pt-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubTab === 'fiche'}
+            onClick={() => setActiveSubTab('fiche')}
+            className={`min-h-11 px-3 py-2 rounded-xl border-2 font-display font-bold uppercase text-xs cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === 'fiche'
+                ? 'bg-primary text-secondary border-primary'
+                : 'bg-app-input text-app-text border-app-card-border hover:border-primary/50'
+            }`}
+          >
+            <FileText size={14} aria-hidden="true" />
+            <span>Fiche</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubTab === 'diagnostic'}
+            onClick={() => setActiveSubTab('diagnostic')}
+            className={`min-h-11 px-3 py-2 rounded-xl border-2 font-display font-bold uppercase text-xs cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === 'diagnostic'
+                ? 'bg-primary text-secondary border-primary'
+                : 'bg-app-input text-app-text border-app-card-border hover:border-primary/50'
+            }`}
+          >
+            <Stethoscope size={14} aria-hidden="true" />
+            <span>Diagnostic</span>
+            <span
+              className={`text-micro px-1.5 py-0.5 rounded-full font-mono ${
+                activeSubTab === 'diagnostic'
+                  ? 'bg-secondary/20 text-secondary'
+                  : 'bg-app-card text-app-text-muted'
               }`}
             >
-              {st.label}
-            </button>
-          ))}
+              {doneDiagItems}/{totalDiagItems}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSubTab === 'ifixit'}
+            onClick={() => setActiveSubTab('ifixit')}
+            className={`min-h-11 px-3 py-2 rounded-xl border-2 font-display font-bold uppercase text-xs cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === 'ifixit'
+                ? 'bg-primary text-secondary border-primary'
+                : 'bg-app-input text-app-text border-app-card-border hover:border-primary/50'
+            }`}
+          >
+            <BookOpenCheck size={14} aria-hidden="true" />
+            <span>Guides iFixit</span>
+          </button>
         </div>
+
+        {activeSubTab === 'fiche' && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {STAGES.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => updateStage(st.id)}
+                className={`min-h-11 px-3 py-2 rounded-xl font-display font-bold uppercase text-xs cursor-pointer border ${
+                  currentStage === st.id
+                    ? 'bg-primary text-secondary border-primary'
+                    : 'bg-app-input text-app-text-muted border-app-card-border'
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
+      {activeSubTab === 'diagnostic' && (
+        <TicketDiagnosticPanel
+          ticket={activeTicket}
+          checkedIds={diagnosticChecks}
+          onToggleCheck={toggleDiagnosticCheck}
+          onOpenIfixit={() => setActiveSubTab('ifixit')}
+        />
+      )}
+
+      {activeSubTab === 'ifixit' && (
+        <IfixitGuidesPanel
+          ticket={activeTicket}
+          onOpenDiagnostic={() => setActiveSubTab('diagnostic')}
+        />
+      )}
+
       {/* ÉTAPE 1 : ACCUEIL À LA TABLE */}
-      {currentStage === 'accueil_table' && (
+      {activeSubTab === 'fiche' && currentStage === 'accueil_table' && (
         <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-4">
           <h4 className="text-lg font-display font-bold uppercase text-app-text">
             1. Accueil bienveillant à la table
@@ -527,7 +641,7 @@ export default function ReparateurCockpit({
       )}
 
       {/* ÉTAPE 2 : DIAGNOSTIC GUIDÉ */}
-      {currentStage === 'diagnostic' && (
+      {activeSubTab === 'fiche' && currentStage === 'diagnostic' && (
         <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-4">
           <h4 className="text-lg font-display font-bold uppercase text-app-text">2. Diagnostic étape par étape</h4>
           {lexiconEntries.map((entry) => (
@@ -579,7 +693,7 @@ export default function ReparateurCockpit({
       )}
 
       {/* ÉTAPE 3 : RÉPARATION */}
-      {currentStage === 'reparation' && (
+      {activeSubTab === 'fiche' && currentStage === 'reparation' && (
         <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-4">
           <h4 className="text-lg font-display font-bold uppercase text-app-text">3. Réparation & Pédagogie</h4>
           {lexiconEntries.map((entry) => (
@@ -618,7 +732,7 @@ export default function ReparateurCockpit({
       )}
 
       {/* ÉTAPE 4 : RAPPORT FINAL EN 3 ÉCRANS */}
-      {currentStage === 'rapport' && (
+      {activeSubTab === 'fiche' && currentStage === 'rapport' && (
         <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
           <span className="text-micro uppercase font-black text-primary block">
             Rapport final • Question {reportSubStep} sur 3

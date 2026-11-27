@@ -4,7 +4,23 @@ Toutes les évolutions notables d'**Insertech — Tableau de bords événementie
 
 ---
 
-## [À venir] — depuis `v1.7.2`
+## [1.8.0] — 2026-11-27
+
+### Ajouté
+- **Assistant de diagnostic local 100 % hors-ligne (`src/utils/repairLexicon.ts`, `TicketDiagnosticPanel.tsx`) :**
+  - Moteur de règles typé (`DIAGNOSTIC_CHECKLIST_RULES`, `getDiagnosticSuggestions`) filtré par catégorie, OS et mots-clés normalisés dans `initialDiagnosis` / `objectName` (alimentation, batterie, écran, lenteur/OS/disque, surchauffe/ventilateur, clavier/ports, Wi-Fi, mobile/tablette et PC tour).
+  - Onglet **`Diagnostic`** dans `ReparateurCockpit.tsx` avec résumé du triage, questions à poser avec conseils techniques et vérifications prioritaires cochables en 1 tap (persistées dans `ticket.extraData.diagnosticChecks`) + compteur de progression.
+- **Bibliothèque locale hors-ligne de guides & distribution LAN (`src/utils/offlineGuideLibrary.ts`, `src/db.ts`, `src/network.ts`, `OfflineGuidesLibraryModal.tsx`) :**
+  - Nouvelle table IndexedDB **`repairGuides`** (Dexie `version(3)`) incluant dès le démarrage **9 fiches pas à pas maison Insertech** (`BUILTIN_REPAIR_GUIDES`).
+  - Gestionnaire **Plus → Bibliothèque de guides hors-ligne** sur Laptop Administrateur pour gérer les fiches, pré-télécharger des guides depuis iFixit (avec compression automatique d'1 miniature par étape via le relais local sécurisé `/image` de `launcher/StorageCompanion.cs`), créer des fiches maison et importer/exporter des packs `.json`.
+  - **Filtrage strict selon l'inscription du participant (`matchOfflineGuidesForTicket`) :** exclusion automatique des guides d'une autre marque, catégorie, OS ou sans recouvrement de symptôme (ex. un guide batterie Dell n'apparaît jamais pour un PC Lenovo sous Linux lent).
+  - **Distribution LAN automatique avec le participant :** le Laptop serveur pousse uniquement les guides pertinents vers les tablettes via `GUIDES_SYNC` (à l'ajout/mise à jour du ticket et à `INITIAL_SYNC`) et répond aux recherches manuelles à la demande (`REQUEST_GUIDE_SEARCH` → `GUIDE_SEARCH_RESULTS`).
+- **Client API iFixit v2.0 + cache IndexedDB + lecteur intégré avec zoom HD (`src/services/ifixitService.ts`, `IfixitGuidesPanel.tsx`, `IfixitGuideViewer.tsx`) :**
+  - Table Dexie `ifixitCache` (Dexie `version(2)`, TTL 7 jours, repli hors-ligne sur le cache existant).
+  - Priorité `fr.ifixit.com` avec repli automatique sur `www.ifixit.com` si moins de 3 résultats FR, déduplication par `guideid`, filtres `Tous / FR / EN` et timeout strict de 6 s.
+  - Prise en charge sécurisée de la clé API iFixit (`Authorization: Bearer`) via `.env.local` (non suivi par Git), secret CI `VITE_IFIXIT_API_KEY`, ou saisie locale optionnelle dans l'interface (`localStorage`).
+  - Lecteur pas à pas 100 % intégré (`IfixitGuideViewer.tsx`) : difficulté, durée, outils, pièces, navigation `Précédent` / `Suivant`, puces `Attention` / `Rappel` / `Note`, et **clic sur la miniature d'étape pour ouvrir l'image pleine résolution si disponible** (sinon la miniature reste inchangée).
+- **Navigation par onglets dans `ReparateurCockpit.tsx` :** `[Fiche]`, `[Diagnostic]`, `[Guides iFixit]` sur la fiche du ticket actif.
 
 ### Corrigé
 - **Retour aux sessions actives sur tablette / cellulaire (`src/App.tsx`, `tests/tablette-modes.spec.ts`) :** lorsque l'utilisateur revient à l'écran d'accueil tablette (*Rejoindre un événement*) alors que l'appareil est déjà connecté au PC hôte (ou possède des activités synchronisées), les sessions actives s'affichent directement en gros boutons cliquables pour y revenir en 1 tap sans rester bloqué sur « En attente de l'activité du PC hôte… ». La restauration conserve également l'onglet `formulaire` pour le rôle `Kiosque d'inscription`.

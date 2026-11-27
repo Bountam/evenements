@@ -1,5 +1,14 @@
 import Dexie, { type Table } from 'dexie';
-import { EventSettings, RepairTicket, Technician, Participant, GenericAttendee, BackupSnapshot } from './types';
+import {
+  EventSettings,
+  RepairTicket,
+  Technician,
+  Participant,
+  GenericAttendee,
+  BackupSnapshot,
+  IfixitCacheEntry,
+  OfflineRepairGuide
+} from './types';
 
 // Nom du canal de communication inter-onglets
 const SYNC_CHANNEL_NAME = 'insertech_db_sync_channel';
@@ -71,6 +80,8 @@ class InsertechDatabase extends Dexie {
   participants!: Table<Participant>; // Pour le Kiosque-concours / Teardown
   attendees!: Table<GenericAttendee>; // Pour les autres types d'activités (fresque, ateliers, etc.)
   snapshots!: Table<BackupSnapshot>;  // Sauvegardes de secours automatiques
+  ifixitCache!: Table<IfixitCacheEntry>; // Cache local des recherches et guides iFixit
+  repairGuides!: Table<OfflineRepairGuide>; // Bibliothèque locale hors-ligne de guides (Laptop -> tablettes)
 
   constructor() {
     super('insertech_events_db');
@@ -83,6 +94,29 @@ class InsertechDatabase extends Dexie {
       participants: 'id, eventId, name, email, timeMs, registeredAt',
       attendees: 'id, eventId, name, presenceConfirmed, registeredAt',
       snapshots: 'id, eventId, timestamp'
+    });
+
+    // Version 2 : ajout du cache hors-ligne iFixit (sans modifier les tables existantes)
+    this.version(2).stores({
+      events: 'id, name, type, date',
+      tickets: 'id, eventId, status, visitorName, assignedTechId',
+      technicians: 'id, eventId, name, status',
+      participants: 'id, eventId, name, email, timeMs, registeredAt',
+      attendees: 'id, eventId, name, presenceConfirmed, registeredAt',
+      snapshots: 'id, eventId, timestamp',
+      ifixitCache: 'key, kind, updatedAt'
+    });
+
+    // Version 3 : bibliothèque hors-ligne de guides (fiches maison + guides iFixit pré-téléchargés)
+    this.version(3).stores({
+      events: 'id, name, type, date',
+      tickets: 'id, eventId, status, visitorName, assignedTechId',
+      technicians: 'id, eventId, name, status',
+      participants: 'id, eventId, name, email, timeMs, registeredAt',
+      attendees: 'id, eventId, name, presenceConfirmed, registeredAt',
+      snapshots: 'id, eventId, timestamp',
+      ifixitCache: 'key, kind, updatedAt',
+      repairGuides: 'id, source, lang, updatedAt'
     });
   }
 }
@@ -104,7 +138,7 @@ db.use({
       ...down,
       table(name) {
         const table = down.table(name);
-        if (name === 'snapshots') return table;
+        if (name === 'snapshots' || name === 'ifixitCache' || name === 'repairGuides') return table;
         return {
           ...table,
           mutate(req) {

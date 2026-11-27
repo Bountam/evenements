@@ -31,6 +31,8 @@ jobs:
         run: npm run lint
 
       - name: Bundle autonome (dist/)
+        env:
+          VITE_IFIXIT_API_KEY: ${{ secrets.VITE_IFIXIT_API_KEY }}
         run: npm run build:mobile
 
       - name: Installer Chromium pour le test de rendu

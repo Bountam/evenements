@@ -14,7 +14,8 @@ import {
   Sun,
   Moon,
   Lock,
-  UserCheck
+  UserCheck,
+  Library
 } from 'lucide-react';
 import type { FileBackupState } from '../utils/backupFile';
 import type { SqliteBackupStatus } from '../utils/sqliteBackup';
@@ -59,6 +60,7 @@ interface DashboardShellProps {
   syncColor?: SyncIndicatorColor;
   onOpenRolePicker?: () => void;
   onLockScreen?: () => void;
+  onOpenGuidesLibrary?: () => void;
   // Tablette : commandes de mode (verrouiller/déverrouiller Kiosque uniquement) affichées dans l'en-tête
   modeControls?: React.ReactNode;
   // Kiosque verrouillé : pas de retour au menu principal ni de fenêtre réseau
@@ -107,6 +109,7 @@ export default function DashboardShell({
   syncColor = 'red',
   onOpenRolePicker,
   onLockScreen,
+  onOpenGuidesLibrary,
   modeControls = null,
   hideNavigation = false,
   children
@@ -570,6 +573,21 @@ export default function DashboardShell({
                       >
                         <Download size={13} aria-hidden="true" />
                         <span>Rapport d'Impact & Exports</span>
+                      </Button>
+                    )}
+
+                    {!isMobileDevice && workRole === 'admin' && onOpenGuidesLibrary && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          close();
+                          onOpenGuidesLibrary();
+                        }}
+                        title="Gérer et pré-télécharger les guides de réparation hors-ligne"
+                        className="w-full !justify-start"
+                      >
+                        <Library size={13} className="text-primary" aria-hidden="true" />
+                        <span>Bibliothèque de guides hors-ligne</span>
                       </Button>
                     )}
 

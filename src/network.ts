@@ -1,6 +1,7 @@
 import { db, notifySync } from './db';
-import { SyncMessage, TrackState } from './types';
+import { OfflineRepairGuide, RepairTicket, SyncMessage, TrackState } from './types';
 import { getAppVersion, normalizeVersion } from './utils/updateCheck';
+import { getAllOfflineGuides, matchOfflineGuidesForTicket, searchOfflineGuidesLibrary } from './utils/offlineGuideLibrary';
 import type { Lien } from './net/lien';
 import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
 import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } from './net/tabletteLocale';
@@ -34,6 +35,9 @@ export type NetworkMessage =
         attendees: any[];
       };
     }
+  | { type: 'GUIDES_SYNC'; ticketId?: string; guides: OfflineRepairGuide[] }
+  | { type: 'REQUEST_GUIDE_SEARCH'; requestId: string; query: string; ticketId?: string }
+  | { type: 'GUIDE_SEARCH_RESULTS'; requestId: string; guides: OfflineRepairGuide[] }
   | MessageMaj;
 
 export type SyncIndicatorColor = 'blue' | 'yellow' | 'red';
@@ -68,6 +72,8 @@ class P2PNetworkManager {
 
   // Versions des tablettes connectées au PC principal (connectionId -> version X.Y.Z)
   private clientVersions = new Map<string, string>();
+  private sentGuideIdsByConn = new Map<string, Set<string>>();
+  private pendingGuideSearches = new Map<string, (guides: OfflineRepairGuide[]) => void>();
 
   // PC hôte : appel des tablettes du réseau local (voir src/net/hoteLocal.ts)
   private hoteLocal: HoteLocal | null = null;
@@ -641,6 +647,9 @@ class P2PNetworkManager {
     this.incomingChains.clear();
     this.lastClientPingAt.clear();
     this.clientVersions.clear();
+    this.sentGuideIdsByConn.clear();
+    this.pendingGuideSearches.forEach((resolve) => resolve([]));
+    this.pendingGuideSearches.clear();
     this.notifyClientVersions();
     if (wasClient) arreterServeurTablette().catch(() => {});
     this.isConnecting = false;
@@ -738,6 +747,70 @@ class P2PNetworkManager {
       type: 'CHRONO_ACTION',
       message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksState }
     });
+    await this.pushRelevantGuidesForTickets(tickets as RepairTicket[], conn);
+  }
+
+  // Distribue uniquement les guides pertinents des tickets vers les tablettes (sans surcharger DB_DELTA)
+  private async pushRelevantGuidesForTickets(tickets: RepairTicket[], targetConn?: Lien) {
+    if (this.role !== 'host' || !Array.isArray(tickets) || tickets.length === 0) return;
+    const targets = targetConn ? [targetConn] : this.connections.filter((c) => c.open);
+    if (targets.length === 0) return;
+
+    try {
+      const allGuides = await getAllOfflineGuides();
+      const relevantMap = new Map<string, OfflineRepairGuide>();
+      for (const t of tickets) {
+        if (!t || !t.id) continue;
+        for (const g of matchOfflineGuidesForTicket(t, allGuides, 3)) {
+          relevantMap.set(g.id, g);
+        }
+      }
+      if (relevantMap.size === 0) return;
+      const relevantList = Array.from(relevantMap.values());
+
+      for (const conn of targets) {
+        if (!conn.open) continue;
+        let sentSet = this.sentGuideIdsByConn.get(conn.connectionId);
+        if (!sentSet) {
+          sentSet = new Set<string>();
+          this.sentGuideIdsByConn.set(conn.connectionId, sentSet);
+        }
+        const unsent = relevantList.filter((g) => !sentSet!.has(g.id));
+        if (unsent.length > 0) {
+          conn.send({ type: 'GUIDES_SYNC', guides: unsent });
+          unsent.forEach((g) => sentSet!.add(g.id));
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur lors de la distribution des guides hors-ligne :', e);
+    }
+  }
+
+  // Tablette : interroger à la demande la bibliothèque locale du Laptop serveur via LAN
+  async searchHostGuides(query: string, ticketId?: string): Promise<OfflineRepairGuide[]> {
+    if (this.role !== 'client') return [];
+    const conn = this.connections[0];
+    if (!conn || !conn.open) return [];
+
+    const requestId = `gs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise<OfflineRepairGuide[]>((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.pendingGuideSearches.delete(requestId)) resolve([]);
+      }, 3000);
+
+      this.pendingGuideSearches.set(requestId, (guides) => {
+        clearTimeout(timer);
+        resolve(guides);
+      });
+
+      try {
+        conn.send({ type: 'REQUEST_GUIDE_SEARCH', requestId, query, ticketId });
+      } catch {
+        clearTimeout(timer);
+        this.pendingGuideSearches.delete(requestId);
+        resolve([]);
+      }
+    });
   }
 
   // L'hôte a ouvert une autre activité : la session la partage désormais et les tablettes basculent dessus.
@@ -819,6 +892,9 @@ class P2PNetworkManager {
               action: msg.action,
               data: msg.data
             });
+            if (msg.table === 'tickets' && msg.action === 'put' && msg.data) {
+              void this.pushRelevantGuidesForTickets([msg.data as RepairTicket]);
+            }
           } catch (e) {
             console.error('Erreur lors de la réplication DB_WRITE sur le Master:', e);
           }
@@ -850,6 +926,29 @@ class P2PNetworkManager {
           this.broadcastExcept(conn, { type: 'CHRONO_ACTION', message: msg.message });
           this.acknowledge(conn, msg.opId);
           break;
+
+        case 'REQUEST_GUIDE_SEARCH': {
+          try {
+            const allGuides = await getAllOfflineGuides();
+            let guides: OfflineRepairGuide[];
+            if (msg.query && msg.query.trim()) {
+              guides = searchOfflineGuidesLibrary(msg.query, allGuides).slice(0, 8);
+            } else if (msg.ticketId) {
+              const t = await db.tickets.get(msg.ticketId);
+              guides = t ? matchOfflineGuidesForTicket(t, allGuides, 6) : allGuides.slice(0, 6);
+            } else {
+              guides = allGuides.slice(0, 6);
+            }
+            if (conn.open) {
+              conn.send({ type: 'GUIDE_SEARCH_RESULTS', requestId: msg.requestId, guides });
+            }
+          } catch {
+            if (conn.open) {
+              conn.send({ type: 'GUIDE_SEARCH_RESULTS', requestId: msg.requestId, guides: [] });
+            }
+          }
+          break;
+        }
       }
     } else if (this.role === 'client') {
       // --- PARTIE CLIENT ---
@@ -958,6 +1057,27 @@ class P2PNetworkManager {
           // L'état complet des pistes ne contient pas encore les actions de cette tablette en attente
           if (msg.message.type === 'TRACKS_STATE_SYNC') this.reapplyPendingChronoActions();
           break;
+
+        case 'GUIDES_SYNC':
+          if (Array.isArray(msg.guides) && msg.guides.length > 0) {
+            await db.repairGuides.bulkPut(msg.guides);
+            notifySync();
+          }
+          break;
+
+        case 'GUIDE_SEARCH_RESULTS': {
+          const guides = Array.isArray(msg.guides) ? msg.guides : [];
+          if (guides.length > 0) {
+            await db.repairGuides.bulkPut(guides);
+            notifySync();
+          }
+          const resolve = this.pendingGuideSearches.get(msg.requestId);
+          if (resolve) {
+            this.pendingGuideSearches.delete(msg.requestId);
+            resolve(guides);
+          }
+          break;
+        }
       }
     }
   }
@@ -1096,6 +1216,9 @@ class P2PNetworkManager {
         action,
         data
       });
+      if (table === 'tickets' && action === 'put' && data) {
+        void this.pushRelevantGuidesForTickets([data as RepairTicket]);
+      }
     }
   }
 

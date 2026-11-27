@@ -1,6 +1,6 @@
 # 📋 Insertech — Tableau de bords événementiel
 
-> **Documentation complète · Version 1.7.2 · Rédigée en français (Canada)**
+> **Documentation complète · Version 1.8.0 · Rédigée en français (Canada)**
 > Voir aussi [CHANGELOG.md](CHANGELOG.md) pour l'historique détaillé des versions depuis la `1.4.0`.
 
 ---
@@ -93,16 +93,17 @@ Insertech - Tableau de bords événementiel/
     ├── network.ts                → networkManager : session hôte ou tablette, file d'envoi, synchronisation
     ├── App.tsx                   → Composant racine : navigation, import/export, événements
     ├── net/                      → Réseau local : appel des tablettes, poignée de main, chiffrement, mises à jour
+    ├── services/ifixitService.ts → Client API iFixit v2.0 + cache IndexedDB (FR prioritaire, repli EN)
     ├── native/android.ts         → Appels aux plugins Android (plein écran, épinglage, liens, mise à jour)
-    ├── utils/                    → Contact & Loi 25 (contact.ts), rapports d'impact (impactReport.ts), lexique réparation (repairLexicon.ts), anti-veille (wakeLock.ts), exports (saveFile.ts), verrouillage/rôles (modeLock.ts), lien du QR…
+    ├── utils/                    → Contact & Loi 25 (contact.ts), diagnostic hors-ligne (repairLexicon.ts), bibliothèque & filtrage strict des guides (offlineGuideLibrary.ts), rapports d'impact (impactReport.ts), anti-veille (wakeLock.ts), exports (saveFile.ts), verrouillage/rôles (modeLock.ts), lien du QR…
     │
     └── components/
         ├── DashboardShell.tsx    → Coquille du tableau de bord (en-têtes épurés par appareil/rôle, logo = menu principal, icône synchro seule)
         ├── MatrixSelector.tsx    → Écran de création/sélection d'un événement
-        ├── matrices/             → Modules par type d'événement : Réparothon (+ ReparateurCockpit, AssistantCockpit, AdminMapAndGodMode), Kiosque-Concours (+ JudgeConcoursCockpit 2 joueurs / 10 pistes), Install Fest, Générique (+ FormateurEvaluationPanel)
+        ├── matrices/             → Modules par type d'événement : Réparothon (+ ReparateurCockpit, TicketDiagnosticPanel, IfixitGuidesPanel, IfixitGuideViewer, AssistantCockpit, AdminMapAndGodMode), Kiosque-Concours (+ JudgeConcoursCockpit 2 joueurs / 10 pistes), Install Fest, Générique (+ FormateurEvaluationPanel)
         ├── reseau/               → Fenêtres Réseau local du PC et de la tablette, mise à jour des tablettes
         ├── tablette/             → Rejoindre un événement, onboarding mobile 4 étapes (MobileOnboardingWizard), PIN & verrouillage kiosque (ModeControls, PinDialog)
-        └── shared/               → Composants réutilisables (ContactForm 1-2-3, ImpactReportModal, MultiEventControlBar, VolunteerSurveyButton, graphiques, chrono, classement, tirage, QR…)
+        └── shared/               → Composants réutilisables (ContactForm 1-2-3, ImpactReportModal, OfflineGuidesLibraryModal, MultiEventControlBar, VolunteerSurveyButton, graphiques, chrono, classement, tirage, QR…)
 ```
 
 ### 📝 Description de chaque fichier
@@ -2527,4 +2528,4 @@ du navigateur. L'écran allumé et le paysage passent par `@capacitor-community/
 
 ---
 
-*Tableau de bords événementiel — Insertech · Documentation à jour pour la version 1.7.2+ (voir [CHANGELOG.md](CHANGELOG.md)) · Novembre 2026*
+*Tableau de bords événementiel — Insertech · Documentation à jour pour la version 1.8.0 (voir [CHANGELOG.md](CHANGELOG.md)) · Novembre 2026*

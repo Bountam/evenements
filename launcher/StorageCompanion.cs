@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -22,6 +23,8 @@ namespace InsertechEvenements
         static readonly string[] Tables = { "events", "tickets", "technicians", "participants", "attendees" };
         const int PreferredPort = 47615;
         const int MaxBodyBytes = 64 * 1024 * 1024;
+        const int MaxImageBytes = 8 * 1024 * 1024;
+        static readonly HttpClient ImageHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
 
         readonly string dbPath;
         readonly object dbLock = new object();
@@ -158,6 +161,10 @@ namespace InsertechEvenements
                         var (status, json) = SaveSnapshot(body);
                         await Write(stream, status, json);
                     }
+                    else if (path == "/image" && method == "GET")
+                    {
+                        await ProxyIfixitImage(stream, query);
+                    }
                     else
                         await Write(stream, 404, "{\"ok\":false}");
                 }
@@ -232,10 +239,15 @@ namespace InsertechEvenements
         static async Task Write(NetworkStream stream, int status, string json)
         {
             var body = Encoding.UTF8.GetBytes(json);
+            await WriteBytes(stream, status, "application/json; charset=utf-8", body);
+        }
+
+        static async Task WriteBytes(NetworkStream stream, int status, string contentType, byte[] body)
+        {
             string reason = status == 200 ? "OK" : status == 204 ? "No Content" : "Error";
             var head =
                 $"HTTP/1.1 {status} {reason}\r\n" +
-                "Content-Type: application/json; charset=utf-8\r\n" +
+                $"Content-Type: {contentType}\r\n" +
                 "Access-Control-Allow-Origin: *\r\n" +
                 "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
                 "Access-Control-Allow-Headers: Content-Type\r\n" +
@@ -246,6 +258,56 @@ namespace InsertechEvenements
             var h = Encoding.ASCII.GetBytes(head);
             await stream.WriteAsync(h, 0, h.Length);
             await stream.WriteAsync(body, 0, body.Length);
+        }
+
+        // Relais local sécurisé pour compresser les miniatures iFixit sur le Laptop sans contrainte CORS
+        static async Task ProxyIfixitImage(NetworkStream stream, string query)
+        {
+            string imageUrl = null;
+            foreach (var part in query.Split('&'))
+            {
+                if (part.StartsWith("url=", StringComparison.Ordinal))
+                {
+                    imageUrl = Uri.UnescapeDataString(part.Substring(4));
+                    break;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(imageUrl) || !Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            {
+                await Write(stream, 400, "{\"ok\":false,\"error\":\"url\"}");
+                return;
+            }
+
+            string host = uri.Host.ToLowerInvariant();
+            if (host != "guide-images.cdn.ifixit.com" && host != "fr.ifixit.com" && host != "www.ifixit.com")
+            {
+                await Write(stream, 400, "{\"ok\":false,\"error\":\"host\"}");
+                return;
+            }
+
+            try
+            {
+                using var resp = await ImageHttpClient.GetAsync(uri);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    await Write(stream, 502, "{\"ok\":false,\"error\":\"upstream\"}");
+                    return;
+                }
+                var bytes = await resp.Content.ReadAsByteArrayAsync();
+                if (bytes.Length == 0 || bytes.Length > MaxImageBytes)
+                {
+                    await Write(stream, 413, "{\"ok\":false,\"error\":\"size\"}");
+                    return;
+                }
+                string contentType = resp.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+                if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) contentType = "image/jpeg";
+                await WriteBytes(stream, 200, contentType, bytes);
+            }
+            catch
+            {
+                await Write(stream, 502, "{\"ok\":false,\"error\":\"fetch\"}");
+            }
         }
 
         // Remplace tout le contenu par l'état envoyé par la page, en une seule transaction

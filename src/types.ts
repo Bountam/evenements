@@ -201,6 +201,7 @@ export interface RepairTicketExtraData {
   priority?: boolean;
   repairStage?: RepairStage;
   checkedDiagSteps?: string[];
+  diagnosticChecks?: string[];
   actionsPerformed?: string[];
   followUpType?: FollowUpType;
   followUpPart?: string;
@@ -273,4 +274,58 @@ export interface BackupSnapshot {
     participants: Participant[];
     attendees: GenericAttendee[];
   };
+}
+
+export interface IfixitCacheEntry {
+  key: string;
+  kind: 'search' | 'guide';
+  lang: 'fr' | 'en';
+  payload: any;
+  updatedAt: number;
+}
+
+export type RepairSymptomDomain =
+  | 'alimentation'
+  | 'batterie'
+  | 'ecran'
+  | 'lenteur_os'
+  | 'surchauffe'
+  | 'clavier_ports'
+  | 'wifi'
+  | 'linux';
+
+export interface OfflineGuideImage {
+  id?: number;
+  thumbnailDataUrl?: string;
+  fullResUrl?: string;
+  mediumUrl?: string;
+}
+
+export interface OfflineGuideStep {
+  stepid: number;
+  orderby: number;
+  title: string;
+  images: OfflineGuideImage[];
+  lines: { text: string; bullet: string; level: number }[];
+}
+
+export interface OfflineRepairGuide {
+  id: string;
+  source: 'builtin' | 'ifixit' | 'custom';
+  ifixitGuideId?: number;
+  lang: 'fr' | 'en';
+  title: string;
+  device: string;
+  brands: string[];
+  models: string[];
+  categories: DeviceCategory[];
+  operatingSystems?: OperatingSystem[];
+  symptomDomains: RepairSymptomDomain[];
+  difficulty: string;
+  timeRequired: string;
+  introduction: string;
+  tools: string[];
+  parts: string[];
+  steps: OfflineGuideStep[];
+  updatedAt: number;
 }
