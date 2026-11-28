@@ -256,10 +256,10 @@ export default function ContactForm({
   const skillLabels = TECH_SKILLS.filter((s) => value.techSkills.includes(s.id)).map((s) => s.label);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 court:space-y-2">
       {/* Indicateur d'étape accessible et annonce pour lecteurs d'écran */}
       {stepped && steps.length > 1 && (
-        <div className="space-y-2 pb-2 border-b border-app-card-border">
+        <div className="space-y-2 court:space-y-0 pb-2 court:pb-1 border-b border-app-card-border">
           <div className="flex items-center justify-between gap-2">
             <span className="text-micro font-bold uppercase tracking-wider text-primary" aria-live="polite">
               Question {currentIndex + 1} sur {steps.length} · {meta.title}
@@ -279,7 +279,7 @@ export default function ContactForm({
               ))}
             </div>
           </div>
-          <p className="text-xs text-app-text-muted font-sans">{meta.falc}</p>
+          <p className="text-xs text-app-text-muted font-sans line-clamp-2 court:hidden">{meta.falc}</p>
         </div>
       )}
 
@@ -790,8 +790,12 @@ export default function ContactForm({
       )}
 
       {/* BARRE DE NAVIGATION ENTRE MICRO-ÉTAPES */}
+      {/* Collée au bas de la zone visible : reste au-dessus du clavier (interactive-widget=resizes-content) */}
       {stepped && (
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-app-card-border">
+        <div
+          data-primary-action={isFinalStep ? '' : undefined}
+          className="sticky bottom-0 z-10 bg-app-card flex items-center justify-between gap-2 pt-2 pb-1 border-t border-app-card-border"
+        >
           {!isFirstStep || onStepBackFromFirst ? (
             <button
               type="button"
@@ -808,6 +812,7 @@ export default function ContactForm({
           {!isFinalStep ? (
             <button
               type="button"
+              data-primary-action
               onClick={handleNextStep}
               className="min-h-12 px-6 py-2.5 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs sm:text-sm cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
             >

@@ -36,13 +36,17 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
   // PC hôte : créer l'activité (PIN 0000 créé par défaut) et tester le changement vers 1234
   await createContestOnPc(page);
   await page.getByRole('button', { name: /Synchronisation réseau/ }).click();
+  // Sur le PC hôte seulement : rappel du code par défaut tant qu'aucun code personnalisé n'est choisi
+  await expect(page.getByText("Code actuel : 0000 par défaut. Changez-le avant d'ouvrir l'événement.")).toBeVisible();
   await page.locator('#tablet-pin').fill('12a3');
   await expect(page.locator('#tablet-pin')).toHaveValue('123');
-  await page.getByRole('button', { name: 'Changer' }).click();
+  await page.getByRole('button', { name: 'Définir' }).click();
   await expect(page.getByText('Le code doit compter exactement 4 chiffres.')).toBeVisible();
   await page.locator('#tablet-pin').fill('1234');
-  await page.getByRole('button', { name: 'Changer' }).click();
+  await page.getByRole('button', { name: 'Définir' }).click();
   await expect(page.getByText('Code de déverrouillage enregistré')).toBeVisible();
+  await expect(page.getByText('Un code personnalisé protège cette activité.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Changer' })).toBeVisible();
 
   const stored = await page.evaluate(async () => {
     const id = localStorage.getItem('insertech_active_event_id');
@@ -57,13 +61,15 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
     });
   });
   expect(stored?.empreinte).toMatch(/^[0-9a-f]{64}$/);
-  expect(JSON.stringify(stored)).not.toContain('1234');
+  // Le code n'est jamais stocké en clair (l'empreinte hexadécimale peut contenir « 1234 » par hasard)
+  expect(Object.values(stored ?? {})).not.toContain('1234');
 
   // Sur tablette : saut auto de l'étape 1 (1 seul événement actif), arrivée directe au choix de rôle (sans Écran public)
   await page.addInitScript(SIMULATE_ANDROID);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Quel est votre rôle aujourd\'hui ?' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Écran Public/i })).toHaveCount(0);
+  expect(await page.locator('body').innerText()).not.toContain('0000');
 
   // Choisir Kiosque d'inscription (saute l'étape 3 bénévole et ouvre le formulaire visiteur en étapes)
   await page.getByRole('button', { name: /Kiosque d'inscription/ }).click();
@@ -93,6 +99,9 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
   await page.getByRole('button', { name: 'Déverrouiller (maintenir 2 secondes)' }).click();
   await expect(page.getByRole('dialog', { name: 'Déverrouiller la tablette' })).toHaveCount(0);
   await holdUnlock(page);
+  // Le code par défaut n'est jamais affiché sur la tablette (fenêtre du code, onboarding, en-tête)
+  await expect(page.getByRole('dialog', { name: 'Déverrouiller la tablette' })).not.toContainText('0000');
+  expect(await page.locator('body').innerText()).not.toContain('0000');
   for (const wrong of ['0000', '1111', '2222']) {
     await page.locator('#pin-code').fill(wrong);
     await page.getByRole('button', { name: 'Déverrouiller', exact: true }).click();

@@ -3,6 +3,7 @@ import { Download, ExternalLink, Sparkles, AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import type { ReleaseUpdateInfo } from '../../utils/updateCheck';
+import ScrollZone from './ScrollZone';
 
 interface UpdateModalProps {
   isOpen: boolean;
@@ -82,9 +83,9 @@ export default function UpdateModal({
           <div className="text-micro font-bold uppercase tracking-wider text-app-text-muted font-display">
             Notes de la version
           </div>
-          <div className="max-h-60 overflow-y-auto p-3.5 rounded-2xl bg-app-input border border-app-card-border text-xs text-app-text whitespace-pre-wrap leading-relaxed font-sans">
+          <ScrollZone className="max-h-60 p-3.5 rounded-2xl bg-app-input border border-app-card-border text-xs text-app-text whitespace-pre-wrap leading-relaxed font-sans">
             {release.notes || 'Aucune note de version fournie pour cette publication.'}
-          </div>
+          </ScrollZone>
         </div>
 
         <div className="flex items-center justify-between pt-1">

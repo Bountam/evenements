@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/Bountam/evenements/releases/latest';
 
 function makeReleasePayload(overrides: Record<string, any> = {}) {
-  const tag = overrides.tag_name ?? 'v1.9.0';
+  const tag = overrides.tag_name ?? 'v1.10.0';
   const ver = String(tag).replace(/^[vV]/, '');
   return {
     tag_name: tag,
@@ -32,7 +32,7 @@ function makeReleasePayload(overrides: Record<string, any> = {}) {
 }
 
 test('Mise à jour — nouvelle version détectée, pastille, Plus tard et Ignorer cette version', async ({ page }) => {
-  let currentTag = 'V1.9.0'; // Casse majuscule V aussi supportée
+  let currentTag = 'V1.10.0'; // Casse majuscule V aussi supportée
   await page.route(GITHUB_RELEASE_API, async (route) => {
     await route.fulfill({
       status: 200,
@@ -48,7 +48,7 @@ test('Mise à jour — nouvelle version détectée, pastille, Plus tard et Ignor
   await page.goto('http://localhost:4173/');
 
   // Aucun appel à internet au lancement : la vérification se fait seulement à la demande
-  const dialog = page.getByRole('dialog', { name: 'Version 1.9.0 disponible' });
+  const dialog = page.getByRole('dialog', { name: 'Version 1.10.0 disponible' });
   await expect(page.getByRole('heading', { name: 'Insertech Événements' })).toBeVisible();
   await page.waitForTimeout(500);
   expect(apiCalls).toBe(0);
@@ -59,13 +59,13 @@ test('Mise à jour — nouvelle version détectée, pastille, Plus tard et Ignor
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Ajout de la détection de mises à jour (#35)')).toBeVisible();
   const releaseLink = dialog.getByRole('link', { name: 'Voir la release sur GitHub' });
-  await expect(releaseLink).toHaveAttribute('href', 'https://github.com/Bountam/evenements/releases/tag/V1.9.0');
+  await expect(releaseLink).toHaveAttribute('href', 'https://github.com/Bountam/evenements/releases/tag/V1.10.0');
   await expect(dialog.getByRole('button', { name: 'Mettre à jour' })).toBeEnabled();
 
   // Fermer avec la croix : la pastille « Nouvelle version » reste dans l'en-tête et rouvre la fenêtre
   await dialog.getByRole('button', { name: 'Fermer la boîte de dialogue' }).click();
   await expect(dialog).toBeHidden();
-  const pill = page.getByRole('button', { name: /Nouvelle version \(1\.9\.0\)/ });
+  const pill = page.getByRole('button', { name: /Nouvelle version \(1\.10\.0\)/ });
   await expect(pill).toBeVisible();
   await pill.click();
   await expect(dialog).toBeVisible();
@@ -83,17 +83,17 @@ test('Mise à jour — nouvelle version détectée, pastille, Plus tard et Ignor
   await page.getByRole('button', { name: 'Rechercher une mise à jour' }).click();
   await expect(dialog).toBeVisible();
 
-  // « Ignorer cette version » masque 1.9.0 jusqu'à la version suivante
+  // « Ignorer cette version » masque 1.10.0 jusqu'à la version suivante
   await dialog.getByRole('button', { name: 'Ignorer cette version' }).click();
   await expect(dialog).toBeHidden();
   await page.reload();
   await expect(dialog).toBeHidden();
 
-  // Une version suivante (1.9.1) n'est pas ignorée et s'affiche
-  currentTag = 'v1.9.1';
+  // Une version suivante (1.10.1) n'est pas ignorée et s'affiche
+  currentTag = 'v1.10.1';
   await page.reload();
   await page.getByRole('button', { name: 'Rechercher une mise à jour' }).click();
-  await expect(page.getByRole('dialog', { name: 'Version 1.9.1 disponible' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Version 1.10.1 disponible' })).toBeVisible();
 });
 
 test('Mise à jour — version identique, pré-version, hors ligne et limite atteinte', async ({ page }) => {
@@ -156,7 +156,7 @@ test('Mise à jour — bloquée pendant un chrono en cours ou une session active
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(makeReleasePayload({ tag_name: 'v1.9.0' }))
+      body: JSON.stringify(makeReleasePayload({ tag_name: 'v1.10.0' }))
     });
   });
 
@@ -172,7 +172,7 @@ test('Mise à jour — bloquée pendant un chrono en cours ou une session active
 
   await page.goto('http://localhost:4173/');
   await page.getByRole('button', { name: 'Rechercher une mise à jour' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Version 1.9.0 disponible' });
+  const dialog = page.getByRole('dialog', { name: 'Version 1.10.0 disponible' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Termine la session pour mettre à jour')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Mettre à jour' })).toBeDisabled();

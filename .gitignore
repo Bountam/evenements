@@ -47,3 +47,6 @@ android/build/
 /InsertechEvenements-Android.apk
 test-results/
 playwright-report/
+
+# Captures du test zéro défilement (galerie générée)
+captures/

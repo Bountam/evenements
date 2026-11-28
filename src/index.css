@@ -347,6 +347,9 @@
   }
 }
 
+/* Cellulaire en paysage (hauteur sous 480 px) : en-tête réduit, onglets en colonne à gauche */
+@custom-variant court (@media (max-height: 480px));
+
 @theme {
   --color-primary: #9ecd33; /* Vert Lime Insertech */
   --color-secondary: #480A94; /* Violet Insertech */
@@ -413,15 +416,21 @@
 }
 
 @layer base {
+  /* Plan v1.9, étape 6 : la page ne défile jamais. Chaque écran occupe la hauteur visible (dvh) ;
+     seules les zones ScrollZone (data-scroll-zone) défilent. */
   html, body {
     margin: 0;
     padding: 0;
-    min-height: 100vh;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
     background: radial-gradient(circle at 50% 0%, #2e1065 0%, var(--app-bg) 100%) no-repeat;
     background-attachment: fixed;
     color: var(--color-app-text);
     transition: background 0.5s ease, color 0.3s ease;
-    overflow-x: hidden;
+  }
+  #root {
+    height: 100%;
   }
 
   /* Encoche en paysage (PWA standalone, APK) : rien ne passe sous la découpe de l'écran.
@@ -654,13 +663,34 @@ button:disabled {
   animation-play-state: paused;
 }
 
-/* --- PROTECTION UNIVERSELLE RESPONSIVE & ANTI-SUPERPOSITION --- */
-@media (max-height: 760px) {
-  .kiosk-auto-scroll {
-    height: auto !important;
-    min-height: 100% !important;
-    overflow-y: auto !important;
+/* --- ZONES DE DÉFILEMENT (ScrollZone) : léger fondu quand il reste du contenu à voir --- */
+.scroll-zone {
+  scrollbar-width: thin;
+}
+.scroll-zone[data-fade='bas'] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+}
+.scroll-zone[data-fade='haut'] {
+  mask-image: linear-gradient(to top, #000 calc(100% - 1.5rem), transparent);
+}
+.scroll-zone[data-fade='deux'] {
+  mask-image: linear-gradient(to bottom, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
+}
+
+/* --- TEXTE SUR CELLULAIRE ET TABLETTE (17A) : 16 px minimum pour le texte courant --- */
+@media (pointer: coarse) {
+  :root {
+    --text-xs: 0.875rem;
+    --text-xs--line-height: 1.25rem;
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.4rem;
   }
+}
+html.appareil-tactile {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.4rem;
 }
 
 /* Sécurité anti-débordement pour éléments flexibles et colonnes */

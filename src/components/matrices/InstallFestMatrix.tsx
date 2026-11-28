@@ -14,6 +14,7 @@ import {
   DEFAULT_DISTROS, PREVIOUS_OS_OPTIONS, DEVICE_OPTIONS, INSTALL_STATUS_LABELS, MAX_COMPUTERS_PER_VOLUNTEER,
   getEventDistros, previousOSLabel, deviceLabel, toOperatingSystem, isInstallActive, isInstallDone, isInstallFailed
 } from '../../utils/installFest';
+import ScrollZone from '../shared/ScrollZone';
 
 interface InstallFestMatrixProps {
   event: EventSettings;
@@ -950,7 +951,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
               {tickets.length === 0 ? 'Aucune inscription pour cet événement.' : 'Aucune inscription ne correspond à vos critères.'}
             </p>
           ) : (
-            <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
+            <ScrollZone className="space-y-3 max-h-[640px] pr-1">
               {filtered.map(t => (
                 <div key={t.id} className="p-4 rounded-xl bg-app-input border border-app-card-border space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -1031,7 +1032,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
                   </div>
                 </div>
               ))}
-            </div>
+            </ScrollZone>
           )}
         </div>
       </div>

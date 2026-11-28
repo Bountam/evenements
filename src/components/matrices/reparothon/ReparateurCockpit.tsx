@@ -11,7 +11,8 @@ import {
   Plus,
   Star,
   Timer,
-  Zap
+  Zap,
+  Stethoscope
 } from 'lucide-react';
 import type { EventSettings, FollowUpType, RepairTicket, Technician, TicketStatus } from '../../../types';
 import { networkManager } from '../../../network';
@@ -22,6 +23,8 @@ import {
   getLexiconEntriesForSymptoms
 } from '../../../utils/repairLexicon';
 import Modal from '../../shared/Modal';
+import ScrollZone from '../../shared/ScrollZone';
+import TabSwitcher from '../../shared/TabSwitcher';
 import { showToast } from '../../shared/Toast';
 import DiagnosticDecisionTree from './DiagnosticDecisionTree';
 import IfixitGuidesPanel from './IfixitGuidesPanel';
@@ -58,6 +61,8 @@ export default function ReparateurCockpit({
   const [showLexicon, setShowLexicon] = useState(false);
   const [showReportWizard, setShowReportWizard] = useState(false);
   const [guideFocusKeyword, setGuideFocusKeyword] = useState<string | null>(null);
+  // Cellulaire et tablette portrait : diagnostic et guides en onglets ; écran large : côte à côte
+  const [ticketPane, setTicketPane] = useState<'ticket-diagnostic' | 'ticket-guides'>('ticket-diagnostic');
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Création rapide de profil si besoin
@@ -352,13 +357,13 @@ export default function ReparateurCockpit({
   // File d'attente intelligente si aucun appareil actif
   if (!activeTicket) {
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
-        <div className="bg-app-card border border-app-card-border p-4 rounded-2xl flex flex-wrap items-center justify-between gap-2">
-          <div>
+      <div className="w-full max-w-4xl mx-auto h-full min-h-0 flex flex-col gap-3 court:gap-2">
+        <div className="shrink-0 bg-app-card border border-app-card-border p-3 sm:p-4 court:p-2 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
             <span className="text-sm font-display font-bold uppercase text-app-text">
               {activeTech.name} {activeTech.tableNumber ? `• Table ${activeTech.tableNumber}` : ''}
             </span>
-            <p className="text-xs text-app-text-muted">Choisissez votre prochain appareil en fonction de vos compétences.</p>
+            <p className="text-xs text-app-text-muted max-sm:hidden court:hidden">Choisissez votre prochain appareil en fonction de vos compétences.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -384,26 +389,28 @@ export default function ReparateurCockpit({
               onClick={() => setSelectedTechId('')}
               className="min-h-11 px-3 py-1.5 rounded-xl bg-app-input border border-app-card-border text-xs font-bold text-app-text-muted cursor-pointer"
             >
-              Changer de profil
+              <span className="sm:hidden">Profil</span>
+              <span className="max-sm:hidden">Changer de profil</span>
             </button>
           </div>
         </div>
 
-        <div className="bg-app-card border border-app-card-border p-5 rounded-3xl shadow-lg space-y-3">
-          <h3 className="text-base font-display font-bold uppercase text-app-text">
+        <div className="flex-1 min-h-0 bg-app-card border border-app-card-border p-3 sm:p-5 court:p-2 rounded-3xl shadow-lg flex flex-col gap-3 court:gap-2">
+          <h3 className="shrink-0 text-base font-display font-bold uppercase text-app-text">
             File d'attente ({waitingTickets.length})
           </h3>
           {waitingTickets.length === 0 ? (
             <p className="text-sm text-app-text-muted py-8 text-center">Aucun appareil en attente pour le moment.</p>
           ) : (
-            <div className="space-y-3">
-              {waitingTickets.map((t) => {
+            <ScrollZone aria-label="Appareils en attente" className="flex-1 space-y-3 court:space-y-2">
+              {waitingTickets.map((t, index) => {
                 const compat = isCompatible(t, activeTech);
                 const waitMin = Math.max(0, Math.round((nowMs - t.createdAt) / 60000));
                 return (
                   <div
                     key={t.id}
-                    className={`p-4 rounded-2xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    data-testid="appareil-en-attente"
+                    className={`p-3 sm:p-4 court:p-2 rounded-2xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 court:gap-2 ${
                       compat ? 'bg-primary/10 border-primary/50' : 'bg-app-input border-app-card-border'
                     }`}
                   >
@@ -420,14 +427,15 @@ export default function ReparateurCockpit({
                           Attente : {waitMin} min
                         </span>
                       </div>
-                      <p className="text-xs text-app-text-muted">
+                      <p className="text-xs text-app-text-muted line-clamp-2">
                         Participant : <strong className="text-app-text">{t.visitorName}</strong> • {t.initialDiagnosis}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleTakeTicket(t)}
-                      className="min-h-14 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center justify-center gap-2 shrink-0"
+                      data-primary-action={index === 0 ? true : undefined}
+                      className="min-h-12 sm:min-h-14 court:min-h-11 px-6 py-2.5 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center justify-center gap-2 shrink-0"
                     >
                       <span>Prendre cet appareil</span>
                       <ArrowRight size={16} aria-hidden="true" />
@@ -435,10 +443,10 @@ export default function ReparateurCockpit({
                   </div>
                 );
               })}
-            </div>
+            </ScrollZone>
           )}
         </div>
-        <p className="text-center text-xs text-app-text-muted pt-1">
+        <p className="shrink-0 text-center text-xs text-app-text-muted max-sm:hidden court:hidden">
           Un visiteur souhaite devenir bénévole ? Orientez-le vers <strong className="text-app-text">l'Accueil</strong>, un <strong className="text-app-text">Assistant</strong> ou un <strong className="text-app-text">Administrateur</strong>.
         </p>
       </div>
@@ -453,16 +461,17 @@ export default function ReparateurCockpit({
   const elapsedMinutes = Math.max(0, Math.round((nowMs - serviceStartMs) / 60000));
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    // Cellulaire en paysage : fiche, onglets et clôture à gauche ; diagnostic ou guides à droite
+    <div className="w-full h-full min-h-0 flex flex-col gap-3 court:grid court:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] court:grid-rows-[auto_auto_minmax(0,1fr)] court:gap-2">
       {/* Multi-appareils assignés par God Mode */}
       {myActiveTickets.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <ScrollZone horizontal aria-label="Mes appareils" className="shrink-0 flex gap-2 court:col-start-1">
           {myActiveTickets.map((t, idx) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setActiveTicketId(t.id)}
-              className={`min-h-11 px-4 py-2 rounded-xl font-display font-bold uppercase text-xs cursor-pointer border-2 ${
+              className={`shrink-0 min-h-11 px-4 py-2 rounded-xl font-display font-bold uppercase text-xs cursor-pointer border-2 ${
                 t.id === activeTicket.id
                   ? 'bg-primary text-secondary border-primary'
                   : 'bg-app-card text-app-text border-app-card-border'
@@ -471,15 +480,15 @@ export default function ReparateurCockpit({
               Appareil #{idx + 1} : {t.objectName}
             </button>
           ))}
-        </div>
+        </ScrollZone>
       )}
 
       {/* FICHE TECHNIQUE PERMANENTE TOUJOURS VISIBLE DÈS LE DÉPART */}
       <section
         aria-label="Fiche technique de l'appareil"
-        className="bg-app-card border border-app-card-border p-4 sm:p-5 rounded-3xl shadow-lg space-y-3.5"
+        className="shrink-0 court:col-start-1 bg-app-card border border-app-card-border p-3 sm:p-4 court:p-2 rounded-3xl shadow-lg space-y-2.5 court:space-y-1.5"
       >
-        <div className="flex flex-wrap items-start justify-between gap-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-2.5 court:gap-1.5">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-micro uppercase font-black text-primary">
@@ -498,14 +507,14 @@ export default function ReparateurCockpit({
                 <span>{elapsedMinutes} min</span>
               </span>
             </div>
-            <h3 className="text-lg sm:text-xl font-display font-black uppercase text-app-text">
+            <h3 className="text-lg sm:text-xl court:text-base font-display font-black uppercase text-app-text">
               {activeTicket.objectName}
             </h3>
             <p className="text-xs sm:text-sm text-app-text">
               Participant : <strong>{activeTicket.visitorName}</strong>
               {activeTicket.extraData?.contact?.pronouns ? ` (${activeTicket.extraData.contact.pronouns})` : ''}
-              {' · '}
-              <span className="uppercase font-semibold text-app-text-muted">
+              <span className="uppercase font-semibold text-app-text-muted court:hidden">
+                {' · '}
                 {activeTicket.objectCategory.replace('_', ' ')} · {activeTicket.operatingSystem}
               </span>
             </p>
@@ -518,7 +527,7 @@ export default function ReparateurCockpit({
               className="min-h-11 px-3.5 py-2 rounded-xl bg-primary/15 border border-primary text-primary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
             >
               <Megaphone size={15} aria-hidden="true" />
-              <span>Appeler Table {activeTech.tableNumber || '?'}</span>
+              <span className="max-sm:sr-only court:sr-only">Appeler Table {activeTech.tableNumber || '?'}</span>
             </button>
             <button
               type="button"
@@ -526,7 +535,7 @@ export default function ReparateurCockpit({
               className="min-h-11 px-3.5 py-2 rounded-xl bg-warning/15 border border-warning/40 text-warning font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
             >
               <HandHeart size={15} aria-hidden="true" />
-              <span>Assistant</span>
+              <span className="max-sm:sr-only court:sr-only">Assistant</span>
             </button>
             <button
               type="button"
@@ -534,14 +543,14 @@ export default function ReparateurCockpit({
               className="min-h-11 px-3.5 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
             >
               <BookOpen size={15} aria-hidden="true" />
-              <span>Lexique</span>
+              <span className="max-sm:sr-only court:sr-only">Lexique</span>
             </button>
           </div>
         </div>
 
-        <div className="p-3 rounded-2xl bg-app-input border border-app-card-border">
-          <span className="text-micro uppercase font-black text-app-text-muted block">Symptôme noté à l'accueil</span>
-          <p className="text-sm font-semibold text-app-text mt-0.5">
+        <div className="p-3 court:p-2 rounded-2xl bg-app-input border border-app-card-border">
+          <span className="text-micro uppercase font-black text-app-text-muted block court:hidden">Symptôme noté à l'accueil</span>
+          <p className="text-sm font-semibold text-app-text mt-0.5 line-clamp-2" title={activeTicket.initialDiagnosis || undefined}>
             {activeTicket.initialDiagnosis || 'Aucun symptôme précisé.'}
           </p>
         </div>
@@ -549,30 +558,59 @@ export default function ReparateurCockpit({
 
       {!showReportWizard ? (
         <>
-          {/* DIAGNOSTIC INTERACTIF OUI / NON + POINTS DE CONTRÔLE */}
-          <DiagnosticDecisionTree
-            ticket={activeTicket}
-            checkedIds={diagnosticChecks}
-            onToggleCheck={toggleDiagnosticCheck}
-            onSelectGuideKeyword={(kw) => setGuideFocusKeyword(kw)}
+          {/* Diagnostic et guides : onglets sur cellulaire et tablette portrait, côte à côte sur écran large */}
+          <TabSwitcher
+            tabs={[
+              { id: 'ticket-diagnostic', label: 'Diagnostic', icon: Stethoscope },
+              { id: 'ticket-guides', label: 'Guides', icon: BookOpen }
+            ]}
+            currentTab={ticketPane}
+            onTabChange={(id) => setTicketPane(id as typeof ticketPane)}
+            ariaLabel="Diagnostic ou guides de réparation"
+            pillId="ticketPanePill"
+            className="lg:hidden self-start court:col-start-1"
           />
+          <div className="flex-1 min-h-0 flex gap-3 court:col-start-2 court:row-start-1 court:row-span-3">
+            {/* DIAGNOSTIC INTERACTIF OUI / NON + POINTS DE CONTRÔLE */}
+            <ScrollZone
+              id="panel-ticket-diagnostic"
+              role="tabpanel"
+              aria-labelledby="tab-ticket-diagnostic"
+              className={`flex-1 ${ticketPane === 'ticket-diagnostic' ? 'block' : 'hidden lg:block'}`}
+            >
+              <DiagnosticDecisionTree
+                ticket={activeTicket}
+                checkedIds={diagnosticChecks}
+                onToggleCheck={toggleDiagnosticCheck}
+                onSelectGuideKeyword={(kw) => {
+                  setGuideFocusKeyword(kw);
+                  setTicketPane('ticket-guides');
+                }}
+              />
+            </ScrollZone>
 
-          {/* GUIDES PERTINENTS EN LIGNE / HORS-LIGNE (DIRECTEMENT SOUS LE DIAGNOSTIC) */}
-          <IfixitGuidesPanel
-            ticket={activeTicket}
-            embedded
-            focusKeyword={guideFocusKeyword}
-          />
+            {/* GUIDES PERTINENTS : FICHES LOCALES ET ARTICLES IFIXIT */}
+            <ScrollZone
+              id="panel-ticket-guides"
+              role="tabpanel"
+              aria-labelledby="tab-ticket-guides"
+              className={`flex-1 ${ticketPane === 'ticket-guides' ? 'block' : 'hidden lg:block'}`}
+            >
+              <IfixitGuidesPanel ticket={activeTicket} embedded focusKeyword={guideFocusKeyword} />
+            </ScrollZone>
+          </div>
 
-          {/* CLÔTURE DIRECTE EN BAS DU PARCOURS */}
-          <div className="pt-2 flex flex-col sm:flex-row justify-end gap-3">
+          {/* CLÔTURE : toujours visible en bas de l'écran */}
+          <div className="shrink-0 grid grid-cols-2 sm:flex sm:justify-end gap-2 sm:gap-3 court:col-start-1 court:self-end court:grid!">
             <button
               type="button"
               onClick={handleQuickValidate}
-              className="min-h-14 px-6 py-3 rounded-2xl bg-success/15 border-2 border-success/60 text-success font-display font-black uppercase text-sm cursor-pointer inline-flex items-center justify-center gap-2"
+              aria-label="Valider rapidement (Réparé)"
+              className="min-h-12 sm:min-h-14 court:min-h-11 px-3 sm:px-6 py-2.5 rounded-2xl bg-success/15 border-2 border-success/60 text-success font-display font-black uppercase text-xs sm:text-sm cursor-pointer inline-flex items-center justify-center gap-2"
             >
               <Zap size={18} aria-hidden="true" />
-              <span>Valider rapidement (Réparé)</span>
+              <span className="sm:hidden court:inline!" aria-hidden="true">Réparé</span>
+              <span className="max-sm:hidden court:hidden!" aria-hidden="true">Valider rapidement (Réparé)</span>
             </button>
             <button
               type="button"
@@ -580,16 +618,20 @@ export default function ReparateurCockpit({
                 setReportSubStep(1);
                 setShowReportWizard(true);
               }}
-              className="min-h-14 px-7 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer inline-flex items-center justify-center gap-2 shadow-lg"
+              data-primary-action
+              aria-label="Clôturer et faire le rapport"
+              className="min-h-12 sm:min-h-14 court:min-h-11 px-3 sm:px-7 py-2.5 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-xs sm:text-sm cursor-pointer inline-flex items-center justify-center gap-2 shadow-lg"
             >
               <CheckCircle size={18} aria-hidden="true" />
-              <span>Clôturer et faire le rapport</span>
+              <span className="sm:hidden court:inline!" aria-hidden="true">Rapport</span>
+              <span className="max-sm:hidden court:hidden!" aria-hidden="true">Clôturer et faire le rapport</span>
             </button>
           </div>
         </>
       ) : (
         /* RAPPORT FINAL EN 3 QUESTIONS (1 À LA FOIS) + RACCOURCI VALIDER RAPIDEMENT */
-        <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
+        <ScrollZone kind="page" className="flex-1 court:col-span-2">
+        <div className="bg-app-card border border-app-card-border p-4 sm:p-6 court:p-3 rounded-3xl shadow-lg space-y-5 court:space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-micro uppercase font-black text-primary" aria-live="polite">
               Rapport final • Question {reportSubStep} sur 3
@@ -777,10 +819,11 @@ export default function ReparateurCockpit({
             </div>
           )}
         </div>
+        </ScrollZone>
       )}
 
       {/* Orientation bénévolat : le réparateur réfère vers Accueil, Assistant ou Admin */}
-      <p className="text-center text-xs text-app-text-muted pt-2">
+      <p className="shrink-0 text-center text-xs text-app-text-muted max-lg:hidden">
         Un visiteur souhaite devenir bénévole ? Orientez-le vers <strong className="text-app-text">l'Accueil</strong>, un <strong className="text-app-text">Assistant</strong> ou un <strong className="text-app-text">Administrateur</strong>.
       </p>
 

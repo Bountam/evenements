@@ -1,27 +1,45 @@
 import { db, notifySync } from './db';
 import { OfflineRepairGuide, RepairTicket, SyncMessage, TrackState } from './types';
 import { getAppVersion, normalizeVersion } from './utils/updateCheck';
-import { getAllOfflineGuides, matchOfflineGuidesForTicket, searchOfflineGuidesLibrary } from './utils/offlineGuideLibrary';
+import {
+  compressImageToThumbnailDataUrl,
+  getAllOfflineGuides,
+  matchOfflineGuidesForTicket,
+  searchOfflineGuidesLibrary
+} from './utils/offlineGuideLibrary';
 import type { Lien } from './net/lien';
 import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
 import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } from './net/tabletteLocale';
 import { nouvelleCle } from './net/chiffrement';
+import { dateLocale, evenementsAEffacer } from './net/purge';
 import { DiffusionMaj, estMessageMaj, recevoirMajTablette, reinitialiserReceptionMaj, versionCodeDe, type ApkPret, type MessageMaj } from './net/miseAJour';
 import { getNatifMaj } from './native/android';
-import { readLocked } from './utils/modeLock';
+import { getDeviceRole, matchesPin, PinAttemptTracker, readEventPinLock, readLocked } from './utils/modeLock';
 import { sauvegarderMaintenant } from './utils/sqliteBackup';
+import {
+  getIfixitGuideDetail,
+  searchIfixitGuides,
+  setIfixitRelay,
+  type IfixitGuideDetail,
+  type IfixitGuideSummary,
+  type IfixitLang,
+  type IfixitRelay,
+  type IfixitSearchResponse
+} from './services/ifixitService';
 
 // Types de messages réseau local
 export type NetworkMessage =
   | { type: 'DB_WRITE'; table: string; action: 'put' | 'delete'; data: any; opId?: string }
-  | { type: 'DB_DELTA'; table: string; action: 'put' | 'delete'; data: any }
+  | { type: 'DB_DELTA'; table: string; action: 'put' | 'delete'; data: any; eventId?: string }
   | { type: 'DB_BATCH_WRITE'; table: string; items: any[]; opId?: string }
   | { type: 'DB_SYNC'; table: string; data: any[] }
   | { type: 'CHRONO_ACTION'; message: SyncMessage; opId?: string }
   | { type: 'ACK'; opId: string }
   | { type: 'PING' }
   | { type: 'PONG' }
-  | { type: 'REQUEST_INITIAL_SYNC'; version?: string }
+  | { type: 'REQUEST_INITIAL_SYNC'; version?: string; eventId?: string }
+  // Tablette : événement auquel elle est inscrite (elle ne reçoit que ses données)
+  | { type: 'SELECT_EVENT'; eventId: string }
   | { type: 'CLOCK_PING'; t0: number }
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
   | {
@@ -38,7 +56,43 @@ export type NetworkMessage =
   | { type: 'GUIDES_SYNC'; ticketId?: string; guides: OfflineRepairGuide[] }
   | { type: 'REQUEST_GUIDE_SEARCH'; requestId: string; query: string; ticketId?: string }
   | { type: 'GUIDE_SEARCH_RESULTS'; requestId: string; guides: OfflineRepairGuide[] }
+  // Code de déverrouillage vérifié par le PC hôte (le code circule dans la liaison chiffrée)
+  | { type: 'PIN_CHECK'; requestId: string; code: string; eventId?: string }
+  // PC hôte → tablette : action de chrono refusée (piste réservée par un autre juge ou déjà occupée)
+  | { type: 'CHRONO_REJECTED'; actionType: string; trackId?: number; reason: 'occupee' | 'autre_juge' | 'reservation' }
+  | { type: 'PIN_RESULT'; requestId: string; status: 'ok' | 'bad' | 'blocked'; remainingMs?: number; attemptsLeft?: number }
+  // Articles iFixit : la tablette demande, le PC hôte interroge iFixit avec SA clé (jamais transmise) et renvoie
+  // le texte sans aucune adresse d'image ; les photos suivent une à une, compressées, dans IFIXIT_IMAGE
+  | { type: 'IFIXIT_REQUEST'; requestId: string; kind: 'search' | 'guide'; query?: string; enQuery?: string; guideId?: number; lang?: IfixitLang }
+  | { type: 'IFIXIT_RESULT'; requestId: string; ok: boolean; search?: IfixitSearchResponse; guide?: IfixitGuideDetail; erreur?: string }
+  // stepIndex -1 : miniature du résultat de recherche n° imageIndex
+  | { type: 'IFIXIT_IMAGE'; requestId: string; stepIndex: number; imageIndex: number; dataUrl: string }
   | MessageMaj;
+
+export type IfixitResultMessage = Extract<NetworkMessage, { type: 'IFIXIT_RESULT' }>;
+export type IfixitImageMessage = Extract<NetworkMessage, { type: 'IFIXIT_IMAGE' }>;
+
+// Tablette : délai d'attente d'une réponse iFixit relayée (le PC peut essayer FR puis EN, 6 s chacun)
+export const IFIXIT_RELAY_TIMEOUT_MS = 20_000;
+export const IFIXIT_HOST_UNREACHABLE =
+  'PC hôte injoignable : les articles iFixit passent par le PC. Les guides locaux restent disponibles.';
+const IFIXIT_IMAGE_WIDTH = 640;
+const IFIXIT_THUMB_WIDTH = 160;
+const IFIXIT_MAX_IMAGES = 90;
+const IFIXIT_LISTENER_MS = 3 * 60_000;
+
+// Tables dont chaque ligne appartient à un événement (champ eventId)
+const EVENT_TABLES = new Set(['tickets', 'technicians', 'participants', 'attendees']);
+// Tablette : événement choisi à l'onboarding, et anciens événements à effacer après leur journée
+export const TABLET_EVENT_KEY = 'insertech_tablette_evenement';
+export const PURGE_KEY = 'insertech_events_a_purger';
+const PURGE_INTERVAL_MS = 30 * 60_000;
+
+
+export type HostPinResult = Extract<NetworkMessage, { type: 'PIN_RESULT' }>;
+
+// Délai d'attente de la réponse du PC avant de vérifier avec la copie locale
+export const PIN_CHECK_TIMEOUT_MS = 2000;
 
 export type SyncIndicatorColor = 'blue' | 'yellow' | 'red';
 
@@ -61,6 +115,8 @@ class P2PNetworkManager {
   onTracksSync: ((tracks: Record<number, TrackState>) => void) | null = null;
   onCelebration: ((payload: any) => void) | null = null;
   onRaffleAction: ((action: SyncMessage) => void) | null = null;
+  // Tablette : le PC a refusé une action de chrono (message à afficher au juge)
+  onChronoRejected: ((info: { actionType: string; trackId?: number; reason: string }) => void) | null = null;
   onClientVersionsChange: ((mismatchedVersions: string[]) => void) | null = null;
   onActivityStateChange: (() => void) | null = null;
   onActiveEventsSync: ((events: any[]) => void) | null = null;
@@ -74,6 +130,16 @@ class P2PNetworkManager {
   private clientVersions = new Map<string, string>();
   private sentGuideIdsByConn = new Map<string, Set<string>>();
   private pendingGuideSearches = new Map<string, (guides: OfflineRepairGuide[]) => void>();
+  private pendingPinChecks = new Map<string, (result: HostPinResult | null) => void>();
+  private pinAttempts = new PinAttemptTracker();
+  // Tablette : demandes iFixit relayées par le PC et réception des photos qui suivent
+  private pendingIfixit = new Map<string, (result: IfixitResultMessage | null) => void>();
+  private ifixitImageListeners = new Map<string, (img: IfixitImageMessage) => void>();
+  // PC hôte : dernière demande iFixit de chaque tablette (les photos d'un article abandonné ne sont plus envoyées)
+  private latestIfixitByConn = new Map<string, string>();
+  // PC hôte : événement choisi par chaque tablette (absent = elle suit l'événement ouvert sur le PC)
+  private eventByConn = new Map<string, string>();
+  private purgeTimer: ReturnType<typeof setInterval> | null = null;
 
   // PC hôte : appel des tablettes du réseau local (voir src/net/hoteLocal.ts)
   private hoteLocal: HoteLocal | null = null;
@@ -378,7 +444,7 @@ class P2PNetworkManager {
     this.updateStatus(`Connecté (${this.connections.length} appareils)`);
 
     conn.on('data', (data) => {
-      this.enqueueIncoming(conn, data as NetworkMessage, () => this.hostEventId ?? '');
+      this.enqueueIncoming(conn, data as NetworkMessage, () => this.eventForConn(conn));
     });
 
     conn.on('close', () => {
@@ -386,6 +452,7 @@ class P2PNetworkManager {
       this.diffusionMaj?.lienFerme(conn);
       this.lastClientPingAt.delete(conn.connectionId);
       this.incomingChains.delete(conn.connectionId);
+      this.eventByConn.delete(conn.connectionId);
       if (this.clientVersions.delete(conn.connectionId)) {
         this.notifyClientVersions();
       }
@@ -464,6 +531,7 @@ class P2PNetworkManager {
       this.persistOutbox();
     }
     this.role = 'client';
+    this.startPurgeTimer();
     this.joinCode = code;
     this.sessionId = code;
     this.joinEventId = eventId;
@@ -564,7 +632,7 @@ class P2PNetworkManager {
         console.error('Erreur de renvoi en attente :', e);
       }
     }
-    conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion() });
+    conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion(), eventId: this.readTabletEvent() ?? undefined });
 
     // Se caler sur l'horloge du Master
     this.startClockSync();
@@ -650,6 +718,12 @@ class P2PNetworkManager {
     this.sentGuideIdsByConn.clear();
     this.pendingGuideSearches.forEach((resolve) => resolve([]));
     this.pendingGuideSearches.clear();
+    this.pendingPinChecks.forEach((resolve) => resolve(null));
+    this.pendingPinChecks.clear();
+    this.pendingIfixit.forEach((resolve) => resolve(null));
+    this.pendingIfixit.clear();
+    this.ifixitImageListeners.clear();
+    this.latestIfixitByConn.clear();
     this.notifyClientVersions();
     if (wasClient) arreterServeurTablette().catch(() => {});
     this.isConnecting = false;
@@ -718,7 +792,13 @@ class P2PNetworkManager {
   }
 
   // Envoyer à un client toutes les tables des activités actives/épinglées, puis l'état des chronomètres
-  private async sendInitialSync(conn: Lien, eventId: string) {
+  // Événement dont une tablette reçoit les données : celui qu'elle a choisi, sinon celui ouvert sur le PC
+  private eventForConn(conn: Lien): string {
+    return this.eventByConn.get(conn.connectionId) ?? this.hostEventId ?? '';
+  }
+
+  // Événements proposés aux tablettes (onboarding) : réglages seulement, jamais de données personnelles
+  private async listActiveEvents(currentId: string) {
     let pinnedIds: string[] = [];
     try {
       const parsed = JSON.parse(localStorage.getItem('insertech_pinned_event_ids') || '[]');
@@ -726,11 +806,15 @@ class P2PNetworkManager {
     } catch {
       pinnedIds = [];
     }
-    const targetIds = Array.from(new Set([eventId, ...pinnedIds].filter(Boolean)));
-    const allEvents = await db.events.toArray();
-    const activeEvents = allEvents.filter((e) => targetIds.includes(e.id));
-    const eventSettings = activeEvents.find((e) => e.id === eventId) || (await db.events.get(eventId));
-    const syncIds = activeEvents.length > 0 ? activeEvents.map((e) => e.id) : eventId ? [eventId] : [];
+    const ids = Array.from(new Set([currentId, this.hostEventId ?? '', ...pinnedIds].filter(Boolean)));
+    return (await db.events.bulkGet(ids)).filter(Boolean);
+  }
+
+  // Envoyer à une tablette les tables de SON événement seulement, puis l'état des chronomètres
+  private async sendInitialSync(conn: Lien, eventId: string) {
+    const activeEvents = await this.listActiveEvents(eventId);
+    const eventSettings = activeEvents.find((e) => e!.id === eventId) || (await db.events.get(eventId));
+    const syncIds = eventId ? [eventId] : [];
 
     const [tickets, techs, participants, attendees] = await Promise.all([
       syncIds.length > 0 ? db.tickets.where('eventId').anyOf(syncIds).toArray() : Promise.resolve([]),
@@ -745,7 +829,7 @@ class P2PNetworkManager {
     });
     conn.send({
       type: 'CHRONO_ACTION',
-      message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksState }
+      message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksFor(eventId) }
     });
     await this.pushRelevantGuidesForTickets(tickets as RepairTicket[], conn);
   }
@@ -786,6 +870,195 @@ class P2PNetworkManager {
     }
   }
 
+  // Tablette : demander au PC hôte de vérifier le code. null = PC injoignable ou trop lent (repli sur la copie locale)
+  async requestPinCheck(code: string, eventId?: string, timeoutMs = PIN_CHECK_TIMEOUT_MS): Promise<HostPinResult | null> {
+    if (this.role !== 'client') return null;
+    const conn = this.connections[0];
+    if (!conn || !conn.open) return null;
+
+    const requestId = `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise<HostPinResult | null>((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.pendingPinChecks.delete(requestId)) resolve(null);
+      }, timeoutMs);
+      this.pendingPinChecks.set(requestId, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+      try {
+        conn.send({ type: 'PIN_CHECK', requestId, code, eventId });
+      } catch {
+        clearTimeout(timer);
+        this.pendingPinChecks.delete(requestId);
+        resolve(null);
+      }
+    });
+  }
+
+  // PC hôte : vérifier un code reçu d'une tablette, avec un compteur d'essais par tablette
+  private async answerPinCheck(conn: Lien, msg: Extract<NetworkMessage, { type: 'PIN_CHECK' }>, fallbackEventId: string) {
+    const key = conn.connectionId;
+    const reply = (r: Omit<HostPinResult, 'type' | 'requestId'>) => {
+      if (conn.open) conn.send({ type: 'PIN_RESULT', requestId: msg.requestId, ...r });
+    };
+    const remaining = this.pinAttempts.remainingMs(key);
+    if (remaining > 0) {
+      reply({ status: 'blocked', remainingMs: remaining });
+      return;
+    }
+    const eventId = typeof msg.eventId === 'string' && msg.eventId ? msg.eventId : fallbackEventId;
+    const event = eventId ? await db.events.get(eventId) : undefined;
+    const ok = typeof msg.code === 'string' && (await matchesPin(msg.code, readEventPinLock(event)));
+    if (ok) {
+      this.pinAttempts.reset(key);
+      reply({ status: 'ok' });
+      return;
+    }
+    const failure = this.pinAttempts.fail(key);
+    if (failure.blockedMs > 0) reply({ status: 'blocked', remainingMs: failure.blockedMs });
+    else reply({ status: 'bad', attemptsLeft: failure.attemptsLeft });
+  }
+
+  // Tablette : demander un article ou une recherche iFixit au PC hôte. null = PC injoignable ou trop lent
+  async requestIfixit(
+    request: Omit<Extract<NetworkMessage, { type: 'IFIXIT_REQUEST' }>, 'type' | 'requestId'>,
+    onImage?: (img: IfixitImageMessage) => void,
+    timeoutMs = IFIXIT_RELAY_TIMEOUT_MS
+  ): Promise<IfixitResultMessage | null> {
+    if (this.role !== 'client') return null;
+    const conn = this.connections[0];
+    if (!conn || !conn.open) return null;
+
+    const requestId = `ifx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    if (onImage) {
+      this.ifixitImageListeners.set(requestId, onImage);
+      setTimeout(() => this.ifixitImageListeners.delete(requestId), IFIXIT_LISTENER_MS);
+    }
+    return new Promise<IfixitResultMessage | null>((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.pendingIfixit.delete(requestId)) resolve(null);
+      }, timeoutMs);
+      this.pendingIfixit.set(requestId, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+      try {
+        conn.send({ type: 'IFIXIT_REQUEST', requestId, ...request });
+      } catch {
+        clearTimeout(timer);
+        this.pendingIfixit.delete(requestId);
+        resolve(null);
+      }
+    });
+  }
+
+  // Tablette : relais branché sur ifixitService (la tablette ne contacte jamais ifixit.com elle-même)
+  ifixitRelay(): IfixitRelay {
+    const offline = (error: string): IfixitSearchResponse => ({
+      results: [],
+      fromCache: false,
+      staleCache: false,
+      offline: true,
+      usedFallbackEn: false,
+      error
+    });
+    return {
+      search: async (query, enQuery, onThumb) => {
+        if (this.role !== 'client' || !this.connections[0]?.open) return offline(IFIXIT_HOST_UNREACHABLE);
+        let results: IfixitGuideSummary[] | null = null;
+        const early: IfixitImageMessage[] = [];
+        const deliver = (img: IfixitImageMessage) => {
+          const item = results?.[img.imageIndex];
+          if (item && img.stepIndex === -1) onThumb?.(item.guideid, item.lang, img.dataUrl);
+        };
+        const r = await this.requestIfixit({ kind: 'search', query, enQuery }, (img) => {
+          if (results) deliver(img);
+          else early.push(img);
+        });
+        if (!r) return offline(IFIXIT_HOST_UNREACHABLE);
+        if (!r.ok || !r.search) return offline(r.erreur || 'iFixit injoignable depuis le PC hôte.');
+        results = Array.isArray(r.search.results) ? r.search.results : [];
+        early.forEach(deliver);
+        return { ...r.search, results };
+      },
+      guide: async (guideId, lang, onImage) => {
+        if (this.role !== 'client' || !this.connections[0]?.open) throw new Error(IFIXIT_HOST_UNREACHABLE);
+        let detail: IfixitGuideDetail | null = null;
+        const early: IfixitImageMessage[] = [];
+        const r = await this.requestIfixit({ kind: 'guide', guideId, lang }, (img) => {
+          if (detail) onImage?.(img.stepIndex, img.imageIndex, img.dataUrl);
+          else early.push(img);
+        });
+        if (!r) throw new Error(IFIXIT_HOST_UNREACHABLE);
+        if (!r.ok || !r.guide) throw new Error(r.erreur || "Impossible d'ouvrir cet article iFixit.");
+        const received: IfixitGuideDetail = r.guide;
+        for (const img of early) {
+          const target = received.steps[img.stepIndex]?.images[img.imageIndex];
+          if (target) target.embeddedDataUrl = img.dataUrl;
+        }
+        detail = received;
+        return received;
+      }
+    };
+  }
+
+  // PC hôte : interroger iFixit pour une tablette. Le texte part tout de suite, sans adresse d'image ;
+  // les photos sont ensuite compressées et envoyées une à une, hors de la file des messages de la tablette.
+  private async answerIfixitRequest(conn: Lien, msg: Extract<NetworkMessage, { type: 'IFIXIT_REQUEST' }>) {
+    const requestId = String(msg.requestId || '').slice(0, 80);
+    const reply = (r: Omit<IfixitResultMessage, 'type' | 'requestId'>) => {
+      if (conn.open) conn.send({ type: 'IFIXIT_RESULT', requestId, ...r });
+    };
+    this.latestIfixitByConn.set(conn.connectionId, requestId);
+    try {
+      if (msg.kind === 'search') {
+        const query = String(msg.query || '').slice(0, 200);
+        const enQuery = msg.enQuery ? String(msg.enQuery).slice(0, 200) : undefined;
+        const res = await searchIfixitGuides(query, { enQuery });
+        const thumbs = res.results.map((r, i) => ({ stepIndex: -1, imageIndex: i, url: r.thumbnail }));
+        reply({ ok: true, search: { ...res, results: res.results.map((r) => ({ ...r, thumbnail: '' })) } });
+        await this.sendIfixitImages(conn, requestId, thumbs, IFIXIT_THUMB_WIDTH);
+        return;
+      }
+      const guideId = Number(msg.guideId);
+      if (!Number.isInteger(guideId) || guideId <= 0) {
+        reply({ ok: false, erreur: 'Article iFixit inconnu.' });
+        return;
+      }
+      const lang: IfixitLang = msg.lang === 'en' ? 'en' : 'fr';
+      const guide = await getIfixitGuideDetail(guideId, lang);
+      const jobs: { stepIndex: number; imageIndex: number; url: string }[] = [];
+      const steps = guide.steps.map((step, stepIndex) => ({
+        ...step,
+        images: step.images.map((img, imageIndex) => {
+          jobs.push({ stepIndex, imageIndex, url: img.medium || img.standard || img.thumbnail || '' });
+          return { id: img.id, thumbnail: '', medium: '', standard: '' };
+        })
+      }));
+      reply({ ok: true, guide: { ...guide, steps } });
+      await this.sendIfixitImages(conn, requestId, jobs, IFIXIT_IMAGE_WIDTH);
+    } catch (e) {
+      reply({ ok: false, erreur: e instanceof Error ? e.message : 'iFixit injoignable depuis le PC hôte.' });
+    }
+  }
+
+  private async sendIfixitImages(
+    conn: Lien,
+    requestId: string,
+    jobs: { stepIndex: number; imageIndex: number; url: string }[],
+    width: number
+  ) {
+    for (const job of jobs.slice(0, IFIXIT_MAX_IMAGES)) {
+      // La tablette a ouvert autre chose ou s'est déconnectée : arrêter d'envoyer les photos
+      if (!conn.open || this.latestIfixitByConn.get(conn.connectionId) !== requestId) return;
+      if (!/^https:\/\//.test(job.url)) continue;
+      const dataUrl = await compressImageToThumbnailDataUrl(job.url, width).catch(() => undefined);
+      if (dataUrl && conn.open) {
+        conn.send({ type: 'IFIXIT_IMAGE', requestId, stepIndex: job.stepIndex, imageIndex: job.imageIndex, dataUrl });
+      }
+    }
+  }
+
   // Tablette : interroger à la demande la bibliothèque locale du Laptop serveur via LAN
   async searchHostGuides(query: string, ticketId?: string): Promise<OfflineRepairGuide[]> {
     if (this.role !== 'client') return [];
@@ -821,7 +1094,8 @@ class P2PNetworkManager {
     this.hostEventId = eventId;
     localStorage.setItem('insertech_net_event_id', eventId);
     for (const conn of this.connections) {
-      if (conn.open) {
+      // Une tablette inscrite à un autre événement reste sur le sien
+      if (conn.open && !this.eventByConn.has(conn.connectionId)) {
         try {
           await this.sendInitialSync(conn, eventId);
         } catch (e) {
@@ -863,6 +1137,15 @@ class P2PNetworkManager {
           conn.send({ type: 'CLOCK_PONG', t0: msg.t0, hostTime: Date.now() });
           break;
 
+        case 'PIN_CHECK':
+          await this.answerPinCheck(conn, msg, eventId);
+          break;
+
+        case 'IFIXIT_REQUEST':
+          // Sans attendre : iFixit peut prendre plusieurs secondes, les écritures de la tablette passent avant
+          void this.answerIfixitRequest(conn, msg);
+          break;
+
         case 'REQUEST_INITIAL_SYNC':
           if (typeof msg.version === 'string' && msg.version.trim()) {
             const cleanVer = normalizeVersion(msg.version) || msg.version.trim();
@@ -870,13 +1153,30 @@ class P2PNetworkManager {
             this.notifyClientVersions();
             this.diffusionMaj?.versionSignalee(conn, cleanVer);
           }
-          await this.sendInitialSync(conn, eventId);
+          if (typeof msg.eventId === 'string' && msg.eventId && (await db.events.get(msg.eventId))) {
+            this.eventByConn.set(conn.connectionId, msg.eventId);
+          }
+          await this.sendInitialSync(conn, this.eventForConn(conn));
+          break;
+
+        case 'SELECT_EVENT':
+          if (typeof msg.eventId === 'string' && msg.eventId && (await db.events.get(msg.eventId))) {
+            this.eventByConn.set(conn.connectionId, msg.eventId);
+            await this.sendInitialSync(conn, msg.eventId);
+          }
           break;
 
         case 'DB_WRITE':
           // Écrire la modification reçue d'un client dans le Dexie.js local du Master
           try {
             const table = db.table(msg.table);
+            const rowEventId = await this.eventIdOfWrite(msg.table, msg.action, msg.data);
+            if (!this.writeAllowed(msg.table, msg.action, msg.data, rowEventId, eventId)) {
+              // Écriture visant un autre événement que celui de la tablette : ignorée (accusée pour vider sa file)
+              console.warn(`Écriture refusée : ${msg.table} hors de l'événement de la tablette.`);
+              this.acknowledge(conn, msg.opId);
+              break;
+            }
             if (msg.action === 'put') {
               await table.put(msg.data);
             } else if (msg.action === 'delete') {
@@ -885,12 +1185,13 @@ class P2PNetworkManager {
 
             notifySync(); // Notifier les onglets locaux du Master
 
-            // Diffuser le delta atomique aux AUTRES clients connectés (élimine l'amplification O(N))
+            // Diffuser le delta atomique aux AUTRES tablettes du même événement
             this.broadcastExcept(conn, {
               type: 'DB_DELTA',
               table: msg.table,
               action: msg.action,
-              data: msg.data
+              data: msg.data,
+              eventId: rowEventId ?? undefined
             });
             if (msg.table === 'tickets' && msg.action === 'put' && msg.data) {
               void this.pushRelevantGuidesForTickets([msg.data as RepairTicket]);
@@ -905,13 +1206,16 @@ class P2PNetworkManager {
           // Écriture par lot transactionnelle reçue d'un client
           try {
             const table = db.table(msg.table);
-            if (Array.isArray(msg.items) && msg.items.length > 0) {
-              await table.bulkPut(msg.items);
+            const items = Array.isArray(msg.items)
+              ? msg.items.filter((it: any) => !EVENT_TABLES.has(msg.table) || it?.eventId === eventId)
+              : [];
+            if (items.length > 0) {
+              await table.bulkPut(items);
               notifySync();
               this.broadcastExcept(conn, {
                 type: 'DB_BATCH_WRITE',
                 table: msg.table,
-                items: msg.items
+                items
               });
             }
           } catch (e) {
@@ -920,12 +1224,27 @@ class P2PNetworkManager {
           this.acknowledge(conn, msg.opId);
           break;
 
-        case 'CHRONO_ACTION':
-          // Le Master route les actions de chronomètre et de raffle à tout le monde
-          this.applyChronoAction(msg.message);
-          this.broadcastExcept(conn, { type: 'CHRONO_ACTION', message: msg.message });
+        case 'CHRONO_ACTION': {
+          // Le Master valide les pistes réservées, puis route les actions de chronomètre et de raffle à tout le monde
+          const verdict = this.validateChronoAction(msg.message);
+          if (verdict.ok === false) {
+            if (conn.open) {
+              conn.send({ type: 'CHRONO_REJECTED', actionType: msg.message.type, trackId: verdict.trackId, reason: verdict.reason });
+              // Rétablir l'état réel des pistes sur la tablette, qui avait appliqué son action d'avance
+              conn.send({ type: 'CHRONO_ACTION', message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksFor(eventId) } });
+            }
+            this.acknowledge(conn, msg.opId);
+            break;
+          }
+          this.applyChronoAction(verdict.action);
+          this.broadcastExcept(conn, { type: 'CHRONO_ACTION', message: verdict.action });
+          if (verdict.action !== msg.message && conn.open) {
+            // Réservation partielle : la tablette reçoit ce qui lui a vraiment été accordé
+            conn.send({ type: 'CHRONO_ACTION', message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksFor(eventId) } });
+          }
           this.acknowledge(conn, msg.opId);
           break;
+        }
 
         case 'REQUEST_GUIDE_SEARCH': {
           try {
@@ -978,12 +1297,12 @@ class P2PNetworkManager {
                 ? [importedEvent]
                 : [];
           this.availableHostEvents = syncedEvents;
-          const targetEventIds = Array.from(
-            new Set([
-              ...syncedEvents.map((e) => e?.id).filter(Boolean),
-              ...(importedEvent?.id ? [importedEvent.id] : eventId ? [eventId] : [])
-            ])
-          );
+          // Seules les données de l'événement reçu sont remplacées ; un ancien événement reste jusqu'à la fin de la journée
+          const targetEventIds = importedEvent?.id ? [importedEvent.id] : eventId ? [eventId] : [];
+          const previousEventId = localStorage.getItem('insertech_active_event_id');
+          if (importedEvent?.id && previousEventId && previousEventId !== importedEvent.id) {
+            this.markForPurge(previousEventId);
+          }
 
           await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees], async () => {
             for (const evt of syncedEvents) {
@@ -1065,6 +1384,34 @@ class P2PNetworkManager {
           }
           break;
 
+        case 'IFIXIT_RESULT': {
+          const resolve = this.pendingIfixit.get(msg.requestId);
+          if (resolve) {
+            this.pendingIfixit.delete(msg.requestId);
+            resolve(msg);
+          }
+          break;
+        }
+
+        case 'IFIXIT_IMAGE':
+          if (typeof msg.dataUrl === 'string' && msg.dataUrl.startsWith('data:image/')) {
+            this.ifixitImageListeners.get(msg.requestId)?.(msg);
+          }
+          break;
+
+        case 'CHRONO_REJECTED':
+          this.onChronoRejected?.({ actionType: msg.actionType, trackId: msg.trackId, reason: msg.reason });
+          break;
+
+        case 'PIN_RESULT': {
+          const resolve = this.pendingPinChecks.get(msg.requestId);
+          if (resolve) {
+            this.pendingPinChecks.delete(msg.requestId);
+            resolve(msg);
+          }
+          break;
+        }
+
         case 'GUIDE_SEARCH_RESULTS': {
           const guides = Array.isArray(msg.guides) ? msg.guides : [];
           if (guides.length > 0) {
@@ -1088,6 +1435,15 @@ class P2PNetworkManager {
 
   // ÉMETTRE UNE ACTION DE CHRONO / RAFFLE
   sendChronoAction(action: SyncMessage) {
+    if (this.role === 'host') {
+      // Le PC hôte applique les mêmes règles de réservation à ses propres actions
+      const verdict = this.validateChronoAction(action);
+      if (verdict.ok === false) {
+        this.onChronoRejected?.({ actionType: action.type, trackId: verdict.trackId, reason: verdict.reason });
+        return;
+      }
+      action = verdict.action;
+    }
     this.applyChronoAction(action, true);
     if (this.role === 'host') {
       this.broadcast({ type: 'CHRONO_ACTION', message: action });
@@ -1139,6 +1495,26 @@ class P2PNetworkManager {
         track.startTime = null;
         track.elapsedBeforeStart = 0;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
+        if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
+      }
+    } else if (action.type === 'JUDGE_CLAIM') {
+      let changed = false;
+      for (const trackId of action.trackIds) {
+        const track = this.tracksState[trackId];
+        if (track && (!track.ownerJudgeId || track.ownerJudgeId === action.judgeId)) {
+          this.tracksState[trackId] = { ...track, ownerJudgeId: action.judgeId, ownerJudgeName: action.judgeName };
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.persistTracksState();
+        if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
+      }
+    } else if (action.type === 'TRACK_RELEASE') {
+      const track = this.tracksState[action.trackId];
+      if (track) {
+        this.tracksState[action.trackId] = { ...track, ownerJudgeId: null, ownerJudgeName: null };
         this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }
@@ -1198,6 +1574,7 @@ class P2PNetworkManager {
   async writeToDatabase(table: string, action: 'put' | 'delete', data: any) {
     // 1. Toujours persister immédiatement dans l'IndexedDB locale (Master, Client ou Standalone)
     const t = db.table(table);
+    const rowEventId = this.role === 'host' ? await this.eventIdOfWrite(table, action, data) : null;
     if (action === 'put') {
       await t.put(data);
     } else if (action === 'delete') {
@@ -1214,7 +1591,8 @@ class P2PNetworkManager {
         type: 'DB_DELTA',
         table,
         action,
-        data
+        data,
+        eventId: rowEventId ?? undefined
       });
       if (table === 'tickets' && action === 'put' && data) {
         void this.pushRelevantGuidesForTickets([data as RepairTicket]);
@@ -1247,14 +1625,182 @@ class P2PNetworkManager {
   }
 
   // DIFFUSER À TOUS LES CLIENTS SAUF L'ÉMETTEUR
+  // Chaque tablette ne reçoit que ce qui concerne son événement (Loi 25)
   broadcastExcept(excludeConn: Lien | null, msg: NetworkMessage) {
     this.connections.forEach((conn) => {
-      if (conn.open && (!excludeConn || conn.connectionId !== excludeConn.connectionId)) {
-        conn.send(msg);
-      }
+      if (!conn.open || (excludeConn && conn.connectionId === excludeConn.connectionId)) return;
+      const filtered = this.filterForEvent(msg, this.eventForConn(conn));
+      if (filtered) conn.send(filtered);
     });
+  }
+
+  // Version du message réservée à un événement ; null = rien à envoyer à cette tablette
+  private filterForEvent(msg: NetworkMessage, connEventId: string): NetworkMessage | null {
+    if (msg.type === 'DB_DELTA') {
+      if (!EVENT_TABLES.has(msg.table)) return msg;
+      return msg.eventId && msg.eventId === connEventId ? msg : null;
+    }
+    if (msg.type === 'DB_BATCH_WRITE') {
+      if (!EVENT_TABLES.has(msg.table)) return msg;
+      const items = (msg.items || []).filter((it: any) => it?.eventId === connEventId);
+      return items.length > 0 ? { ...msg, items } : null;
+    }
+    if (msg.type === 'CHRONO_ACTION') {
+      const action = msg.message;
+      if (action.type === 'TRACKS_STATE_SYNC') {
+        return { ...msg, message: { ...action, tracks: this.tracksFor(connEventId, action.tracks) } };
+      }
+      if (action.type === 'TRACK_ASSIGN' && action.eventId && action.eventId !== connEventId) {
+        // Piste prise pour un autre événement : la tablette la voit occupée, sans le nom du joueur
+        return { ...msg, message: { ...action, participantName: null, participantId: action.participantId ? 'autre-evenement' : null } };
+      }
+    }
+    return msg;
+  }
+
+  // PC hôte : règles des pistes réservées (plan v1.9, étape 4). Une réservation peut être réduite aux pistes
+  // vraiment libres ; une attribution sur la piste d'un autre juge ou déjà occupée est refusée.
+  private validateChronoAction(
+    action: SyncMessage
+  ): { ok: true; action: SyncMessage } | { ok: false; trackId?: number; reason: 'occupee' | 'autre_juge' | 'reservation' } {
+    if (action.type === 'JUDGE_CLAIM') {
+      const granted = (action.trackIds || []).filter((id) => {
+        const t = this.tracksState[id];
+        return t && (t.ownerJudgeId === action.judgeId || (!t.ownerJudgeId && !t.participantId));
+      });
+      if (granted.length === 0) return { ok: false, trackId: action.trackIds?.[0], reason: 'reservation' };
+      return { ok: true, action: granted.length === action.trackIds.length ? action : { ...action, trackIds: granted } };
+    }
+    if (action.type === 'TRACK_ASSIGN') {
+      const t = this.tracksState[action.trackId];
+      if (!t) return { ok: false, trackId: action.trackId, reason: 'occupee' };
+      const juge = action.judgeId && action.judgeId !== 'bassin' ? action.judgeId : null;
+      if (juge && t.ownerJudgeId && t.ownerJudgeId !== juge) return { ok: false, trackId: action.trackId, reason: 'autre_juge' };
+      if (action.participantId && t.participantId && t.participantId !== action.participantId) {
+        return { ok: false, trackId: action.trackId, reason: 'occupee' };
+      }
+    }
+    return { ok: true, action };
+  }
+
+  // État des pistes pour un événement : les pistes des autres événements restent visibles comme occupées, sans nom
+  private tracksFor(eventId: string, tracks: Record<number, TrackState> = this.tracksState): Record<number, TrackState> {
+    const out: Record<number, TrackState> = {};
+    for (const [id, t] of Object.entries(tracks)) {
+      out[Number(id)] =
+        t.eventId && t.eventId !== eventId
+          ? { ...t, participantName: null, participantId: t.participantId ? 'autre-evenement' : null }
+          : t;
+    }
+    return out;
+  }
+
+  // Événement d'une écriture : champ eventId de la ligne, ou de la ligne existante pour une suppression
+  private async eventIdOfWrite(table: string, action: 'put' | 'delete', data: any): Promise<string | null> {
+    if (!EVENT_TABLES.has(table)) return table === 'events' ? (action === 'put' ? data?.id : data) ?? null : null;
+    if (action === 'put') return typeof data?.eventId === 'string' ? data.eventId : null;
+    try {
+      const row: any = await db.table(table).get(data);
+      return typeof row?.eventId === 'string' ? row.eventId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Une tablette n'écrit que dans son événement ; les autres tables (sauvegardes, guides) restent libres
+  private writeAllowed(table: string, action: 'put' | 'delete', data: any, rowEventId: string | null, connEventId: string): boolean {
+    if (!connEventId) return true;
+    if (table === 'events') return rowEventId === connEventId;
+    if (!EVENT_TABLES.has(table)) return true;
+    if (action === 'delete' && rowEventId === null) return true; // ligne déjà absente : rien à protéger
+    return rowEventId === connEventId && (action === 'delete' || data?.eventId === connEventId);
+  }
+
+  // --- Tablette : choix de l'événement et effacement des anciens après leur journée ---
+
+  // Tablette : s'inscrire à un événement du PC hôte (onboarding ou retour à une session active)
+  selectEvent(eventId: string) {
+    if (!eventId) return;
+    const previous = this.readTabletEvent();
+    if (previous && previous !== eventId) this.markForPurge(previous);
+    try {
+      localStorage.setItem(TABLET_EVENT_KEY, eventId);
+    } catch {
+      // Stockage indisponible : l'événement sera redemandé
+    }
+    if (this.role === 'client' && this.isLinkedToHost()) {
+      try {
+        this.connections[0].send({ type: 'SELECT_EVENT', eventId });
+      } catch {
+        // Liaison perdue : REQUEST_INITIAL_SYNC renverra l'événement à la reconnexion
+      }
+    }
+  }
+
+  private readTabletEvent(): string | null {
+    try {
+      return localStorage.getItem(TABLET_EVENT_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  private readPurgeList(): Record<string, string> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PURGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private writePurgeList(list: Record<string, string>) {
+    try {
+      if (Object.keys(list).length === 0) localStorage.removeItem(PURGE_KEY);
+      else localStorage.setItem(PURGE_KEY, JSON.stringify(list));
+    } catch {
+      // Ignorer
+    }
+  }
+
+  // Les données d'un ancien événement restent sur la tablette jusqu'à la fin de la journée
+  private markForPurge(eventId: string, now = Date.now()) {
+    const list = this.readPurgeList();
+    if (!list[eventId]) list[eventId] = dateLocale(now);
+    this.writePurgeList(list);
+  }
+
+  // Effacer les événements quittés un jour précédent, une fois leurs envois en attente partis
+  async purgeOldEvents(now = Date.now()): Promise<string[]> {
+    const enAttente = new Set<string>();
+    for (const m of this.outbox as any[]) {
+      const id = m?.data?.eventId ?? m?.message?.eventId;
+      if (typeof id === 'string') enAttente.add(id);
+    }
+    const { effacer, garder } = evenementsAEffacer(this.readPurgeList(), dateLocale(now), this.readTabletEvent(), enAttente);
+    for (const eventId of effacer) {
+      await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees], async () => {
+        await db.tickets.where('eventId').equals(eventId).delete();
+        await db.technicians.where('eventId').equals(eventId).delete();
+        await db.participants.where('eventId').equals(eventId).delete();
+        await db.attendees.where('eventId').equals(eventId).delete();
+        await db.events.delete(eventId);
+      });
+    }
+    this.writePurgeList(garder);
+    if (effacer.length > 0) notifySync();
+    return effacer;
+  }
+
+  private startPurgeTimer() {
+    if (this.purgeTimer) return;
+    void this.purgeOldEvents().catch(() => {});
+    this.purgeTimer = setInterval(() => void this.purgeOldEvents().catch(() => {}), PURGE_INTERVAL_MS);
   }
 
 }
 
 export const networkManager = new P2PNetworkManager();
+
+// Sur tablette, toute demande iFixit passe par le PC hôte (seul appareil qui détient la clé et sort sur internet)
+if (getDeviceRole() === 'tablette') setIfixitRelay(networkManager.ifixitRelay());

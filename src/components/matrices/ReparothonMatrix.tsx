@@ -36,6 +36,7 @@ import AdminMapAndGodMode from './reparothon/AdminMapAndGodMode';
 import AccueilQueueView from './reparothon/AccueilQueueView';
 import { fileAccept } from '../../native/android';
 import { clampNumber } from '../../utils/security';
+import ScrollZone from '../shared/ScrollZone';
 
 interface ReparothonMatrixProps {
   event: EventSettings;
@@ -1341,7 +1342,7 @@ export default function ReparothonMatrix({
 
     if (!kioskForm && workRole === 'reparateur') {
       return (
-        <div className="max-w-4xl mx-auto space-y-5">
+        <div className="w-full max-w-6xl mx-auto h-full min-h-0 flex flex-col">
           <ReparateurCockpit
             event={event}
             tickets={tickets}
@@ -2366,7 +2367,7 @@ export default function ReparothonMatrix({
 
   if (workRole === 'reparateur') {
     return (
-      <div className="max-w-4xl mx-auto space-y-5">
+      <div className="w-full max-w-6xl mx-auto h-full min-h-0 flex flex-col">
         <ReparateurCockpit
           event={event}
           tickets={tickets}
@@ -2463,7 +2464,7 @@ export default function ReparothonMatrix({
             </button>
           </div>
         ) : (
-          <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
+          <ScrollZone className="space-y-3 max-h-[640px] pr-1">
             <AnimatePresence initial={false}>
               {technicians.map((t) => (
                 <motion.div
@@ -2536,7 +2537,7 @@ export default function ReparothonMatrix({
                 </motion.div>
               ))}
             </AnimatePresence>
-          </div>
+          </ScrollZone>
         )}
       </div>
 
@@ -2615,7 +2616,7 @@ export default function ReparothonMatrix({
                 : 'Aucun appareil ne correspond à vos critères de recherche.'}
             </p>
           ) : (
-            <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
+            <ScrollZone className="space-y-3 max-h-[640px] pr-1">
               <AnimatePresence initial={false}>
                 {filteredTickets.map((t) => {
                   const freeTechs = technicians.filter((tech) => tech.status === 'libre');
@@ -2793,7 +2794,7 @@ export default function ReparothonMatrix({
                   );
                 })}
               </AnimatePresence>
-            </div>
+            </ScrollZone>
           )}
         </div>
       </div>

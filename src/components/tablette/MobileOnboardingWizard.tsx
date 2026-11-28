@@ -23,6 +23,7 @@ import {
   saveMobileTechId,
   saveMobileVolunteerName
 } from '../../utils/modeLock';
+import ScrollZone from '../shared/ScrollZone';
 import BrandLogo from '../shared/BrandLogo';
 import PinDialog from './PinDialog';
 import { showToast } from '../shared/Toast';
@@ -49,7 +50,7 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
       { role: 'reparateur', description: 'Prendre un appareil, suivre les 4 étapes et consulter le lexique.', icon: Wrench },
       { role: 'assistant', description: "Répondre aux demandes d'aide et orienter les visiteurs.", icon: HandHeart },
       { role: 'kiosque_formulaire', description: 'Tablette libre-service pour les visiteurs (verrouillable PIN).', icon: MonitorSmartphone },
-      { role: 'admin', description: 'Contrôle complet, carte des tables et gestion multi-événements (PIN).', icon: ShieldCheck }
+      { role: 'admin', description: 'Contrôle complet, carte des tables et gestion multi-événements (code requis).', icon: ShieldCheck }
     ];
   }
   if (eventType === 'kiosque_concours') {
@@ -57,7 +58,7 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
       { role: 'juge', description: 'Chronométrer jusqu’à 2 joueurs devant vous et lancer un départ commun.', icon: Timer },
       { role: 'accueil', description: 'Gérer les inscriptions et accueillir les participants.', icon: ClipboardList },
       { role: 'kiosque_formulaire', description: 'Tablette libre-service pour l’inscription au concours (verrouillable PIN).', icon: MonitorSmartphone },
-      { role: 'admin', description: 'Toutes les pistes, tirage au sort, prix et exports (PIN).', icon: ShieldCheck }
+      { role: 'admin', description: 'Toutes les pistes, tirage au sort, prix et exports (code requis).', icon: ShieldCheck }
     ];
   }
   if (eventType === 'install_fest_linux') {
@@ -65,14 +66,14 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
       { role: 'accueil', description: 'Accueillir les visiteurs et suivre les installations.', icon: ClipboardList },
       { role: 'reparateur', description: 'Installer Linux sur les ordinateurs des participants.', icon: Wrench },
       { role: 'kiosque_formulaire', description: 'Formulaire d’inscription seul pour les visiteurs (verrouillable PIN).', icon: MonitorSmartphone },
-      { role: 'admin', description: 'Gestion complète des bénévoles et exports (PIN).', icon: ShieldCheck }
+      { role: 'admin', description: 'Gestion complète des bénévoles et exports (code requis).', icon: ShieldCheck }
     ];
   }
   return [
     { role: 'formateur', description: 'Évaluer les participants Avant / Pendant / Après la formation.', icon: GraduationCap },
     { role: 'accueil', description: 'Inscrire les participants et confirmer les présences.', icon: ClipboardList },
     { role: 'kiosque_formulaire', description: 'Formulaire d’inscription seul pour les participants (verrouillable PIN).', icon: MonitorSmartphone },
-    { role: 'admin', description: 'Gestion complète, bilan et exports (PIN).', icon: ShieldCheck }
+    { role: 'admin', description: 'Gestion complète, bilan et exports (code requis).', icon: ShieldCheck }
   ];
 }
 
@@ -191,18 +192,18 @@ export default function MobileOnboardingWizard({
   };
 
   return (
-    <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
-      <header className="flex items-center justify-between gap-4 px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b-4 border-primary bg-app-header">
+    <div className="h-dvh bg-app-bg text-app-text flex flex-col overflow-hidden">
+      <header className="shrink-0 flex items-center justify-between gap-3 px-3 sm:px-6 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] court:py-1 border-b-4 border-primary bg-app-header">
         <button
           type="button"
           onClick={onLeaveSession}
           title="Menu principal"
           aria-label="Menu principal"
-          className="flex items-center gap-3 min-w-0 text-left cursor-pointer hover:opacity-90 transition"
+          className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 text-left cursor-pointer hover:opacity-90 transition"
         >
           <BrandLogo />
           <div className="min-w-0">
-            <p className="text-micro uppercase font-bold text-primary">
+            <p className="text-micro uppercase font-bold text-primary truncate">
               {step === 'event' ? 'Étape 1 • Événement' : step === 'role' ? 'Étape 2 • Votre rôle' : 'Étape 3 • Identification'}
             </p>
             <h1 className="font-display font-black uppercase text-base sm:text-lg truncate">
@@ -227,14 +228,14 @@ export default function MobileOnboardingWizard({
         )}
       </header>
 
-      <main className="flex-1 w-full max-w-4xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-6">
+      <ScrollZone as="main" kind="page" className="flex-1 w-full max-w-4xl mx-auto p-3 sm:p-8 court:py-2 flex flex-col justify-center-safe gap-4 court:gap-2">
         {/* ÉTAPE 1 : ÉVÉNEMENT EN COURS (affichée uniquement si > 1 événement actif) */}
         {step === 'event' && (
           <section className="space-y-4">
-            <h2 className="font-display font-black uppercase tracking-wider text-xl text-center">
+            <h2 className="font-display font-black uppercase tracking-wider text-lg sm:text-xl court:text-base text-center">
               1. Quel événement rejoignez-vous ?
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 court:grid-cols-3 gap-3 court:gap-2">
               {activeEvents.map((evt) => {
                 const isSelected = evt.id === selectedEvent.id;
                 return (
@@ -245,7 +246,7 @@ export default function MobileOnboardingWizard({
                       onSelectEvent(evt);
                       setStep('role');
                     }}
-                    className={`min-h-28 p-5 rounded-3xl border-2 text-left flex flex-col justify-between gap-2 cursor-pointer transition shadow-sm ${
+                    className={`min-h-20 sm:min-h-28 court:min-h-16 p-4 sm:p-5 court:p-2.5 rounded-3xl border-2 text-left flex flex-col justify-between gap-2 cursor-pointer transition shadow-sm ${
                       isSelected
                         ? 'bg-primary/15 border-primary text-app-text'
                         : 'bg-app-card border-app-card-border hover:border-primary/60 text-app-text'
@@ -276,31 +277,33 @@ export default function MobileOnboardingWizard({
 
         {/* ÉTAPE 2 : CHOIX DU RÔLE */}
         {step === 'role' && (
-          <section className="space-y-4">
+          <section className="space-y-3 court:space-y-2">
             <div className="text-center space-y-1">
-              <h2 className="font-display font-black uppercase tracking-wider text-xl">
+              <h2 className="font-display font-black uppercase tracking-wider text-lg sm:text-xl court:text-base">
                 Quel est votre rôle aujourd'hui ?
               </h2>
-              <p className="text-xs text-app-text-muted">
+              <p className="text-xs text-app-text-muted max-sm:hidden court:hidden">
                 L'interface et les boutons de l'en-tête s'adapteront automatiquement à votre tâche.
               </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Cellulaire : 2 colonnes compactes (description masquée) ; paysage : 3 à 4 colonnes */}
+            <div className="grid grid-cols-2 court:grid-cols-4 gap-2.5 sm:gap-4 court:gap-2">
               {roleOptions.map(({ role, description, icon: Icon }) => (
                 <button
                   key={role}
                   type="button"
                   onClick={() => handleChooseRole(role)}
-                  className="min-h-28 p-5 rounded-3xl bg-app-card border-2 border-app-card-border hover:border-primary focus-visible:border-primary text-left flex items-start gap-4 transition cursor-pointer shadow-sm"
+                  title={description}
+                  className="min-h-20 sm:min-h-28 court:min-h-16 p-3 sm:p-5 court:p-2 rounded-2xl sm:rounded-3xl bg-app-card border-2 border-app-card-border hover:border-primary focus-visible:border-primary text-left flex max-sm:flex-col court:flex-col items-start gap-2 sm:gap-4 court:gap-1 transition cursor-pointer shadow-sm"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                    <Icon size={26} />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 court:w-8 court:h-8 rounded-xl sm:rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                    <Icon size={22} aria-hidden="true" />
                   </div>
                   <div className="min-w-0 space-y-1">
-                    <span className="font-display font-black uppercase tracking-wider text-base block text-app-text">
+                    <span className="font-display font-black uppercase tracking-wider text-sm sm:text-base court:text-xs block text-app-text leading-tight">
                       {WORK_ROLE_LABELS[role]}
                     </span>
-                    <span className="text-xs text-app-text-muted block leading-snug">{description}</span>
+                    <span className="text-xs text-app-text-muted block leading-snug max-sm:hidden court:hidden">{description}</span>
                   </div>
                 </button>
               ))}
@@ -432,6 +435,7 @@ export default function MobileOnboardingWizard({
 
               <button
                 type="submit"
+                data-primary-action
                 className="w-full min-h-12 px-5 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center justify-center gap-2"
               >
                 <Plus size={16} />
@@ -443,21 +447,26 @@ export default function MobileOnboardingWizard({
 
         {/* ÉTAPE 3B : IDENTIFICATION RAPIDE BÉNÉVOLE (1 seul champ Nom/surnom, même si introuvable en BD) */}
         {step === 'volunteer' && pendingRole !== 'reparateur' && (
-          <section className="max-w-lg w-full mx-auto bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
+          <section className="max-w-lg w-full mx-auto bg-app-card border border-app-card-border p-4 sm:p-6 court:p-3 rounded-3xl shadow-lg space-y-4 court:space-y-2">
             <div>
-              <span className="text-micro uppercase font-black tracking-widest text-primary block">
+              <span className="text-micro uppercase font-black tracking-widest text-primary block court:hidden">
                 Identification rapide • {WORK_ROLE_LABELS[pendingRole]}
               </span>
-              <h2 className="font-display font-bold uppercase text-xl text-app-text">
+              <h2 className="font-display font-bold uppercase text-lg sm:text-xl court:text-base text-app-text">
                 Comment doit-on vous appeler aujourd'hui ?
               </h2>
-              <p className="text-xs text-app-text-muted mt-1">
+              <p className="text-xs text-app-text-muted mt-1 court:hidden">
                 Entrez simplement votre nom, prénom ou surnom — aucune fiche complète requise.
               </p>
             </div>
 
-            <form onSubmit={handleQuickVolunteerSubmit} className="space-y-4" noValidate>
-              <div>
+            {/* Clavier ouvert en paysage : champ et bouton côte à côte pour que le bouton reste visible */}
+            <form
+              onSubmit={handleQuickVolunteerSubmit}
+              className="space-y-4 court:space-y-0 court:flex court:items-end court:gap-2"
+              noValidate
+            >
+              <div className="court:flex-1 court:min-w-0">
                 <label
                   htmlFor="mob-vol-displayName"
                   className="text-micro font-bold uppercase tracking-wider text-app-text-muted block mb-1"
@@ -487,18 +496,22 @@ export default function MobileOnboardingWizard({
 
               <button
                 type="submit"
-                className="w-full min-h-14 px-5 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase tracking-wider text-sm cursor-pointer shadow-lg"
+                data-primary-action
+                aria-label={`Confirmer et ouvrir mon espace (${WORK_ROLE_LABELS[pendingRole]})`}
+                className="w-full court:w-auto court:shrink-0 min-h-14 court:min-h-12 px-5 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase tracking-wider text-sm cursor-pointer shadow-lg"
               >
-                Confirmer et ouvrir mon espace ({WORK_ROLE_LABELS[pendingRole]})
+                <span className="court:hidden" aria-hidden="true">Confirmer et ouvrir mon espace ({WORK_ROLE_LABELS[pendingRole]})</span>
+                <span className="hidden court:inline" aria-hidden="true">Confirmer</span>
               </button>
             </form>
           </section>
         )}
-      </main>
+      </ScrollZone>
 
       <PinDialog
         isOpen={showAdminPin}
         pinLock={getEffectivePinLock(selectedEvent)}
+        eventId={selectedEvent?.id}
         onClose={() => setShowAdminPin(false)}
         onUnlocked={() => {
           setShowAdminPin(false);

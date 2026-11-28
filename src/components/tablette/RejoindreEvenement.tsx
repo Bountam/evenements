@@ -31,6 +31,8 @@ export default function RejoindreEvenement({ codePropose = '', onJoined }: Rejoi
   const [nom, setNom] = useState(() => networkManager.getTabletName());
   const [erreur, setErreur] = useState('');
   const [scanner, setScanner] = useState(false);
+  // Le QR est le chemin principal ; la saisie manuelle est repliée pour tenir dans un écran de cellulaire
+  const [saisie, setSaisie] = useState(Boolean(codePropose));
 
   // Nom proposé : celui déjà donné, sinon le modèle de la tablette
   useEffect(() => {
@@ -84,29 +86,44 @@ export default function RejoindreEvenement({ codePropose = '', onJoined }: Rejoi
   };
 
   return (
-    <div className="space-y-4 text-left">
-      <Button variant="primary" className="w-full min-h-12" onClick={() => setScanner(true)}>
-        <ScanLine size={18} aria-hidden="true" />
-        <span>Scanner le QR du PC</span>
-      </Button>
-      <form onSubmit={soumettre} className="space-y-3" noValidate aria-labelledby="titre-saisie">
-        <div id="titre-saisie" className="text-[10px] uppercase font-bold text-app-text-muted">Ou saisir le code et la clé</div>
-        <div className="space-y-1">
-          <label htmlFor="rejoindre-code" className="text-xs font-bold text-app-text block">Code de session</label>
-          <input id="rejoindre-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="INS-4821-AB12" autoCapitalize="characters" className={`${champ} font-mono uppercase`} />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="rejoindre-cle" className="text-xs font-bold text-app-text block">Clé</label>
-          <input id="rejoindre-cle" value={cle} onChange={(e) => setCle(e.target.value)} placeholder="ABCD-EFGH-JKLM" autoCapitalize="characters" autoComplete="off" className={`${champ} font-mono uppercase`} />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="rejoindre-nom" className="text-xs font-bold text-app-text block">Nom de cette tablette</label>
-          <input id="rejoindre-nom" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex. Kiosque entrée" maxLength={40} className={champ} />
-        </div>
-        {erreur && <p role="alert" className="text-xs font-bold text-danger">{erreur}</p>}
-        <Button type="submit" className="w-full">Rejoindre</Button>
-        <p className="text-[10px] text-app-text-muted">Le QR, le code et la clé s'affichent dans la fenêtre Réseau du PC hôte. Rien ne passe par internet.</p>
-      </form>
+    <div className="space-y-3 court:space-y-2 text-left">
+      {!saisie && (
+        <Button variant="primary" className="w-full min-h-12" data-primary-action onClick={() => setScanner(true)}>
+          <ScanLine size={18} aria-hidden="true" />
+          <span>Scanner le QR du PC</span>
+        </Button>
+      )}
+      <button
+        type="button"
+        aria-expanded={saisie}
+        aria-controls="rejoindre-saisie"
+        onClick={() => setSaisie((v) => !v)}
+        className="w-full min-h-11 rounded-xl bg-app-input border border-app-card-border text-xs font-bold uppercase text-app-text cursor-pointer"
+      >
+        {saisie ? 'Scanner le QR plutôt' : 'Ou saisir le code et la clé'}
+      </button>
+      {saisie && (
+        <form id="rejoindre-saisie" onSubmit={soumettre} className="space-y-3 court:space-y-2" noValidate aria-label="Saisir le code et la clé">
+          <div className="grid grid-cols-1 court:grid-cols-3 gap-3 court:gap-2">
+            <div className="space-y-1">
+              <label htmlFor="rejoindre-code" className="text-xs font-bold text-app-text block">Code de session</label>
+              <input id="rejoindre-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="INS-4821-AB12" autoCapitalize="characters" className={`${champ} font-mono uppercase`} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="rejoindre-cle" className="text-xs font-bold text-app-text block">Clé</label>
+              <input id="rejoindre-cle" value={cle} onChange={(e) => setCle(e.target.value)} placeholder="ABCD-EFGH-JKLM" autoCapitalize="characters" autoComplete="off" className={`${champ} font-mono uppercase`} />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="rejoindre-nom" className="text-xs font-bold text-app-text block">Nom de cette tablette</label>
+              <input id="rejoindre-nom" value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex. Kiosque entrée" maxLength={40} className={champ} />
+            </div>
+          </div>
+          {erreur && <p role="alert" className="text-xs font-bold text-danger">{erreur}</p>}
+          <Button type="submit" variant="primary" className="w-full min-h-12" data-primary-action>Rejoindre</Button>
+        </form>
+      )}
+      {!saisie && erreur && <p role="alert" className="text-xs font-bold text-danger">{erreur}</p>}
+      <p className="text-micro text-app-text-muted court:hidden">Le QR, le code et la clé s'affichent dans la fenêtre Réseau du PC hôte. Rien ne passe par internet.</p>
       <QrScanner isOpen={scanner} onClose={() => setScanner(false)} onResult={qrLu} />
     </div>
   );

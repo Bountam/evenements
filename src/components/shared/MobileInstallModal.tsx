@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { saveFile } from '../../utils/saveFile';
+import ScrollZone from './ScrollZone';
 
 interface MobileInstallModalProps {
   isOpen: boolean;
@@ -80,8 +81,9 @@ export default function MobileInstallModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="bg-app-card border-2 border-primary/40 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative overflow-hidden max-h-[90vh] overflow-y-auto text-app-text"
+          className="bg-app-card border-2 border-primary/40 rounded-3xl max-w-lg w-full shadow-2xl relative overflow-hidden max-h-[90dvh] flex flex-col text-app-text"
         >
+          <ScrollZone kind="page" className="p-5 sm:p-6">
           {/* Bouton de fermeture */}
           <button
             onClick={onClose}
@@ -273,6 +275,7 @@ export default function MobileInstallModal({
               Fermer
             </button>
           </div>
+          </ScrollZone>
         </motion.div>
       </div>
     </AnimatePresence>

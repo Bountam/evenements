@@ -41,6 +41,7 @@ import VolunteerSurveyButton from './shared/VolunteerSurveyButton';
 import TabSwitcher, { type TabBadge, type TabItem } from './shared/TabSwitcher';
 import { MultiEventHeaderSelector } from './shared/MultiEventControlBar';
 import BrandLogo from './shared/BrandLogo';
+import ScrollZone from './shared/ScrollZone';
 import Button from './shared/Button';
 
 interface DashboardShellProps {
@@ -136,15 +137,17 @@ export default function DashboardShell({
   const isKioskFormView = currentTab === 'formulaire';
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [a11yPrefs, setA11yPrefs] = useState<A11yPrefs>(readA11yPrefs);
+  // Onglets en bas sur cellulaire en portrait (< 640 px), en colonne à gauche sur cellulaire en paysage (< 480 px de haut)
+  const NARROW_QUERY = '(max-width: 639px), (max-height: 480px)';
   const [isNarrowScreen, setIsNarrowScreen] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
+    typeof window !== 'undefined' ? window.matchMedia(NARROW_QUERY).matches : false
   );
 
   useEffect(() => subscribeA11yPrefs(setA11yPrefs), []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(max-width: 639px)');
+    const mq = window.matchMedia(NARROW_QUERY);
     const sync = () => setIsNarrowScreen(mq.matches);
     sync();
     mq.addEventListener('change', sync);
@@ -315,7 +318,7 @@ export default function DashboardShell({
                 close();
                 onLockScreen();
               }}
-              title="Verrouiller l'écran administrateur du Laptop (code 0000 par défaut)"
+              title="Verrouiller l'écran administrateur du Laptop"
               className="w-full !justify-start"
             >
               <Lock size={13} className="text-primary" aria-hidden="true" />
@@ -387,6 +390,10 @@ export default function DashboardShell({
             </Button>
           )}
 
+          <span className="block px-1 text-micro text-app-text-muted">
+            Données gardées sur cet appareil (IndexedDB) • v{currentVersion}
+          </span>
+
           {sqliteStatus !== 'unavailable' && (
             <span
               role="status"
@@ -418,12 +425,12 @@ export default function DashboardShell({
 
   if (isKioskFormView) {
     return (
-      <div className="min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10">
-        <header className="sticky top-0 z-40 shrink-0 h-14 min-h-14 bg-app-header border-b-2 border-primary px-2.5 sm:px-4 flex items-center justify-between gap-2 shadow-lg backdrop-blur-xl">
+      <div className="h-dvh flex flex-col overflow-hidden bg-app-bg text-app-text transition-colors duration-300 relative z-10">
+        <header className="z-40 shrink-0 h-14 min-h-14 court:h-11 court:min-h-11 bg-app-header border-b-2 border-primary px-2.5 sm:px-4 flex items-center justify-between gap-2 shadow-lg backdrop-blur-xl">
           {hideNavigation ? (
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2">
               <BrandLogo size="md" alt="Insertech" />
-              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-sm sm:text-base max-w-[160px] sm:max-w-[280px]" title={event.name}>
+              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-sm sm:text-base max-w-[160px] sm:max-w-[280px] max-sm:hidden" title={event.name}>
                 {event.name}
               </h1>
             </div>
@@ -433,10 +440,10 @@ export default function DashboardShell({
               onClick={onLeaveEvent}
               title="Menu principal"
               aria-label="Menu principal"
-              className="flex items-center gap-2 min-w-0 text-left cursor-pointer hover:opacity-90 transition rounded-xl"
+              className="flex items-center gap-2 text-left cursor-pointer hover:opacity-90 transition rounded-xl"
             >
               <BrandLogo size="md" alt="Insertech" />
-              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-sm sm:text-base max-w-[160px] sm:max-w-[280px]" title={event.name}>
+              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-sm sm:text-base max-w-[160px] sm:max-w-[280px] max-sm:hidden" title={event.name}>
                 {event.name}
               </h1>
             </button>
@@ -450,7 +457,7 @@ export default function DashboardShell({
                 aria-label={`Changer de rôle (${WORK_ROLE_LABELS[workRole]})`}
               >
                 <UserCheck size={14} className="text-primary" aria-hidden="true" />
-                <span className="hidden sm:inline">{WORK_ROLE_LABELS[workRole]}</span>
+                <span className="hidden md:inline">{WORK_ROLE_LABELS[workRole]}</span>
               </Button>
             )}
             <VolunteerSurveyButton eventId={event.id} iconOnly />
@@ -458,14 +465,16 @@ export default function DashboardShell({
             {!hideNavigation && renderMoreMenu()}
           </div>
         </header>
-        <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-8">{children}</main>
+        <ScrollZone as="main" kind="page" className="flex-1 w-full px-3 sm:px-6 py-3 sm:py-6 court:py-2">
+          {children}
+        </ScrollZone>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10 ${
-      isPublicView ? `min-h-screen lg:h-screen lg:h-[100dvh] lg:overflow-hidden kiosk-auto-scroll ${isPointerIdle ? 'cursor-none' : ''}` : ''
+    <div className={`h-dvh flex flex-col overflow-hidden bg-app-bg text-app-text transition-colors duration-300 relative z-10 ${
+      isPublicView && isPointerIdle ? 'cursor-none' : ''
     }`}>
       {/* ==================================================================== */}
       {/* EN-TÊTE ÉCRAN PUBLIC (Kiosque immersif et épuré) */}
@@ -579,10 +588,10 @@ export default function DashboardShell({
         /* ==================================================================== */
         <header
           ref={adminHeaderRef}
-          className="sticky top-0 z-40 shrink-0 h-14 min-h-14 bg-app-header border-b-2 border-primary px-2.5 sm:px-4 flex items-center justify-between gap-2 shadow-lg backdrop-blur-xl transition-colors duration-300"
+          className="z-40 shrink-0 h-14 min-h-14 court:h-11 court:min-h-11 bg-app-header border-b-2 border-primary px-2.5 sm:px-4 flex items-center justify-between gap-2 shadow-lg backdrop-blur-xl transition-colors duration-300"
         >
           {/* Logo Insertech (Menu principal) + Titre court cliquable sur Laptop */}
-          <div className="flex items-center gap-2 min-w-0 shrink">
+          <div className="flex items-center gap-2 shrink">
             {hideNavigation ? (
               <div className="shrink-0">
                 <BrandLogo size="md" alt="Insertech Événements" />
@@ -633,7 +642,7 @@ export default function DashboardShell({
                 aria-label={`Changer de rôle (${WORK_ROLE_LABELS[workRole]})`}
               >
                 <UserCheck size={14} className="text-primary" aria-hidden="true" />
-                <span className="hidden sm:inline">{WORK_ROLE_LABELS[workRole]}</span>
+                <span className="hidden md:inline">{WORK_ROLE_LABELS[workRole]}</span>
               </Button>
             )}
 
@@ -683,49 +692,49 @@ export default function DashboardShell({
         </header>
       )}
 
-      {/* Zone de contenu principale débridée en largeur (jusqu'à 1850px) */}
-      <main className={`flex-1 w-full transition-all duration-300 ${
-        isPublicView 
-          ? 'flex-1 min-h-0 overflow-y-auto lg:overflow-hidden p-2 sm:p-4 flex flex-col kiosk-auto-scroll' 
-          : event.type === 'kiosque_concours'
-            ? 'max-w-[1850px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex-1 flex flex-col min-h-0'
-            : `max-w-[1850px] mx-auto px-4 md:px-6 py-4 md:py-6 ${isNarrowScreen && tabsWithBadges.length > 0 ? 'pb-20' : ''}`
-      }`}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`${event.id}-${panelKey}`}
-            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.99 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            role={isPublicView ? undefined : 'tabpanel'}
-            id={isPublicView ? undefined : `panel-${currentTab}`}
-            aria-labelledby={isPublicView ? undefined : `tab-${currentTab}`}
-            className={isPublicView ? 'min-h-full lg:h-full flex flex-col kiosk-auto-scroll' : ''}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+      {/* Contenu : prend toute la hauteur restante ; la barre d'onglets est en bas (portrait)
+          ou en colonne à gauche (cellulaire en paysage). La page elle-même ne défile jamais. */}
+      <div className="flex-1 min-h-0 flex flex-col court:flex-row">
+        <ScrollZone
+          as="main"
+          kind="page"
+          className={`flex-1 w-full transition-all duration-300 ${
+            isPublicView
+              ? 'p-2 sm:p-4 flex flex-col'
+              : event.type === 'kiosque_concours'
+                ? 'px-3 sm:px-6 py-2.5 sm:py-3.5 court:py-2 flex flex-col'
+                : 'px-3 md:px-6 py-3 md:py-5 court:py-2'
+          }`}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${event.id}-${panelKey}`}
+              initial={{ opacity: 0, y: 10, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.99 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              role={isPublicView ? undefined : 'tabpanel'}
+              id={isPublicView ? undefined : `panel-${currentTab}`}
+              aria-labelledby={isPublicView ? undefined : `tab-${currentTab}`}
+              className={`w-full max-w-[1850px] mx-auto ${isPublicView || event.type === 'kiosque_concours' ? 'flex-1 min-h-0 flex flex-col' : 'h-full'}`}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+        </ScrollZone>
 
-      {/* Pied de page informatif sur IndexedDB - MASQUÉ COMPLÈTEMENT SUR L'ÉCRAN PUBLIC */}
-      {!isPublicView && (
-        <footer className={`py-4 border-t border-app-card-border bg-app-bg-footer text-center text-micro text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300 ${isNarrowScreen && tabsWithBadges.length > 0 ? 'pb-20' : ''}`}>
-          <Database size={11} className="text-primary animate-pulse" />
-          <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur • v{currentVersion}</span>
-        </footer>
-      )}
-
-      {/* Barre de navigation fixe en bas sur mobile (< 640px) — un seul tablist monté à la fois */}
-      {!isPublicView && isNarrowScreen && tabsWithBadges.length > 0 && (
-        <TabSwitcher
-          variant="bottom"
-          tabs={tabsWithBadges}
-          currentTab={currentTab}
-          onTabChange={onTabChange}
-          ariaLabel="Navigation des vues de l'événement"
-        />
-      )}
+        {/* Barre d'onglets du bas sur cellulaire — un seul tablist monté à la fois */}
+        {!isPublicView && isNarrowScreen && tabsWithBadges.length > 0 && (
+          <TabSwitcher
+            variant="bottom"
+            tabs={tabsWithBadges}
+            currentTab={currentTab}
+            onTabChange={onTabChange}
+            ariaLabel="Navigation des vues de l'événement"
+            className="court:order-first"
+          />
+        )}
+      </div>
     </div>
   );
 }

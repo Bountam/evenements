@@ -1,14 +1,14 @@
 import { db } from '../db';
 import type {
   DeviceCategory,
-  OfflineGuideImage,
-  OfflineGuideStep,
+  IfixitArticleLink,
   OfflineRepairGuide,
   OperatingSystem,
   RepairSymptomDomain,
   RepairTicket
 } from '../types';
-import { getIfixitGuideDetail, type IfixitGuideDetail, type IfixitLang } from '../services/ifixitService';
+import type { IfixitGuideDetail } from '../services/ifixitService';
+import { GUIDES_LOCAUX, RECHERCHE_FICHES_INITIALES } from '../data/guidesLocaux';
 import { getDiagnosticSuggestions, normalizeDiagnosticText } from './repairLexicon';
 import { getCompanionEndpoint } from './sqliteBackup';
 
@@ -60,10 +60,8 @@ const ALL_SYMPTOM_DOMAINS: RepairSymptomDomain[] = [
   'linux'
 ];
 
-/**
- * 9 fiches pas à pas maison Insertech embarquées dès le démarrage (100 % hors-ligne).
- */
-export const BUILTIN_REPAIR_GUIDES: OfflineRepairGuide[] = [
+// 9 fiches courtes d'origine (v1.8) ; les fiches complètes sont dans src/data/guidesLocaux.ts
+const FICHES_INITIALES: OfflineRepairGuide[] = [
   {
     id: 'builtin-linux-slow-ssd',
     source: 'builtin',
@@ -567,6 +565,15 @@ export const BUILTIN_REPAIR_GUIDES: OfflineRepairGuide[] = [
   }
 ];
 
+/**
+ * Fiches pas à pas Insertech embarquées dès le démarrage (100 % hors ligne) : 9 fiches courtes d'origine
+ * et les fiches complètes rédigées pour la v1.9.
+ */
+export const BUILTIN_REPAIR_GUIDES: OfflineRepairGuide[] = [
+  ...FICHES_INITIALES.map((g) => ({ ...g, ifixitRecherche: RECHERCHE_FICHES_INITIALES[g.id] })),
+  ...GUIDES_LOCAUX
+];
+
 function dedupeStrings(items: string[]): string[] {
   return Array.from(new Set(items.map((s) => s.trim()).filter(Boolean)));
 }
@@ -817,6 +824,10 @@ export function offlineGuideToViewerDetail(guide: OfflineRepairGuide): IfixitGui
     lang: guide.lang,
     fromCache: true,
     staleCache: false,
+    localGuideId: guide.id,
+    ifixitLinks: guide.ifixitLinks ?? [],
+    ifixitRecherche: guide.ifixitRecherche,
+    brouillon: guide.reluPar === '',
     steps: guide.steps.map((st) => ({
       stepid: st.stepid,
       orderby: st.orderby,
@@ -913,8 +924,29 @@ export async function getAllOfflineGuides(): Promise<OfflineRepairGuide[]> {
   }
   const byId = new Map<string, OfflineRepairGuide>();
   for (const g of BUILTIN_REPAIR_GUIDES) byId.set(g.id, g);
-  for (const g of stored) byId.set(g.id, g);
+  for (const g of stored) {
+    const builtin = byId.get(g.id);
+    // Fiche Insertech : seuls les liens iFixit sont enregistrés, le contenu suit toujours la version de l'appli
+    byId.set(g.id, builtin && builtin.source === 'builtin' ? { ...builtin, ifixitLinks: g.ifixitLinks ?? [] } : g);
+  }
   return Array.from(byId.values());
+}
+
+// PC hôte : lier un article iFixit complet à une fiche locale (seul le lien est enregistré)
+export async function linkIfixitArticle(guideId: string, link: IfixitArticleLink): Promise<OfflineRepairGuide | null> {
+  const guide = (await getAllOfflineGuides()).find((g) => g.id === guideId);
+  if (!guide) return null;
+  const others = (guide.ifixitLinks ?? []).filter((l) => !(l.guideId === link.guideId && l.lang === link.lang));
+  const next = { ...guide, ifixitLinks: [...others, link] };
+  await saveOfflineGuide(next);
+  return next;
+}
+
+export async function unlinkIfixitArticle(guideId: string, article: { guideId: number; lang: string }): Promise<void> {
+  const guide = (await getAllOfflineGuides()).find((g) => g.id === guideId);
+  if (!guide) return;
+  const ifixitLinks = (guide.ifixitLinks ?? []).filter((l) => !(l.guideId === article.guideId && l.lang === article.lang));
+  await saveOfflineGuide({ ...guide, ifixitLinks });
 }
 
 export async function saveOfflineGuide(guide: OfflineRepairGuide): Promise<void> {
@@ -923,76 +955,6 @@ export async function saveOfflineGuide(guide: OfflineRepairGuide): Promise<void>
 
 export async function deleteOfflineGuide(id: string): Promise<void> {
   await db.repairGuides.delete(id);
-}
-
-/**
- * Télécharge un guide iFixit complet sur le Laptop, compresse 1 miniature par étape (en conservant fullResUrl)
- * et l'enregistre dans db.repairGuides.
- */
-export async function downloadIfixitGuideToOfflineLibrary(
-  guideId: number,
-  lang: IfixitLang,
-  overrides?: {
-    brands?: string[];
-    categories?: DeviceCategory[];
-    operatingSystems?: OperatingSystem[];
-    symptomDomains?: RepairSymptomDomain[];
-  }
-): Promise<OfflineRepairGuide> {
-  const detail = await getIfixitGuideDetail(guideId, lang, { forceRefresh: true });
-  const inferred = inferGuideMetadata(detail.title, detail.device);
-
-  const steps: OfflineGuideStep[] = [];
-  for (const step of detail.steps) {
-    const primary = step.images[0];
-    const images: OfflineGuideImage[] = [];
-    if (primary) {
-      const thumbSource = primary.medium || primary.standard || primary.thumbnail || '';
-      const fullResUrl = primary.original || primary.standard || primary.medium || '';
-      const thumbnailDataUrl = await compressImageToThumbnailDataUrl(thumbSource);
-      images.push({
-        id: primary.id,
-        thumbnailDataUrl,
-        mediumUrl: primary.medium || primary.standard || '',
-        fullResUrl
-      });
-    }
-    steps.push({
-      stepid: step.stepid,
-      orderby: step.orderby,
-      title: step.title,
-      images,
-      lines: step.lines
-    });
-  }
-
-  const record: OfflineRepairGuide = {
-    id: `ifixit-${lang}-${detail.guideid}`,
-    source: 'ifixit',
-    ifixitGuideId: detail.guideid,
-    lang,
-    title: detail.title,
-    device: detail.device,
-    brands: overrides?.brands && overrides.brands.length > 0 ? overrides.brands : inferred.brands,
-    models: inferred.models,
-    categories:
-      overrides?.categories && overrides.categories.length > 0 ? overrides.categories : inferred.categories,
-    operatingSystems: overrides?.operatingSystems ?? inferred.operatingSystems,
-    symptomDomains:
-      overrides?.symptomDomains && overrides.symptomDomains.length > 0
-        ? overrides.symptomDomains
-        : inferred.symptomDomains,
-    difficulty: detail.difficulty,
-    timeRequired: detail.timeRequired,
-    introduction: detail.introduction,
-    tools: detail.tools,
-    parts: detail.parts,
-    steps,
-    updatedAt: Date.now()
-  };
-
-  await saveOfflineGuide(record);
-  return record;
 }
 
 export function exportOfflineGuidesPack(guides: OfflineRepairGuide[]): string {

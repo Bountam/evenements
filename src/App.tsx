@@ -27,6 +27,7 @@ import MobileInstallModal from './components/shared/MobileInstallModal';
 import UpdateModal from './components/shared/UpdateModal';
 import ImpactReportModal from './components/shared/ImpactReportModal';
 import OfflineGuidesLibraryModal from './components/shared/OfflineGuidesLibraryModal';
+import ScrollZone from './components/shared/ScrollZone';
 import Modal from './components/shared/Modal';
 import { readJoinCodeFromUrl, clearJoinCodeFromUrl } from './utils/joinLink';
 import ThemeToggle from './components/shared/ThemeToggle';
@@ -68,6 +69,8 @@ const IS_PUBLIC_WINDOW =
 
 // Tablette (application Android) : elle rejoint l'activité du PC hôte et n'en crée jamais
 const IS_TABLET = getDeviceRole() === 'tablette';
+// Texte de 16 px minimum et cibles tactiles sur tablette (voir index.css, html.appareil-tactile)
+if (IS_TABLET && typeof document !== 'undefined') document.documentElement.classList.add('appareil-tactile');
 
 // Onglet courant mémorisé par fenêtre, pour survivre à un rechargement
 const TAB_STORAGE_KEY = 'insertech_current_tab';
@@ -532,7 +535,7 @@ export default function App() {
     }
     saveLocked(true);
     setIsModeLocked(true);
-    showToast('Kiosque verrouillé (code 0000 par défaut). Maintenez le cadenas 2 secondes pour déverrouiller.', 'info');
+    showToast('Kiosque verrouillé. Maintenez le cadenas 2 secondes pour déverrouiller.', 'info');
   };
 
   // Tablette verrouillée : plein écran, écran toujours allumé et application épinglée (Retour et Accueil
@@ -772,6 +775,8 @@ export default function App() {
 
   // CHARGER UN ÉVÉNEMENT EXISTANT
   const handleSelectPastEvent = (event: EventSettings) => {
+    // Tablette : s'inscrire à cet événement auprès du PC hôte (elle ne recevra que ses données)
+    if (IS_TABLET) networkManager.selectEvent(event.id);
     localStorage.setItem('insertech_active_event_id', event.id);
     setActiveEvent(event);
     if (IS_TABLET && workRole === 'kiosque_formulaire') {
@@ -1564,7 +1569,7 @@ export default function App() {
             Date : <strong className="text-app-text">{eventData.date}</strong>. Lieu : <strong className="text-app-text">{eventData.location}</strong>.
           </p>
 
-          <div className="max-h-[50vh] overflow-y-auto pr-1 py-2 space-y-4">
+          <ScrollZone className="max-h-[50dvh] pr-1 py-2 space-y-4">
             {conflicts.length === 0 ? (
               <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl text-center space-y-2">
                 <Sparkles className="text-primary mx-auto" size={24} />
@@ -1594,7 +1599,7 @@ export default function App() {
                 </div>
               </div>
             )}
-          </div>
+          </ScrollZone>
 
           <div className="border-t border-app-card-border pt-4 flex items-center justify-between gap-4">
             <button
@@ -1625,7 +1630,7 @@ export default function App() {
   // Affichage du chargement
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#180A2b] flex flex-col items-center justify-center text-white space-y-4">
+      <div className="h-dvh bg-[#180A2b] flex flex-col items-center justify-center text-white space-y-4">
         <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
         <p className="font-display uppercase tracking-widest text-xs text-slate-400">Chargement de l'environnement Insertech...</p>
       </div>
@@ -1749,6 +1754,7 @@ export default function App() {
         <PinDialog
           isOpen={showPinDialog || isLaptopLocked}
           pinLock={getEffectivePinLock(activeEvent)}
+          eventId={activeEvent?.id}
           onClose={() => {
             setShowPinDialog(false);
             setIsLaptopLocked(false);
@@ -1802,11 +1808,11 @@ export default function App() {
       ) : null;
 
     return (
-      <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
-        <main className="flex-1 w-full max-w-xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-6">
+      <div className="h-dvh bg-app-bg text-app-text flex flex-col overflow-hidden">
+        <ScrollZone as="main" kind="page" className="flex-1 w-full max-w-xl mx-auto p-3 sm:p-8 court:py-2 flex flex-col justify-center-safe gap-4 court:gap-2">
           <div className="flex items-center justify-between gap-3.5">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-secondary">
+              <div className="w-12 h-12 court:w-9 court:h-9 rounded-xl overflow-hidden border-2 border-primary shrink-0 bg-secondary">
                 <img src={logoImage} alt="" className="w-full h-full object-cover" />
               </div>
               <h1 className="text-app-text font-bold text-xl tracking-tight uppercase font-display leading-none">
@@ -1815,9 +1821,9 @@ export default function App() {
             </div>
             <VolunteerSurveyButton />
           </div>
-          <section aria-labelledby="join-title" className="bg-app-card border border-app-card-border rounded-3xl p-6 sm:p-8 space-y-4 text-center shadow-lg">
-            <h2 id="join-title" className="font-display font-black uppercase tracking-wider text-lg">Rejoindre un événement</h2>
-            <p className="text-sm text-app-text-muted">
+          <section aria-labelledby="join-title" className="bg-app-card border border-app-card-border rounded-3xl p-4 sm:p-8 court:p-3 space-y-3 court:space-y-2 text-center shadow-lg">
+            <h2 id="join-title" className="font-display font-black uppercase tracking-wider text-lg court:text-base">Rejoindre un événement</h2>
+            <p className="text-sm text-app-text-muted court:hidden">
               Cette tablette se connecte à une activité créée sur le PC hôte. Les activités se créent et se règlent sur le PC.
             </p>
             {sessionCode ? (
@@ -1852,8 +1858,8 @@ export default function App() {
               </>
             )}
           </section>
-          <p className="text-center text-micro text-app-text-muted">v{currentVersion}</p>
-        </main>
+          <p className="text-center text-micro text-app-text-muted court:hidden">v{currentVersion}</p>
+        </ScrollZone>
         {renderNetModal()}
       </div>
     );
@@ -1861,7 +1867,8 @@ export default function App() {
 
   // Rendu de la page d'accueil (Sélecteur de matrice et historique)
   return (
-    <div className="min-h-screen bg-app-bg text-app-text flex flex-col justify-between">
+    <div className="h-dvh bg-app-bg text-app-text flex flex-col overflow-hidden">
+      <ScrollZone kind="page" className="flex-1 flex flex-col justify-between">
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-12">
         {/* En-tête de bienvenue */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-6 border-b border-app-card-border">
@@ -2069,6 +2076,7 @@ export default function App() {
           <span>Rechercher une mise à jour</span>
         </button>
       </footer>
+      </ScrollZone>
 
       {renderNetModal()}
       {renderImportValidationModal()}

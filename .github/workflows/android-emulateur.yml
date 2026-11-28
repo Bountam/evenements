@@ -5,8 +5,12 @@ name: Test Android sur émulateur
 # - Android 10 (API 29) : la version minimale. Son WebView d'origine (74) est trop ancien pour l'interface :
 #   le test vérifie qu'un message explique quoi faire au lieu d'une page blanche.
 # - Android 15 (API 35) : WebView récent, le test vérifie que l'interface elle-même s'affiche.
-# Long (10 à 15 minutes) : seulement quand le code Android change, ou à la demande.
+# Long (10 à 15 minutes) : quand le code Android change (PR), à chaque poussée sur main (les modifications
+# poussées directement sur main passent aussi par l'émulateur), ou à la demande.
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main

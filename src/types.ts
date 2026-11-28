@@ -105,6 +105,9 @@ export interface TrackState {
   eventId?: string | null; // Événement propriétaire de l'assignation (les pistes sont partagées entre événements)
   judgeId?: string | null; // Identifiant de l'animateur juge qui contrôle la piste
   judgeName?: string | null; // Nom affiché aux autres animateurs pour le départ commun
+  // Juge propriétaire de la piste (réservée par le PC hôte) : lui seul peut y placer un joueur
+  ownerJudgeId?: string | null;
+  ownerJudgeName?: string | null;
 }
 
 export type RaffleStatus = 'idle' | 'spinning' | 'celebrating';
@@ -228,6 +231,10 @@ export type SyncMessage =
   | { type: 'STATE_SYNC'; payload: any }
   | { type: 'TIMER_START'; trackId: number; startTime: number; elapsedBeforeStart: number }
   | { type: 'TIMER_START_BATCH'; trackIds: number[]; startTime: number }
+  // Réservation de pistes par un juge (le PC hôte n'accorde que les pistes libres et sans propriétaire)
+  | { type: 'JUDGE_CLAIM'; judgeId: string; judgeName: string; trackIds: number[] }
+  // Libérer une piste réservée (laptop administrateur : tablette perdue, juge parti)
+  | { type: 'TRACK_RELEASE'; trackId: number }
   | { type: 'TIMER_STOP'; trackId: number; elapsed: number }
   | { type: 'TIMER_RESET'; trackId: number }
   | { type: 'RAFFLE_START'; spinStartTime: number; winnerId: string }
@@ -309,6 +316,14 @@ export interface OfflineGuideStep {
   lines: { text: string; bullet: string; level: number }[];
 }
 
+// Article iFixit complet lié à une fiche locale : s'ouvre dans l'application via la clé du PC hôte
+export interface IfixitArticleLink {
+  guideId: number;
+  lang: 'fr' | 'en';
+  title: string;
+  url?: string;
+}
+
 export interface OfflineRepairGuide {
   id: string;
   source: 'builtin' | 'ifixit' | 'custom';
@@ -328,4 +343,11 @@ export interface OfflineRepairGuide {
   parts: string[];
   steps: OfflineGuideStep[];
   updatedAt: number;
+  // Articles iFixit complets liés depuis le PC hôte (lien seulement : le contenu reste chez iFixit)
+  ifixitLinks?: IfixitArticleLink[];
+  // Termes de recherche iFixit proposés pour trouver l'article complet
+  ifixitRecherche?: string;
+  // Nom de la personne qui a relu la fiche ; chaîne vide = brouillon à relire
+  reluPar?: string;
+  version?: number;
 }

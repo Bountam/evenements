@@ -1136,13 +1136,20 @@ Cette fonction génère et télécharge un fichier CSV (ou JSON) prérempli avec
 
 ## 9. DashboardShell.tsx — Coquille du tableau de bord
 
-### 9.1 En-tête permanent compact et navigation mobile
+### 9.1 Zéro défilement : un écran = tout ce qu'il faut (v1.9.0)
 
-L'en-tête reste permanent et tient sur une seule ligne (`h-14 min-h-14 sticky top-0 z-40`), sans chevauchement ni retour à la ligne sur portable (`1366×768`), tablette (`800×1280`) et téléphone (`412×915`), y compris en mode Kiosque d'inscription (seul l'Écran Public projecteur conserve son auto-masquage au repos). Il affiche :
-- Le logo Insertech (clic = retour au menu principal)
-- Le titre court de l'événement (cliquable sur Laptop via `MultiEventHeaderSelector` pour changer d'activité, ouvrir la **Tour de contrôle** ou exporter le bilan consolidé multi-événements)
-- Sur écrans `>= 640px`, les onglets compacts (`TabSwitcher`) ; sur mobile `< 640px`, une barre de navigation fixe en bas d'écran (`variant="bottom"`)
-- Les actions en icônes prioritaires avec libellés accessibles : rôle actif (mobile), verrouillage Kiosque, état réseau (Bleu / Jaune / Rouge), `Devenir bénévole` (masqué pour le Réparateur), `Rapport d'Impact` (`admin`) et le menu `Plus` (`MoreMenu`, contenant `Texte agrandi`, `Contraste élevé`, projecteur, thème, verrouillage PC, bibliothèque de guides et sauvegardes)
+La page ne défile jamais (`html`, `body` et `#root` à `100 %` sans défilement ; coquille en `h-dvh`, qui suit la barre d'adresse et le clavier des cellulaires). Priorité au cellulaire et à la tablette, en portrait comme en paysage :
+- **En-tête** d'une ligne (`h-14`, `h-11` en paysage cellulaire) : logo (clic = menu principal), titre court de l'événement (sélecteur multi-événements sur Laptop), actions en icônes avec libellés accessibles (rôle, verrouillage, réseau, `Devenir bénévole`, `Rapport d'Impact`, menu `Plus` qui contient aussi la version).
+- **Onglets** : compacts dans l'en-tête sur écran large ; sur cellulaire, barre de 4-5 icônes en bas, qui devient une colonne à gauche en paysage (variante Tailwind `court:` = hauteur ≤ 480 px).
+- **Contenu** : prend toute la hauteur restante. Seules les listes défilent, toujours dans `ScrollZone` (`src/components/shared/ScrollZone.tsx`), avec un léger fondu en haut ou en bas quand il reste du contenu. `kind="liste"` pour une liste longue ; `kind="page"` sert de filet de sécurité et ne doit jamais défiler.
+- **Modales** plein écran sur cellulaire (`max-sm` et `court`), corps dans une `ScrollZone`.
+- **Texte tactile** 16 px minimum sur tablette (`html.appareil-tactile`, `pointer: coarse`).
+- **Cockpit réparateur** : file d'attente en liste ; appareil en cours = fiche compacte, onglets `Diagnostic` / `Guides` (côte à côte dès 1024 px), boutons `Réparé` et `Rapport` toujours visibles en bas.
+
+Garde-fous :
+- `npm run lint` (`scripts/check-design-tokens.js`) refuse `overflow-auto`, `overflow-y-auto`, `h-screen`, `min-h-screen` et les unités `vh` en dehors de `ScrollZone.tsx`.
+- `tests/zero-defilement.spec.ts` ouvre les 10 écrans prioritaires (`tests/helpers/ecrans.ts`) sur 6 tailles (360×640, 640×360, 390×844, 844×390, 800×1280, 1280×800 ; laptop 1366×768 ; TV 1920×1080 et 1280×720), plus clavier ouvert (hauteur −40 %) pour les formulaires. Il échoue si la page déborde, si quelque chose défile hors `ScrollZone`, si la zone « page » déborde ou si le bouton principal (`data-primary-action`) sort de l'écran. `RAPPORT=1` liste les écarts sans échouer.
+- Chaque capture va dans `captures/` ; `npm run galerie` en fait `captures/index.html`. La CI publie la galerie (artefact `galerie-zero-defilement`) à chaque build.
 
 ### 9.2 Les onglets par type d'événement
 
@@ -1421,7 +1428,7 @@ Lorsque l'animateur **Réparateur** prend un appareil en charge dans `src/compon
 |---|---|---|
 | **1. Fiche permanente** | `ReparateurCockpit.tsx` | Affiche dès l'ouverture le participant, ses pronoms, l'appareil, l'OS, le symptôme initial, le minuteur de service et les boutons d'action (`Appeler Table`, `Assistant`, `Lexique`). |
 | **2. Diagnostic Oui / Non** | `DiagnosticDecisionTree.tsx` + `src/utils/repairLexicon.ts` | Arbres décisionnels interactifs **Oui / Non** (`DIAGNOSTIC_DECISION_TREES`) triés par pertinence : 1 question claire avec aide FALC → cause probable, conseil de sécurité, action cochable en 1 tap et ciblage des guides, plus section repliable des points de contrôle complémentaires (`DIAGNOSTIC_CHECKLIST_RULES`). |
-| **3. Guides pertinents** | `IfixitGuidesPanel.tsx` (`embedded`) + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Affiche directement les guides hors-ligne ciblés (`matchOfflineGuidesForTicket`), le relais LAN Laptop et les guides iFixit v2.0 (FR prioritaire, repli EN, cache 7 jours), avec recherche manuelle repliable derrière le bouton `Rechercher`, lecteur intégré et zoom HD au clic sur miniature. |
+| **3. Guides pertinents** | `IfixitGuidesPanel.tsx` (`embedded`) + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Affiche directement les fiches locales ciblées (`matchOfflineGuidesForTicket`) et les articles iFixit v2.0 (FR prioritaire, repli EN, cache 7 jours). Sur tablette, tout article passe par le PC hôte (`IFIXIT_REQUEST` → `IFIXIT_RESULT` + `IFIXIT_IMAGE`) : la tablette ne contacte jamais ifixit.com. Recherche manuelle repliable derrière `Rechercher`, lecteur intégré, attribution iFixit (auteur, licence CC BY-NC-SA) et zoom au clic. |
 | **4. Clôture** | `ReparateurCockpit.tsx` | Bouton **`Valider rapidement (Réparé)`** en 1 clic ou assistant de clôture en 3 questions (`Résultat` → `Actions réalisées` → `Suite proposée`). |
 
 Le cockpit **Assistant** (`AssistantCockpit.tsx`) adopte également une vue guidée par défaut sur l'action prioritaire (`Action 1 sur N` : aide réparateur → appel de table → orientation sortie/boutique) avec bascule `Voir toute la file`.
@@ -1429,8 +1436,9 @@ Le cockpit **Assistant** (`AssistantCockpit.tsx`) adopte également une vue guid
 #### Bibliothèque locale hors-ligne & distribution LAN avec le participant
 
 - **Gestionnaire sur Laptop (`OfflineGuidesLibraryModal.tsx`) :** accessible aux administrateurs via **Plus → Bibliothèque de guides hors-ligne** :
-  - **9 fiches maison Insertech** pré-incluses (`BUILTIN_REPAIR_GUIDES` dans `src/utils/offlineGuideLibrary.ts`).
-  - **Pré-téléchargement iFixit** depuis le PC serveur (avec votre clé API stockée uniquement hors Git dans `.env.local`, secret CI `VITE_IFIXIT_API_KEY` ou `localStorage`), compressant 1 miniature par étape (via le relais local `/image` de `launcher/StorageCompanion.cs`) tout en conservant `fullResUrl`.
+  - **33 fiches Insertech** pré-incluses (`BUILTIN_REPAIR_GUIDES` : 9 fiches courtes d'origine + 24 fiches complètes de `src/data/guidesLocaux.ts`, portables, PC tour, cellulaires et tablettes, tous les symptômes). Les nouvelles fiches portent le badge **Brouillon** tant que `reluPar` est vide : à faire relire par un technicien avant l'événement.
+  - **Onglet Articles iFixit** (PC hôte seulement) : clé d'API saisie sur ce PC (`Enregistrer`, `Tester la clé` ; jamais dans le bundle, la CI ni les tablettes, et `npm run build` échoue si une clé s'y retrouve via `scripts/check-bundle-secrets.js`), recherche, `Aperçu` et `Lier` un article à une fiche locale. Seul le lien est enregistré (`ifixitLinks`) : l'article complet s'ouvre dans l'application via le PC (licence CC BY-NC-SA, Insertech OBNL et organisme de charité, attribution affichée). La base iFixit n'est jamais téléchargée.
+  - Le PC hôte relaie les articles aux tablettes : texte d'abord, sans aucune adresse d'image, puis chaque photo compressée à 640 px (relais local `/image` de `launcher/StorageCompanion.cs` si besoin). Sans PC joignable, la tablette affiche « PC hôte injoignable » et garde toutes les fiches locales.
   - Création de **fiches maison** personnalisées et **import / export JSON** d'un pack de guides.
 - **Filtrage strict selon l'inscription (`matchOfflineGuidesForTicket`) :** exclut automatiquement toute fiche dont la **marque**, la **catégorie**, l'**OS** ou les **symptômes** ne correspondent pas au ticket (ex. un guide batterie Dell n'apparaît jamais pour un PC Lenovo sous Linux lent).
 - **Distribution LAN ciblée (`src/network.ts`) :** dès l'inscription ou la mise à jour d'un ticket (et à `INITIAL_SYNC`), le PC hôte pousse automatiquement uniquement les guides pertinents vers les tablettes via `GUIDES_SYNC`, sans alourdir chaque delta de ticket.
@@ -2218,7 +2226,9 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
   - 🌐 **PWA Web & Mobile** : `InsertechEvenements-PWA-Android.zip` et `InsertechEvenements-Mobile.html`.
 - **CD / Releases** : Publication automatique des exécutables et de l'APK dès qu'un tag `v*` est poussé, avec `SHA256SUMS.txt`. La release échoue s'il manque un fichier au lieu de partir incomplète.
 
-**Publier une nouvelle version.** La version de `package.json` est la seule source de vérité : `npm version patch` (ou `minor`, `major`) la monte et la recopie dans le lanceur .NET, `app.manifest` et l'APK (`versionCode` = majeur×10000 + mineur×100 + correctif) via `scripts/sync-version.js`. Fusionner, puis pousser le tag `v<version>` ou lancer le workflow avec `release_tag`. Le pipeline refuse un tag qui ne correspond pas à `package.json`, et `npm run lint` refuse des versions désynchronisées. La version s'affiche dans le pied de page de l'application.
+**Publier une nouvelle version.** La version de `package.json` est la seule source de vérité : `npm version patch` (ou `minor`, `major`) la monte et la recopie dans le lanceur .NET, `app.manifest` et l'APK (`versionCode` = majeur×10000 + mineur×100 + correctif) via `scripts/sync-version.js`. Fusionner, puis pousser le tag `v<version>` ou lancer le workflow avec `release_tag`. Le pipeline refuse un tag qui ne correspond pas à `package.json`, et `npm run lint` refuse des versions désynchronisées. La version s'affiche dans le menu `Plus` de l'application.
+
+**Guide pas à pas :** [`docs/push-pull-release.md`](docs/push-pull-release.md) (branche, push, Pull Request, artefacts de la CI, fusion, release, mise à jour des PC et des tablettes, dépannage).
 
 > [!TIP]
 > Sur smartphone ou tablette (Android / iOS), l'application peut également être installée directement depuis le navigateur via le bouton **« App Mobile (PWA & APK) »** et le QR Code interactif généré sur l'écran d'accueil !
@@ -2246,7 +2256,7 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
    - **2. Rôle** adapté à l'événement (Accueil, Réparateur, Assistant, Formateur, Juge, Administrateur, Kiosque d'inscription — jamais d'Écran Public sur mobile) ;
    - **3. Identification rapide** en **1 seul champ** `Nom, prénom ou surnom *` (accepté même si le bénévole est introuvable en base), ou profil technique (Nom + Table + Spécialités) pour le Réparateur ;
    - **4. Espace dédié** avec en-tête épuré (logo Insertech = Menu principal, icône synchro seule Bleu/Jaune/Rouge, 1 seul bouton de rôle).
-4. Pour une tablette en libre-service visiteur (**Kiosque d'inscription**), cliquer sur **Verrouiller le kiosque** (maintenir le cadenas discret 2 secondes + code PIN **`0000`** par défaut pour déverrouiller). Si l'utilisateur revient au menu principal, les **sessions actives** restent accessibles directement en 1 tap.
+4. Pour une tablette en libre-service visiteur (**Kiosque d'inscription**), cliquer sur **Verrouiller le kiosque** (maintenir le cadenas discret 2 secondes + code PIN pour déverrouiller). Le code par défaut est **`0000`** : changez-le avant l'événement dans **Synchronisation réseau → Code de déverrouillage des tablettes** sur le PC hôte. Il n'est jamais affiché sur les tablettes, et c'est le PC qui le vérifie (copie locale si le PC ne répond pas en 2 s). Si l'utilisateur revient au menu principal, les **sessions actives** restent accessibles directement en 1 tap.
 
 > [!NOTE]
 > Tablettes et PC doivent être sur le **même Wi-Fi**, et le hotspot ne doit pas isoler les appareils. Aucun accès à internet n'est nécessaire. Liste à cocher la veille : [docs/android-verification-tablette.md](docs/android-verification-tablette.md).
@@ -2369,8 +2379,8 @@ Utilisé sur le Kiosque-Concours, le Cockpit Juge, l'Install Fest, les activité
 
 > [!NOTE]
 > Les seuls usages optionnels d'internet sont :
-> - **Sur le PC (préparation / mises à jour) :** rechercher une nouvelle version sur GitHub, « Télécharger depuis GitHub » l'APK des tablettes, ou pré-télécharger des guides iFixit (avec miniatures) dans la **Bibliothèque de guides hors-ligne** avant l'événement.
-> - **En option pendant l'événement (si une connexion est disponible sur le PC ou une tablette) :** interroger l'API iFixit v2.0 en complément de la bibliothèque locale et afficher les photos d'étapes en pleine résolution au clic. Sans internet, le diagnostic local, les fiches maison et tous les guides distribués ou en cache restent **100 % utilisables**.
+> - **Sur le PC (préparation / mises à jour) :** rechercher une nouvelle version sur GitHub, « Télécharger depuis GitHub » l'APK des tablettes, ou lier des articles iFixit aux fiches locales dans la **Bibliothèque de guides hors-ligne** avant l'événement.
+> - **En option pendant l'événement (si le PC hôte a internet) :** ouvrir les articles iFixit complets, sur le PC comme sur les tablettes, toujours via le PC hôte et sa clé. Les tablettes n'ont jamais besoin d'internet. Sans internet, le diagnostic local, les fiches maison et tous les guides distribués ou en cache restent **100 % utilisables**.
 
 ---
 
@@ -2496,7 +2506,7 @@ faut désinstaller (exporter les données avant).
 
 1. Sur le PC (toujours en mode Administrateur avec anti-veille automatique) : ouvrir l'activité, puis la fenêtre **Réseau local**. Elle affiche un QR (`insertech://rejoindre?code=…&cle=…`).
 2. Sur la tablette : **Scanner le QR du PC** dans l'application, ou viser le QR avec l'appareil photo Samsung. Sans appareil photo, taper le code et la clé à la main.
-3. Suivre le parcours guidé en 4 étapes (événement → rôle → identification rapide en 1 champ ou profil Réparateur → vue du rôle). Le verrouillage (**Verrouiller le kiosque**) est réservé au rôle **Kiosque d'inscription** (maintenir le cadenas discret 2 secondes + code PIN **`0000`** par défaut pour déverrouiller). En revenant au menu principal (clic sur le logo Insertech), les **sessions actives** apparaissent directement pour y retourner en 1 tap.
+3. Suivre le parcours guidé en 4 étapes (événement → rôle → identification rapide en 1 champ ou profil Réparateur → vue du rôle). Le verrouillage (**Verrouiller le kiosque**) est réservé au rôle **Kiosque d'inscription** (maintenir le cadenas discret 2 secondes + code PIN pour déverrouiller). Le code par défaut est **`0000`** : changez-le avant l'événement dans **Synchronisation réseau → Code de déverrouillage des tablettes** sur le PC hôte. Il n'est jamais affiché sur les tablettes, et c'est le PC qui le vérifie (copie locale si le PC ne répond pas en 2 s). En revenant au menu principal (clic sur le logo Insertech), les **sessions actives** apparaissent directement pour y retourner en 1 tap.
 
 ### Déboguer
 
@@ -2511,8 +2521,8 @@ faut désinstaller (exporter les données avant).
 | Commande | Où | Ce qu'elle vérifie |
 | --- | --- | --- |
 | `./gradlew :app:testDebugUnitTest` | Dossier `android/`, CI de chaque PR | Vérification des mises à jour en Java pur (`VerificationMaj` : SHA-256, certificats, reprise d'envoi) |
-| `./gradlew :app:connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
-| `npm run test:ui` | PC, CI de chaque PR | Interface, synchro avec une tablette simulée, envoi de mise à jour simulé |
+| `./gradlew :app:connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change, à chaque poussée sur `main` et à la demande (*Run workflow*) | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
+| `npm run test:ui` | PC, CI de chaque PR | Interface, synchro avec une tablette simulée, envoi de mise à jour simulé, zéro défilement sur 6 tailles (galerie de captures) |
 
 L'émulateur de la CI utilise une image Android 10 **sans services Google** (`target: default`), pour prouver
 que l'application n'en dépend pas.

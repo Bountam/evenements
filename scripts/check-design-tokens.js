@@ -62,6 +62,27 @@ for (const file of sourceFiles) {
   });
 }
 
+// Plan v1.9, étape 6 : la page ne défile jamais. Seule ScrollZone peut faire défiler une liste, et la
+// hauteur d'écran se prend en dvh (barre d'adresse et clavier des cellulaires), jamais en vh.
+const NO_SCROLL_RULES = [
+  { pattern: /\boverflow(?:-[xy])?-(?:auto|scroll)\b/g, message: 'défilement hors ScrollZone : utiliser <ScrollZone> (src/components/shared/ScrollZone.tsx)' },
+  { pattern: /\b(?:min-|max-)?h-screen\b/g, message: 'h-screen : utiliser h-dvh (la page ne défile pas)' },
+  // index.html est exclu de cette règle : son message « navigateur trop ancien » vise des moteurs sans dvh
+  { pattern: /\b\d+(?:\.\d+)?vh\b/g, message: 'unité vh : utiliser dvh', saufIndex: true }
+];
+for (const file of [...sourceFiles, 'index.html', 'src/index.css']) {
+  if (file.endsWith('ScrollZone.tsx')) continue;
+  readFileSync(file, 'utf8').split('\n').forEach((line, idx) => {
+    for (const rule of NO_SCROLL_RULES) {
+      if (rule.saufIndex && file === 'index.html') continue;
+      for (const match of line.matchAll(rule.pattern)) {
+        errors++;
+        console.error(`${file}:${idx + 1}  ${match[0]}  →  ${rule.message}`);
+      }
+    }
+  });
+}
+
 if (errors > 0) {
   console.error(`\n${errors} écart(s) au design system du kiosque.`);
   process.exit(1);

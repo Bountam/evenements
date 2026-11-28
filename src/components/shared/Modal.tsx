@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ScrollZone from './ScrollZone';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -31,7 +32,7 @@ function ModalDialog({
   initialFocusRef
 }: Omit<ModalProps, 'isOpen'>) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -82,14 +83,15 @@ function ModalDialog({
         // Clic sur le fond (le <dialog> lui-même, hors du panneau)
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 m-0 w-full h-full max-w-none max-h-none p-4 border-0 bg-black/70 backdrop-blur-xs flex items-center justify-center backdrop:bg-transparent"
+      className="fixed inset-0 m-0 w-full h-full max-w-none max-h-none p-4 max-sm:p-0 court:p-0 border-0 bg-black/70 backdrop-blur-xs flex items-center justify-center backdrop:bg-transparent"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 12 }}
         transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-        className={`w-full ${maxWidth} bg-app-card border border-app-card-border p-6 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] text-app-text overflow-hidden`}
+        // Cellulaire (portrait < 640 px, paysage < 480 px de haut) : feuille plein écran, boutons fixés en bas
+        className={`w-full ${maxWidth} bg-app-card border border-app-card-border p-6 rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] text-app-text overflow-hidden max-sm:max-w-none max-sm:h-full max-sm:max-h-none max-sm:rounded-none max-sm:p-4 max-sm:pt-[calc(1rem+env(safe-area-inset-top,0px))] court:max-w-none court:h-full court:max-h-none court:rounded-none court:p-3`}
       >
         {/* En-tête */}
         <div className="flex items-center justify-between pb-3.5 border-b border-app-card-border shrink-0">
@@ -110,13 +112,13 @@ function ModalDialog({
         </div>
 
         {/* Corps défilable */}
-        <div ref={bodyRef} className="flex-1 overflow-y-auto py-4 space-y-4 font-sans text-xs sm:text-sm text-app-text">
+        <ScrollZone ref={bodyRef} className="flex-1 py-4 court:py-2 space-y-4 font-sans text-xs sm:text-sm text-app-text">
           {children}
-        </div>
+        </ScrollZone>
 
         {/* Pied de page optionnel */}
         {footer && (
-          <div className="pt-3.5 border-t border-app-card-border shrink-0 flex flex-wrap items-center justify-end gap-3">
+          <div className="pt-3.5 court:pt-2 border-t border-app-card-border shrink-0 flex flex-wrap items-center justify-end gap-3 max-sm:pb-[env(safe-area-inset-bottom,0px)]">
             {footer}
           </div>
         )}

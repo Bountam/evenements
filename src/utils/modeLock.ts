@@ -12,6 +12,8 @@ export type ModeUsage = 'animateur' | 'ecran_public' | 'kiosque_formulaire';
 export interface PinLock {
   sel: string;
   empreinte: string;
+  // true quand l'administrateur a choisi son propre code (absent = code par défaut)
+  custom?: boolean;
 }
 
 export const MODE_STORAGE_KEY = 'insertech_mode_usage';
@@ -29,10 +31,15 @@ export const MODE_LABELS: Record<ModeUsage, string> = {
 };
 
 export const DEFAULT_PIN_CODE = '0000';
-export const NO_PIN_MESSAGE = "Le code par défaut est 0000 (modifiable par l'administrateur).";
+// Le code par défaut n'est jamais affiché sur une tablette ni sur un écran public
+export const NO_PIN_MESSAGE = 'Demandez le code à un administrateur.';
 
 export async function createDefaultPinLock(): Promise<PinLock> {
-  return createPinLock(DEFAULT_PIN_CODE);
+  return createPinLock(DEFAULT_PIN_CODE, false);
+}
+
+export function isCustomPinLock(lock: PinLock | null | undefined): boolean {
+  return Boolean(lock?.custom);
 }
 
 export function getDeviceRole(): DeviceRole {
@@ -107,12 +114,19 @@ async function sha256Hex(text: string): Promise<string> {
   return toHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
 }
 
-export async function createPinLock(code: string): Promise<PinLock> {
+export async function createPinLock(code: string, custom = true): Promise<PinLock> {
   if (!isValidPin(code)) throw new Error('Le code doit compter exactement 4 chiffres.');
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   const sel = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return { sel, empreinte: await sha256Hex(sel + code) };
+  const lock: PinLock = { sel, empreinte: await sha256Hex(sel + code) };
+  if (custom) lock.custom = true;
+  return lock;
+}
+
+// Vérifie le code contre un verrou ; sans verrou, seul le code par défaut est accepté
+export async function matchesPin(code: string, lock: PinLock | null): Promise<boolean> {
+  return lock ? verifyPin(code, lock) : code === DEFAULT_PIN_CODE;
 }
 
 export async function verifyPin(code: string, lock: PinLock): Promise<boolean> {
@@ -201,6 +215,37 @@ export function registerPinFailure(now = Date.now()): { blockedMs: number; attem
   return { blockedMs: 0, attemptsLeft: MAX_ATTEMPTS_PER_SERIES - state.fails };
 }
 
+// Compteur d'essais tenu en mémoire (le PC hôte en garde un par tablette), mêmes délais que la tablette
+export class PinAttemptTracker {
+  private state = new Map<string, AttemptsState>();
+
+  remainingMs(key: string, now = Date.now()): number {
+    return Math.max(0, (this.state.get(key)?.blockedUntil ?? 0) - now);
+  }
+
+  fail(key: string, now = Date.now()): { blockedMs: number; attemptsLeft: number } {
+    const s = this.state.get(key) ?? { fails: 0, series: 0, blockedUntil: 0 };
+    s.fails += 1;
+    if (s.fails >= MAX_ATTEMPTS_PER_SERIES) {
+      const blockedMs = blockDurationMs(s.series);
+      this.state.set(key, { fails: 0, series: s.series + 1, blockedUntil: now + blockedMs });
+      return { blockedMs, attemptsLeft: 0 };
+    }
+    this.state.set(key, s);
+    return { blockedMs: 0, attemptsLeft: MAX_ATTEMPTS_PER_SERIES - s.fails };
+  }
+
+  reset(key: string) {
+    this.state.delete(key);
+  }
+}
+
+// Enregistre localement l'état du blocage annoncé par le PC, pour que le compte à rebours s'affiche
+export function applyRemoteBlock(remainingMs: number, now = Date.now()) {
+  const state = readAttempts();
+  saveAttempts({ fails: 0, series: state.series, blockedUntil: now + Math.max(0, remainingMs) });
+}
+
 export function resetPinFailures() {
   writeStorage(ATTEMPTS_STORAGE_KEY, null);
 }
@@ -214,7 +259,7 @@ export type PinCheckResult =
 export async function checkPin(code: string, lock: PinLock | null, now = Date.now()): Promise<PinCheckResult> {
   const remainingMs = getBlockRemainingMs(now);
   if (remainingMs > 0) return { status: 'blocked', remainingMs };
-  const ok = lock ? await verifyPin(code, lock) : code === DEFAULT_PIN_CODE;
+  const ok = await matchesPin(code, lock);
   if (ok) {
     resetPinFailures();
     return { status: 'ok' };

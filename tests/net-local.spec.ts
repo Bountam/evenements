@@ -90,6 +90,37 @@ test('PC hôte : appelle la tablette, synchro chiffrée, accusés et reconnexion
   expect(sorties).toEqual([]);
 });
 
+test('PC hôte : vérifie le code des tablettes, avec un délai après 3 erreurs', async ({ page }) => {
+  test.setTimeout(60_000);
+  let tablette: FakeTablette | null = null;
+  const { code, cle } = await preparerPc(page, () => (tablette ? [tablette] : []));
+  tablette = new FakeTablette(code, cle, 'Tablette kiosque');
+  await tablette.demarrer();
+  try {
+    await expect(page.getByText('Connectée', { exact: true })).toBeVisible({ timeout: 15_000 });
+    tablette.envoyer({ type: 'REQUEST_INITIAL_SYNC', version: '1.9.0' });
+    const sync = await tablette.attendre((m) => m.type === 'INITIAL_SYNC');
+    const eventId = sync.payload.event.id;
+    // Le verrou envoyé n'est que l'empreinte, jamais le code en clair
+    expect(JSON.stringify(sync.payload.event)).not.toContain('"0000"');
+
+    const demander = async (requestId: string, pin: string) => {
+      tablette!.envoyer({ type: 'PIN_CHECK', requestId, code: pin, eventId });
+      return tablette!.attendre((m) => m.type === 'PIN_RESULT' && m.requestId === requestId);
+    };
+    expect((await demander('p1', '0000')).status).toBe('ok');
+    expect(await demander('p2', '1111')).toMatchObject({ status: 'bad', attemptsLeft: 2 });
+    expect(await demander('p3', '2222')).toMatchObject({ status: 'bad', attemptsLeft: 1 });
+    const bloque = await demander('p4', '3333');
+    expect(bloque.status).toBe('blocked');
+    expect(bloque.remainingMs).toBeGreaterThan(20_000);
+    // Même le bon code est refusé pendant le délai
+    expect((await demander('p5', '0000')).status).toBe('blocked');
+  } finally {
+    await tablette.arreter();
+  }
+});
+
 test('PC hôte : une tablette avec une autre clé est refusée', async ({ page }) => {
   test.setTimeout(60_000);
   let tablette: FakeTablette | null = null;

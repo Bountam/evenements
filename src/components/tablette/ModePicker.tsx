@@ -2,6 +2,7 @@ import React from 'react';
 import { ClipboardList, MonitorPlay, Settings2, House } from 'lucide-react';
 import type { EventSettings } from '../../types';
 import { MODE_LABELS, type ModeUsage } from '../../utils/modeLock';
+import ScrollZone from '../shared/ScrollZone';
 import BrandLogo from '../shared/BrandLogo';
 import Button from '../shared/Button';
 
@@ -34,8 +35,8 @@ const TILES: Array<{ mode: ModeUsage; icon: React.ComponentType<{ size?: number;
 // Choix du mode d'usage d'une tablette, après la connexion au PC hôte
 export default function ModePicker({ event, onPick, onLeaveEvent, landscapeLocked, onLandscapeChange }: ModePickerProps) {
   return (
-    <div className="min-h-screen bg-app-bg text-app-text flex flex-col">
-      <header className="flex items-center justify-between gap-4 px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b-4 border-primary bg-app-header">
+    <div className="h-dvh bg-app-bg text-app-text flex flex-col overflow-hidden">
+      <header className="shrink-0 flex items-center justify-between gap-4 px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b-4 border-primary bg-app-header">
         <div className="flex items-center gap-3 min-w-0">
           <BrandLogo />
           <div className="min-w-0">
@@ -49,7 +50,7 @@ export default function ModePicker({ event, onPick, onLeaveEvent, landscapeLocke
         </Button>
       </header>
 
-      <main className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-6">
+      <ScrollZone as="main" kind="page" className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-8 flex flex-col justify-center-safe gap-6">
         <h2 className="font-display font-black uppercase tracking-wider text-xl text-center">Comment utiliser cette tablette ?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {TILES.map(({ mode, icon: Icon, description }) => (
@@ -81,7 +82,7 @@ export default function ModePicker({ event, onPick, onLeaveEvent, landscapeLocke
             ensemble les boutons Retour et Aperçu (les carrés) pour libérer la tablette.
           </p>
         </div>
-      </main>
+      </ScrollZone>
     </div>
   );
 }

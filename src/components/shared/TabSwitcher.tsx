@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import type { LucideIcon } from 'lucide-react';
+import ScrollZone from './ScrollZone';
 
 export type TabBadgeTone = 'success' | 'info' | 'warning';
 
@@ -33,6 +34,8 @@ interface TabSwitcherProps {
   compact?: boolean;
   variant?: 'header' | 'bottom';
   className?: string;
+  // Identifiant d'animation de la pastille active : distinct si deux sélecteurs sont visibles en même temps
+  pillId?: string;
 }
 
 // Sélecteur d'onglets en pastille (motif ARIA « tabs » à activation automatique).
@@ -45,8 +48,9 @@ export default function TabSwitcher({
   compact = false,
   variant = 'header',
   className = '',
+  pillId = 'activeTabPill',
 }: TabSwitcherProps) {
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
     const index = tabs.findIndex((t) => t.id === currentTab);
     if (index === -1) return;
     let next = index;
@@ -65,13 +69,14 @@ export default function TabSwitcher({
     return (
       <nav
         aria-label={ariaLabel}
-        className={`fixed bottom-0 inset-x-0 z-40 bg-app-header/95 backdrop-blur-xl border-t-2 border-primary/40 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] shadow-2xl ${className}`}
+        className={`shrink-0 z-40 bg-app-header/95 backdrop-blur-xl border-t-2 border-primary/40 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] shadow-2xl court:w-20 court:px-1.5 court:py-2 court:border-t-0 court:border-r-2 ${className}`}
       >
+        {/* Barre du bas (64 px) ; en paysage sur cellulaire, colonne d'icônes à gauche */}
         <div
           role="tablist"
           aria-label={ariaLabel}
           onKeyDown={handleKeyDown}
-          className="flex items-stretch justify-around gap-1 max-w-xl mx-auto"
+          className="flex items-stretch justify-around gap-1 max-w-xl mx-auto court:flex-col court:justify-start court:h-full court:gap-2"
         >
           {tabs.map((tab) => {
             const isActive = currentTab === tab.id;
@@ -87,7 +92,7 @@ export default function TabSwitcher({
                 title={tab.label}
                 tabIndex={isActive ? 0 : -1}
                 onClick={() => onTabChange(tab.id)}
-                className={`relative flex-1 min-w-0 min-h-12 flex flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-xl text-micro font-bold font-display uppercase transition cursor-pointer ${
+                className={`relative flex-1 court:flex-none min-w-0 min-h-12 flex flex-col items-center justify-center gap-0.5 px-1.5 py-1 rounded-xl text-micro font-bold font-display uppercase transition cursor-pointer ${
                   isActive
                     ? 'bg-primary text-secondary font-extrabold shadow-sm'
                     : 'text-app-text-muted hover:text-app-text'
@@ -120,11 +125,12 @@ export default function TabSwitcher({
   }
 
   return (
-    <div
+    <ScrollZone
+      horizontal
       role="tablist"
       aria-label={ariaLabel}
       onKeyDown={handleKeyDown}
-      className={`flex items-center max-w-full overflow-x-auto bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative shrink-0 ${className}`}
+      className={`flex items-center max-w-full bg-app-input p-1 rounded-xl border border-app-card-border transition-colors duration-300 relative shrink-0 ${className}`}
     >
       {tabs.map((tab) => {
         const isActive = currentTab === tab.id;
@@ -149,7 +155,7 @@ export default function TabSwitcher({
           >
             {isActive && (
               <motion.span
-                layoutId="activeTabPill"
+                layoutId={pillId}
                 transition={{ type: 'spring', stiffness: 420, damping: 30 }}
                 className="absolute inset-0 bg-primary rounded-lg -z-10 shadow-md shadow-primary/25"
               />
@@ -175,6 +181,6 @@ export default function TabSwitcher({
           </button>
         );
       })}
-    </div>
+    </ScrollZone>
   );
 }

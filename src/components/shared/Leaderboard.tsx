@@ -4,6 +4,7 @@ import { formatTime } from './Stopwatch';
 import { Trophy, Clock, Medal, Crown, Sparkles } from 'lucide-react';
 import { getRankedParticipants } from '../../utils/ranking';
 import { motion, AnimatePresence } from 'motion/react';
+import ScrollZone from './ScrollZone';
 
 interface LeaderboardProps {
   participants: Participant[];
@@ -225,7 +226,7 @@ export default function Leaderboard({
           </ol>
 
           {/* LISTE DYNAMIQUE DES PARTICIPANTS (Poursuite : 4e rang et suivants) */}
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+          <ScrollZone className="flex-1 min-h-0 space-y-2 pr-1">
             {pursuitParticipants.length === 0 ? (
               <div className="py-6 px-4 rounded-2xl bg-app-input/40 border border-dashed border-app-card-border text-center flex flex-col items-center justify-center my-auto">
                 <Sparkles size={24} className="text-primary mb-2" aria-hidden="true" />
@@ -291,7 +292,7 @@ export default function Leaderboard({
                 </AnimatePresence>
               </ol>
             )}
-          </div>
+          </ScrollZone>
         </div>
       )}
     </div>
