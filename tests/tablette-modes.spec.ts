@@ -61,7 +61,8 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
     });
   });
   expect(stored?.empreinte).toMatch(/^[0-9a-f]{64}$/);
-  expect(JSON.stringify(stored)).not.toContain('1234');
+  // Le code n'est jamais stocké en clair (l'empreinte hexadécimale peut contenir « 1234 » par hasard)
+  expect(Object.values(stored ?? {})).not.toContain('1234');
 
   // Sur tablette : saut auto de l'étape 1 (1 seul événement actif), arrivée directe au choix de rôle (sans Écran public)
   await page.addInitScript(SIMULATE_ANDROID);

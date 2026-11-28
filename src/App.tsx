@@ -772,6 +772,8 @@ export default function App() {
 
   // CHARGER UN ÉVÉNEMENT EXISTANT
   const handleSelectPastEvent = (event: EventSettings) => {
+    // Tablette : s'inscrire à cet événement auprès du PC hôte (elle ne recevra que ses données)
+    if (IS_TABLET) networkManager.selectEvent(event.id);
     localStorage.setItem('insertech_active_event_id', event.id);
     setActiveEvent(event);
     if (IS_TABLET && workRole === 'kiosque_formulaire') {

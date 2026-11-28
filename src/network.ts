@@ -6,6 +6,7 @@ import type { Lien } from './net/lien';
 import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
 import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } from './net/tabletteLocale';
 import { nouvelleCle } from './net/chiffrement';
+import { dateLocale, evenementsAEffacer } from './net/purge';
 import { DiffusionMaj, estMessageMaj, recevoirMajTablette, reinitialiserReceptionMaj, versionCodeDe, type ApkPret, type MessageMaj } from './net/miseAJour';
 import { getNatifMaj } from './native/android';
 import { matchesPin, PinAttemptTracker, readEventPinLock, readLocked } from './utils/modeLock';
@@ -14,14 +15,16 @@ import { sauvegarderMaintenant } from './utils/sqliteBackup';
 // Types de messages réseau local
 export type NetworkMessage =
   | { type: 'DB_WRITE'; table: string; action: 'put' | 'delete'; data: any; opId?: string }
-  | { type: 'DB_DELTA'; table: string; action: 'put' | 'delete'; data: any }
+  | { type: 'DB_DELTA'; table: string; action: 'put' | 'delete'; data: any; eventId?: string }
   | { type: 'DB_BATCH_WRITE'; table: string; items: any[]; opId?: string }
   | { type: 'DB_SYNC'; table: string; data: any[] }
   | { type: 'CHRONO_ACTION'; message: SyncMessage; opId?: string }
   | { type: 'ACK'; opId: string }
   | { type: 'PING' }
   | { type: 'PONG' }
-  | { type: 'REQUEST_INITIAL_SYNC'; version?: string }
+  | { type: 'REQUEST_INITIAL_SYNC'; version?: string; eventId?: string }
+  // Tablette : événement auquel elle est inscrite (elle ne reçoit que ses données)
+  | { type: 'SELECT_EVENT'; eventId: string }
   | { type: 'CLOCK_PING'; t0: number }
   | { type: 'CLOCK_PONG'; t0: number; hostTime: number }
   | {
@@ -42,6 +45,14 @@ export type NetworkMessage =
   | { type: 'PIN_CHECK'; requestId: string; code: string; eventId?: string }
   | { type: 'PIN_RESULT'; requestId: string; status: 'ok' | 'bad' | 'blocked'; remainingMs?: number; attemptsLeft?: number }
   | MessageMaj;
+
+// Tables dont chaque ligne appartient à un événement (champ eventId)
+const EVENT_TABLES = new Set(['tickets', 'technicians', 'participants', 'attendees']);
+// Tablette : événement choisi à l'onboarding, et anciens événements à effacer après leur journée
+export const TABLET_EVENT_KEY = 'insertech_tablette_evenement';
+export const PURGE_KEY = 'insertech_events_a_purger';
+const PURGE_INTERVAL_MS = 30 * 60_000;
+
 
 export type HostPinResult = Extract<NetworkMessage, { type: 'PIN_RESULT' }>;
 
@@ -84,6 +95,9 @@ class P2PNetworkManager {
   private pendingGuideSearches = new Map<string, (guides: OfflineRepairGuide[]) => void>();
   private pendingPinChecks = new Map<string, (result: HostPinResult | null) => void>();
   private pinAttempts = new PinAttemptTracker();
+  // PC hôte : événement choisi par chaque tablette (absent = elle suit l'événement ouvert sur le PC)
+  private eventByConn = new Map<string, string>();
+  private purgeTimer: ReturnType<typeof setInterval> | null = null;
 
   // PC hôte : appel des tablettes du réseau local (voir src/net/hoteLocal.ts)
   private hoteLocal: HoteLocal | null = null;
@@ -388,7 +402,7 @@ class P2PNetworkManager {
     this.updateStatus(`Connecté (${this.connections.length} appareils)`);
 
     conn.on('data', (data) => {
-      this.enqueueIncoming(conn, data as NetworkMessage, () => this.hostEventId ?? '');
+      this.enqueueIncoming(conn, data as NetworkMessage, () => this.eventForConn(conn));
     });
 
     conn.on('close', () => {
@@ -396,6 +410,7 @@ class P2PNetworkManager {
       this.diffusionMaj?.lienFerme(conn);
       this.lastClientPingAt.delete(conn.connectionId);
       this.incomingChains.delete(conn.connectionId);
+      this.eventByConn.delete(conn.connectionId);
       if (this.clientVersions.delete(conn.connectionId)) {
         this.notifyClientVersions();
       }
@@ -474,6 +489,7 @@ class P2PNetworkManager {
       this.persistOutbox();
     }
     this.role = 'client';
+    this.startPurgeTimer();
     this.joinCode = code;
     this.sessionId = code;
     this.joinEventId = eventId;
@@ -574,7 +590,7 @@ class P2PNetworkManager {
         console.error('Erreur de renvoi en attente :', e);
       }
     }
-    conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion() });
+    conn.send({ type: 'REQUEST_INITIAL_SYNC', version: getAppVersion(), eventId: this.readTabletEvent() ?? undefined });
 
     // Se caler sur l'horloge du Master
     this.startClockSync();
@@ -730,7 +746,13 @@ class P2PNetworkManager {
   }
 
   // Envoyer à un client toutes les tables des activités actives/épinglées, puis l'état des chronomètres
-  private async sendInitialSync(conn: Lien, eventId: string) {
+  // Événement dont une tablette reçoit les données : celui qu'elle a choisi, sinon celui ouvert sur le PC
+  private eventForConn(conn: Lien): string {
+    return this.eventByConn.get(conn.connectionId) ?? this.hostEventId ?? '';
+  }
+
+  // Événements proposés aux tablettes (onboarding) : réglages seulement, jamais de données personnelles
+  private async listActiveEvents(currentId: string) {
     let pinnedIds: string[] = [];
     try {
       const parsed = JSON.parse(localStorage.getItem('insertech_pinned_event_ids') || '[]');
@@ -738,11 +760,15 @@ class P2PNetworkManager {
     } catch {
       pinnedIds = [];
     }
-    const targetIds = Array.from(new Set([eventId, ...pinnedIds].filter(Boolean)));
-    const allEvents = await db.events.toArray();
-    const activeEvents = allEvents.filter((e) => targetIds.includes(e.id));
-    const eventSettings = activeEvents.find((e) => e.id === eventId) || (await db.events.get(eventId));
-    const syncIds = activeEvents.length > 0 ? activeEvents.map((e) => e.id) : eventId ? [eventId] : [];
+    const ids = Array.from(new Set([currentId, this.hostEventId ?? '', ...pinnedIds].filter(Boolean)));
+    return (await db.events.bulkGet(ids)).filter(Boolean);
+  }
+
+  // Envoyer à une tablette les tables de SON événement seulement, puis l'état des chronomètres
+  private async sendInitialSync(conn: Lien, eventId: string) {
+    const activeEvents = await this.listActiveEvents(eventId);
+    const eventSettings = activeEvents.find((e) => e!.id === eventId) || (await db.events.get(eventId));
+    const syncIds = eventId ? [eventId] : [];
 
     const [tickets, techs, participants, attendees] = await Promise.all([
       syncIds.length > 0 ? db.tickets.where('eventId').anyOf(syncIds).toArray() : Promise.resolve([]),
@@ -757,7 +783,7 @@ class P2PNetworkManager {
     });
     conn.send({
       type: 'CHRONO_ACTION',
-      message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksState }
+      message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksFor(eventId) }
     });
     await this.pushRelevantGuidesForTickets(tickets as RepairTicket[], conn);
   }
@@ -882,7 +908,8 @@ class P2PNetworkManager {
     this.hostEventId = eventId;
     localStorage.setItem('insertech_net_event_id', eventId);
     for (const conn of this.connections) {
-      if (conn.open) {
+      // Une tablette inscrite à un autre événement reste sur le sien
+      if (conn.open && !this.eventByConn.has(conn.connectionId)) {
         try {
           await this.sendInitialSync(conn, eventId);
         } catch (e) {
@@ -935,13 +962,30 @@ class P2PNetworkManager {
             this.notifyClientVersions();
             this.diffusionMaj?.versionSignalee(conn, cleanVer);
           }
-          await this.sendInitialSync(conn, eventId);
+          if (typeof msg.eventId === 'string' && msg.eventId && (await db.events.get(msg.eventId))) {
+            this.eventByConn.set(conn.connectionId, msg.eventId);
+          }
+          await this.sendInitialSync(conn, this.eventForConn(conn));
+          break;
+
+        case 'SELECT_EVENT':
+          if (typeof msg.eventId === 'string' && msg.eventId && (await db.events.get(msg.eventId))) {
+            this.eventByConn.set(conn.connectionId, msg.eventId);
+            await this.sendInitialSync(conn, msg.eventId);
+          }
           break;
 
         case 'DB_WRITE':
           // Écrire la modification reçue d'un client dans le Dexie.js local du Master
           try {
             const table = db.table(msg.table);
+            const rowEventId = await this.eventIdOfWrite(msg.table, msg.action, msg.data);
+            if (!this.writeAllowed(msg.table, msg.action, msg.data, rowEventId, eventId)) {
+              // Écriture visant un autre événement que celui de la tablette : ignorée (accusée pour vider sa file)
+              console.warn(`Écriture refusée : ${msg.table} hors de l'événement de la tablette.`);
+              this.acknowledge(conn, msg.opId);
+              break;
+            }
             if (msg.action === 'put') {
               await table.put(msg.data);
             } else if (msg.action === 'delete') {
@@ -950,12 +994,13 @@ class P2PNetworkManager {
 
             notifySync(); // Notifier les onglets locaux du Master
 
-            // Diffuser le delta atomique aux AUTRES clients connectés (élimine l'amplification O(N))
+            // Diffuser le delta atomique aux AUTRES tablettes du même événement
             this.broadcastExcept(conn, {
               type: 'DB_DELTA',
               table: msg.table,
               action: msg.action,
-              data: msg.data
+              data: msg.data,
+              eventId: rowEventId ?? undefined
             });
             if (msg.table === 'tickets' && msg.action === 'put' && msg.data) {
               void this.pushRelevantGuidesForTickets([msg.data as RepairTicket]);
@@ -970,13 +1015,16 @@ class P2PNetworkManager {
           // Écriture par lot transactionnelle reçue d'un client
           try {
             const table = db.table(msg.table);
-            if (Array.isArray(msg.items) && msg.items.length > 0) {
-              await table.bulkPut(msg.items);
+            const items = Array.isArray(msg.items)
+              ? msg.items.filter((it: any) => !EVENT_TABLES.has(msg.table) || it?.eventId === eventId)
+              : [];
+            if (items.length > 0) {
+              await table.bulkPut(items);
               notifySync();
               this.broadcastExcept(conn, {
                 type: 'DB_BATCH_WRITE',
                 table: msg.table,
-                items: msg.items
+                items
               });
             }
           } catch (e) {
@@ -1043,12 +1091,12 @@ class P2PNetworkManager {
                 ? [importedEvent]
                 : [];
           this.availableHostEvents = syncedEvents;
-          const targetEventIds = Array.from(
-            new Set([
-              ...syncedEvents.map((e) => e?.id).filter(Boolean),
-              ...(importedEvent?.id ? [importedEvent.id] : eventId ? [eventId] : [])
-            ])
-          );
+          // Seules les données de l'événement reçu sont remplacées ; un ancien événement reste jusqu'à la fin de la journée
+          const targetEventIds = importedEvent?.id ? [importedEvent.id] : eventId ? [eventId] : [];
+          const previousEventId = localStorage.getItem('insertech_active_event_id');
+          if (importedEvent?.id && previousEventId && previousEventId !== importedEvent.id) {
+            this.markForPurge(previousEventId);
+          }
 
           await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees], async () => {
             for (const evt of syncedEvents) {
@@ -1272,6 +1320,7 @@ class P2PNetworkManager {
   async writeToDatabase(table: string, action: 'put' | 'delete', data: any) {
     // 1. Toujours persister immédiatement dans l'IndexedDB locale (Master, Client ou Standalone)
     const t = db.table(table);
+    const rowEventId = this.role === 'host' ? await this.eventIdOfWrite(table, action, data) : null;
     if (action === 'put') {
       await t.put(data);
     } else if (action === 'delete') {
@@ -1288,7 +1337,8 @@ class P2PNetworkManager {
         type: 'DB_DELTA',
         table,
         action,
-        data
+        data,
+        eventId: rowEventId ?? undefined
       });
       if (table === 'tickets' && action === 'put' && data) {
         void this.pushRelevantGuidesForTickets([data as RepairTicket]);
@@ -1321,12 +1371,152 @@ class P2PNetworkManager {
   }
 
   // DIFFUSER À TOUS LES CLIENTS SAUF L'ÉMETTEUR
+  // Chaque tablette ne reçoit que ce qui concerne son événement (Loi 25)
   broadcastExcept(excludeConn: Lien | null, msg: NetworkMessage) {
     this.connections.forEach((conn) => {
-      if (conn.open && (!excludeConn || conn.connectionId !== excludeConn.connectionId)) {
-        conn.send(msg);
-      }
+      if (!conn.open || (excludeConn && conn.connectionId === excludeConn.connectionId)) return;
+      const filtered = this.filterForEvent(msg, this.eventForConn(conn));
+      if (filtered) conn.send(filtered);
     });
+  }
+
+  // Version du message réservée à un événement ; null = rien à envoyer à cette tablette
+  private filterForEvent(msg: NetworkMessage, connEventId: string): NetworkMessage | null {
+    if (msg.type === 'DB_DELTA') {
+      if (!EVENT_TABLES.has(msg.table)) return msg;
+      return msg.eventId && msg.eventId === connEventId ? msg : null;
+    }
+    if (msg.type === 'DB_BATCH_WRITE') {
+      if (!EVENT_TABLES.has(msg.table)) return msg;
+      const items = (msg.items || []).filter((it: any) => it?.eventId === connEventId);
+      return items.length > 0 ? { ...msg, items } : null;
+    }
+    if (msg.type === 'CHRONO_ACTION') {
+      const action = msg.message;
+      if (action.type === 'TRACKS_STATE_SYNC') {
+        return { ...msg, message: { ...action, tracks: this.tracksFor(connEventId, action.tracks) } };
+      }
+      if (action.type === 'TRACK_ASSIGN' && action.eventId && action.eventId !== connEventId) {
+        // Piste prise pour un autre événement : la tablette la voit occupée, sans le nom du joueur
+        return { ...msg, message: { ...action, participantName: null, participantId: action.participantId ? 'autre-evenement' : null } };
+      }
+    }
+    return msg;
+  }
+
+  // État des pistes pour un événement : les pistes des autres événements restent visibles comme occupées, sans nom
+  private tracksFor(eventId: string, tracks: Record<number, TrackState> = this.tracksState): Record<number, TrackState> {
+    const out: Record<number, TrackState> = {};
+    for (const [id, t] of Object.entries(tracks)) {
+      out[Number(id)] =
+        t.eventId && t.eventId !== eventId
+          ? { ...t, participantName: null, participantId: t.participantId ? 'autre-evenement' : null }
+          : t;
+    }
+    return out;
+  }
+
+  // Événement d'une écriture : champ eventId de la ligne, ou de la ligne existante pour une suppression
+  private async eventIdOfWrite(table: string, action: 'put' | 'delete', data: any): Promise<string | null> {
+    if (!EVENT_TABLES.has(table)) return table === 'events' ? (action === 'put' ? data?.id : data) ?? null : null;
+    if (action === 'put') return typeof data?.eventId === 'string' ? data.eventId : null;
+    try {
+      const row: any = await db.table(table).get(data);
+      return typeof row?.eventId === 'string' ? row.eventId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Une tablette n'écrit que dans son événement ; les autres tables (sauvegardes, guides) restent libres
+  private writeAllowed(table: string, action: 'put' | 'delete', data: any, rowEventId: string | null, connEventId: string): boolean {
+    if (!connEventId) return true;
+    if (table === 'events') return rowEventId === connEventId;
+    if (!EVENT_TABLES.has(table)) return true;
+    if (action === 'delete' && rowEventId === null) return true; // ligne déjà absente : rien à protéger
+    return rowEventId === connEventId && (action === 'delete' || data?.eventId === connEventId);
+  }
+
+  // --- Tablette : choix de l'événement et effacement des anciens après leur journée ---
+
+  // Tablette : s'inscrire à un événement du PC hôte (onboarding ou retour à une session active)
+  selectEvent(eventId: string) {
+    if (!eventId) return;
+    const previous = this.readTabletEvent();
+    if (previous && previous !== eventId) this.markForPurge(previous);
+    try {
+      localStorage.setItem(TABLET_EVENT_KEY, eventId);
+    } catch {
+      // Stockage indisponible : l'événement sera redemandé
+    }
+    if (this.role === 'client' && this.isLinkedToHost()) {
+      try {
+        this.connections[0].send({ type: 'SELECT_EVENT', eventId });
+      } catch {
+        // Liaison perdue : REQUEST_INITIAL_SYNC renverra l'événement à la reconnexion
+      }
+    }
+  }
+
+  private readTabletEvent(): string | null {
+    try {
+      return localStorage.getItem(TABLET_EVENT_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  private readPurgeList(): Record<string, string> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PURGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private writePurgeList(list: Record<string, string>) {
+    try {
+      if (Object.keys(list).length === 0) localStorage.removeItem(PURGE_KEY);
+      else localStorage.setItem(PURGE_KEY, JSON.stringify(list));
+    } catch {
+      // Ignorer
+    }
+  }
+
+  // Les données d'un ancien événement restent sur la tablette jusqu'à la fin de la journée
+  private markForPurge(eventId: string, now = Date.now()) {
+    const list = this.readPurgeList();
+    if (!list[eventId]) list[eventId] = dateLocale(now);
+    this.writePurgeList(list);
+  }
+
+  // Effacer les événements quittés un jour précédent, une fois leurs envois en attente partis
+  async purgeOldEvents(now = Date.now()): Promise<string[]> {
+    const enAttente = new Set<string>();
+    for (const m of this.outbox as any[]) {
+      const id = m?.data?.eventId ?? m?.message?.eventId;
+      if (typeof id === 'string') enAttente.add(id);
+    }
+    const { effacer, garder } = evenementsAEffacer(this.readPurgeList(), dateLocale(now), this.readTabletEvent(), enAttente);
+    for (const eventId of effacer) {
+      await db.transaction('rw', [db.events, db.tickets, db.technicians, db.participants, db.attendees], async () => {
+        await db.tickets.where('eventId').equals(eventId).delete();
+        await db.technicians.where('eventId').equals(eventId).delete();
+        await db.participants.where('eventId').equals(eventId).delete();
+        await db.attendees.where('eventId').equals(eventId).delete();
+        await db.events.delete(eventId);
+      });
+    }
+    this.writePurgeList(garder);
+    if (effacer.length > 0) notifySync();
+    return effacer;
+  }
+
+  private startPurgeTimer() {
+    if (this.purgeTimer) return;
+    void this.purgeOldEvents().catch(() => {});
+    this.purgeTimer = setInterval(() => void this.purgeOldEvents().catch(() => {}), PURGE_INTERVAL_MS);
   }
 
 }
