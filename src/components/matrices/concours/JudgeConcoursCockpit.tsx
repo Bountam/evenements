@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   UserPlus,
   Play,
@@ -96,6 +96,9 @@ function JudgeTrackCard({ slotLabel, track, onStopAndFinish, onRelease }: JudgeT
   );
 }
 
+// Un juge contrôle 2 joueurs au plus : il réserve donc 2 pistes
+export const MAX_TRACKS_PER_JUDGE = 2;
+
 interface JudgeConcoursCockpitProps {
   event: EventSettings;
   participants: Participant[];
@@ -122,6 +125,48 @@ export default function JudgeConcoursCockpit({
   const [selectedPoolIds, setSelectedPoolIds] = useState<string[]>([]);
   const [joinedTrackIds, setJoinedTrackIds] = useState<number[]>([]);
   const [results, setResults] = useState<CompletedChallengeResult[]>([]);
+
+  // Pistes réservées à CE juge par le PC hôte (plan v1.9, étape 4) : personne d'autre ne peut y placer un joueur
+  const ownedTracks = useMemo(
+    () =>
+      Object.values(tracks)
+        .filter((t) => t.ownerJudgeId === judgeId)
+        .sort((a, b) => a.trackId - b.trackId),
+    [tracks, judgeId]
+  );
+
+  // Réserver automatiquement 2 pistes libres (2 joueurs maximum devant un juge) ; le PC tranche en cas de course
+  const lastClaimAt = useRef(0);
+  useEffect(() => {
+    if (ownedTracks.length >= MAX_TRACKS_PER_JUDGE) return;
+    if (Date.now() - lastClaimAt.current < 3000) return;
+    const libres = Object.values(tracks)
+      .filter((t) => !t.ownerJudgeId && !t.participantId)
+      .sort((a, b) => a.trackId - b.trackId)
+      .slice(0, MAX_TRACKS_PER_JUDGE - ownedTracks.length)
+      .map((t) => t.trackId);
+    if (libres.length === 0) return;
+    lastClaimAt.current = Date.now();
+    networkManager.sendChronoAction({ type: 'JUDGE_CLAIM', judgeId, judgeName, trackIds: libres });
+  }, [tracks, ownedTracks.length, judgeId, judgeName]);
+
+  // Refus du PC hôte : message clair, le juge recommence (le joueur reste inscrit, sans piste)
+  useEffect(() => {
+    const previous = networkManager.onChronoRejected;
+    networkManager.onChronoRejected = (info) => {
+      if (info.actionType === 'JUDGE_CLAIM') {
+        lastClaimAt.current = 0;
+        return;
+      }
+      showToast(
+        info.trackId ? `Piste ${info.trackId} déjà prise. Recommencez.` : 'Action refusée par le PC hôte. Recommencez.',
+        'warning'
+      );
+    };
+    return () => {
+      networkManager.onChronoRejected = previous;
+    };
+  }, []);
 
   // Pistes contrôlées par CET animateur juge (max 2 joueurs à la fois)
   const myTracks = useMemo(
@@ -164,10 +209,8 @@ export default function JudgeConcoursCockpit({
   const myRunningTracks = myTracks.filter((t) => t.isRunning);
   const canAddMorePlayers = myTracks.length + results.length < 2;
 
-  const findFreeTrack = (): TrackState | undefined =>
-    Object.values(tracks)
-      .sort((a, b) => a.trackId - b.trackId)
-      .find((t) => t.participantId === null);
+  // Seulement parmi les pistes réservées à ce juge
+  const findFreeTrack = (): TrackState | undefined => ownedTracks.find((t) => t.participantId === null);
 
   const assignToFreeTrack = (participant: Participant) => {
     if (myTracks.length >= 2) {
@@ -176,7 +219,12 @@ export default function JudgeConcoursCockpit({
     }
     const free = findFreeTrack();
     if (!free) {
-      showToast('Toutes les pistes sont actuellement occupées.', 'warning');
+      showToast(
+        ownedTracks.length === 0
+          ? 'Réservation de vos pistes en cours auprès du PC hôte. Réessayez dans un instant.'
+          : 'Vos pistes sont occupées.',
+        'warning'
+      );
       return false;
     }
     networkManager.sendChronoAction({
@@ -243,9 +291,7 @@ export default function JudgeConcoursCockpit({
   const handleStartBatch = () => {
     // 1. Assigner d'abord les joueurs choisis depuis le bassin (si des pistes sont libres pour suivre la partie)
     const assignedFromPoolTrackIds: number[] = [];
-    const freeTracks = Object.values(tracks)
-      .sort((a, b) => a.trackId - b.trackId)
-      .filter((t) => t.participantId === null);
+    const freeTracks = ownedTracks.filter((t) => t.participantId === null);
 
     let freeIdx = 0;
     for (const pid of selectedPoolIds) {
@@ -258,8 +304,8 @@ export default function JudgeConcoursCockpit({
         participantId: p.id,
         participantName: p.name,
         eventId: event.id,
-        judgeId: 'bassin',
-        judgeName: 'Bassin commun'
+        judgeId,
+        judgeName
       });
       assignedFromPoolTrackIds.push(slot.trackId);
       freeIdx++;
@@ -357,6 +403,11 @@ export default function JudgeConcoursCockpit({
           <h2 className="text-xl font-display font-bold uppercase text-app-text">
             Mes joueurs devant moi ({myTracks.length}/2)
           </h2>
+          <p className="text-xs text-app-text-muted" data-testid="pistes-du-juge">
+            {ownedTracks.length > 0
+              ? `Vos pistes : ${ownedTracks.map((t) => t.trackId).join(' et ')}`
+              : 'Réservation de vos pistes…'}
+          </p>
         </div>
         {canAddMorePlayers && myRunningTracks.length === 0 && (
           <button

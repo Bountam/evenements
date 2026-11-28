@@ -433,7 +433,7 @@ export default function TeardownMatrix({
       return;
     }
 
-    const freeTrack = Object.values(tracks).find((t) => t.participantId === null);
+    const freeTrack = Object.values(tracks).find((t) => t.participantId === null && !t.ownerJudgeId);
     if (!freeTrack) {
       showToast('Toutes les 5 pistes sont actuellement occupées !', 'warning');
       return;
@@ -807,7 +807,7 @@ export default function TeardownMatrix({
       setFormResetKey((k) => k + 1);
 
       if (autoAssignTrack) {
-        const freeTrack = Object.values(tracks).find((t) => t.participantId === null);
+        const freeTrack = Object.values(tracks).find((t) => t.participantId === null && !t.ownerJudgeId);
         if (freeTrack) {
           networkManager.sendChronoAction({
             type: 'TRACK_ASSIGN',
@@ -1618,6 +1618,7 @@ export default function TeardownMatrix({
                     onReset={() => handleResetTimer(track.trackId)}
                     onAdjustTime={(deltaMs) => handleAdjustTrackTime(track.trackId, deltaMs)}
                     onSave={() => handleSaveTrackTime(track.trackId)}
+                    onReleaseOwner={() => networkManager.sendChronoAction({ type: 'TRACK_RELEASE', trackId: track.trackId })}
                   />
                 </div>
               );
@@ -1880,6 +1881,8 @@ interface AdminTrackBlockProps {
   onReset: () => void;
   onAdjustTime: (deltaMs: number) => void;
   onSave: () => void;
+  // Libérer la réservation d'un juge (tablette perdue, juge parti)
+  onReleaseOwner?: () => void;
 }
 
 function AdminTrackBlock({
@@ -1892,7 +1895,8 @@ function AdminTrackBlock({
   onStop,
   onReset,
   onAdjustTime,
-  onSave
+  onSave,
+  onReleaseOwner
 }: AdminTrackBlockProps) {
   const waitingParticipants = assignableParticipants
     .filter((p) => !hasValidTime(p))
@@ -1923,8 +1927,18 @@ function AdminTrackBlock({
               Piste {track.trackId}
             </span>
             <span className="text-micro px-2 py-0.5 rounded-full bg-app-input text-app-text-muted border border-app-card-border font-bold uppercase">
-              Libre
+              {track.ownerJudgeId ? `Juge : ${track.ownerJudgeName || 'Animateur'}` : 'Libre'}
             </span>
+            {track.ownerJudgeId && onReleaseOwner && (
+              <button
+                type="button"
+                onClick={onReleaseOwner}
+                className="text-micro px-2 py-0.5 rounded-full border border-app-card-border text-app-text font-bold uppercase cursor-pointer hover:border-primary"
+                aria-label={`Libérer la piste ${track.trackId} réservée par ${track.ownerJudgeName || 'un juge'}`}
+              >
+                Libérer
+              </button>
+            )}
           </div>
           <span className="text-micro text-app-text-muted flex items-center gap-1">
             <User size={11} />

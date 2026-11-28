@@ -105,6 +105,9 @@ export interface TrackState {
   eventId?: string | null; // Événement propriétaire de l'assignation (les pistes sont partagées entre événements)
   judgeId?: string | null; // Identifiant de l'animateur juge qui contrôle la piste
   judgeName?: string | null; // Nom affiché aux autres animateurs pour le départ commun
+  // Juge propriétaire de la piste (réservée par le PC hôte) : lui seul peut y placer un joueur
+  ownerJudgeId?: string | null;
+  ownerJudgeName?: string | null;
 }
 
 export type RaffleStatus = 'idle' | 'spinning' | 'celebrating';
@@ -228,6 +231,10 @@ export type SyncMessage =
   | { type: 'STATE_SYNC'; payload: any }
   | { type: 'TIMER_START'; trackId: number; startTime: number; elapsedBeforeStart: number }
   | { type: 'TIMER_START_BATCH'; trackIds: number[]; startTime: number }
+  // Réservation de pistes par un juge (le PC hôte n'accorde que les pistes libres et sans propriétaire)
+  | { type: 'JUDGE_CLAIM'; judgeId: string; judgeName: string; trackIds: number[] }
+  // Libérer une piste réservée (laptop administrateur : tablette perdue, juge parti)
+  | { type: 'TRACK_RELEASE'; trackId: number }
   | { type: 'TIMER_STOP'; trackId: number; elapsed: number }
   | { type: 'TIMER_RESET'; trackId: number }
   | { type: 'RAFFLE_START'; spinStartTime: number; winnerId: string }

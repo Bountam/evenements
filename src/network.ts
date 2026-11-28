@@ -43,6 +43,8 @@ export type NetworkMessage =
   | { type: 'GUIDE_SEARCH_RESULTS'; requestId: string; guides: OfflineRepairGuide[] }
   // Code de déverrouillage vérifié par le PC hôte (le code circule dans la liaison chiffrée)
   | { type: 'PIN_CHECK'; requestId: string; code: string; eventId?: string }
+  // PC hôte → tablette : action de chrono refusée (piste réservée par un autre juge ou déjà occupée)
+  | { type: 'CHRONO_REJECTED'; actionType: string; trackId?: number; reason: 'occupee' | 'autre_juge' | 'reservation' }
   | { type: 'PIN_RESULT'; requestId: string; status: 'ok' | 'bad' | 'blocked'; remainingMs?: number; attemptsLeft?: number }
   | MessageMaj;
 
@@ -80,6 +82,8 @@ class P2PNetworkManager {
   onTracksSync: ((tracks: Record<number, TrackState>) => void) | null = null;
   onCelebration: ((payload: any) => void) | null = null;
   onRaffleAction: ((action: SyncMessage) => void) | null = null;
+  // Tablette : le PC a refusé une action de chrono (message à afficher au juge)
+  onChronoRejected: ((info: { actionType: string; trackId?: number; reason: string }) => void) | null = null;
   onClientVersionsChange: ((mismatchedVersions: string[]) => void) | null = null;
   onActivityStateChange: (() => void) | null = null;
   onActiveEventsSync: ((events: any[]) => void) | null = null;
@@ -1033,12 +1037,27 @@ class P2PNetworkManager {
           this.acknowledge(conn, msg.opId);
           break;
 
-        case 'CHRONO_ACTION':
-          // Le Master route les actions de chronomètre et de raffle à tout le monde
-          this.applyChronoAction(msg.message);
-          this.broadcastExcept(conn, { type: 'CHRONO_ACTION', message: msg.message });
+        case 'CHRONO_ACTION': {
+          // Le Master valide les pistes réservées, puis route les actions de chronomètre et de raffle à tout le monde
+          const verdict = this.validateChronoAction(msg.message);
+          if (verdict.ok === false) {
+            if (conn.open) {
+              conn.send({ type: 'CHRONO_REJECTED', actionType: msg.message.type, trackId: verdict.trackId, reason: verdict.reason });
+              // Rétablir l'état réel des pistes sur la tablette, qui avait appliqué son action d'avance
+              conn.send({ type: 'CHRONO_ACTION', message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksFor(eventId) } });
+            }
+            this.acknowledge(conn, msg.opId);
+            break;
+          }
+          this.applyChronoAction(verdict.action);
+          this.broadcastExcept(conn, { type: 'CHRONO_ACTION', message: verdict.action });
+          if (verdict.action !== msg.message && conn.open) {
+            // Réservation partielle : la tablette reçoit ce qui lui a vraiment été accordé
+            conn.send({ type: 'CHRONO_ACTION', message: { type: 'TRACKS_STATE_SYNC', tracks: this.tracksFor(eventId) } });
+          }
           this.acknowledge(conn, msg.opId);
           break;
+        }
 
         case 'REQUEST_GUIDE_SEARCH': {
           try {
@@ -1178,6 +1197,10 @@ class P2PNetworkManager {
           }
           break;
 
+        case 'CHRONO_REJECTED':
+          this.onChronoRejected?.({ actionType: msg.actionType, trackId: msg.trackId, reason: msg.reason });
+          break;
+
         case 'PIN_RESULT': {
           const resolve = this.pendingPinChecks.get(msg.requestId);
           if (resolve) {
@@ -1210,6 +1233,15 @@ class P2PNetworkManager {
 
   // ÉMETTRE UNE ACTION DE CHRONO / RAFFLE
   sendChronoAction(action: SyncMessage) {
+    if (this.role === 'host') {
+      // Le PC hôte applique les mêmes règles de réservation à ses propres actions
+      const verdict = this.validateChronoAction(action);
+      if (verdict.ok === false) {
+        this.onChronoRejected?.({ actionType: action.type, trackId: verdict.trackId, reason: verdict.reason });
+        return;
+      }
+      action = verdict.action;
+    }
     this.applyChronoAction(action, true);
     if (this.role === 'host') {
       this.broadcast({ type: 'CHRONO_ACTION', message: action });
@@ -1261,6 +1293,26 @@ class P2PNetworkManager {
         track.startTime = null;
         track.elapsedBeforeStart = 0;
         this.tracksState[action.trackId] = { ...track };
+        this.persistTracksState();
+        if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
+      }
+    } else if (action.type === 'JUDGE_CLAIM') {
+      let changed = false;
+      for (const trackId of action.trackIds) {
+        const track = this.tracksState[trackId];
+        if (track && (!track.ownerJudgeId || track.ownerJudgeId === action.judgeId)) {
+          this.tracksState[trackId] = { ...track, ownerJudgeId: action.judgeId, ownerJudgeName: action.judgeName };
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.persistTracksState();
+        if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
+      }
+    } else if (action.type === 'TRACK_RELEASE') {
+      const track = this.tracksState[action.trackId];
+      if (track) {
+        this.tracksState[action.trackId] = { ...track, ownerJudgeId: null, ownerJudgeName: null };
         this.persistTracksState();
         if (this.onTracksSync) this.onTracksSync({ ...this.tracksState });
       }
@@ -1402,6 +1454,31 @@ class P2PNetworkManager {
       }
     }
     return msg;
+  }
+
+  // PC hôte : règles des pistes réservées (plan v1.9, étape 4). Une réservation peut être réduite aux pistes
+  // vraiment libres ; une attribution sur la piste d'un autre juge ou déjà occupée est refusée.
+  private validateChronoAction(
+    action: SyncMessage
+  ): { ok: true; action: SyncMessage } | { ok: false; trackId?: number; reason: 'occupee' | 'autre_juge' | 'reservation' } {
+    if (action.type === 'JUDGE_CLAIM') {
+      const granted = (action.trackIds || []).filter((id) => {
+        const t = this.tracksState[id];
+        return t && (t.ownerJudgeId === action.judgeId || (!t.ownerJudgeId && !t.participantId));
+      });
+      if (granted.length === 0) return { ok: false, trackId: action.trackIds?.[0], reason: 'reservation' };
+      return { ok: true, action: granted.length === action.trackIds.length ? action : { ...action, trackIds: granted } };
+    }
+    if (action.type === 'TRACK_ASSIGN') {
+      const t = this.tracksState[action.trackId];
+      if (!t) return { ok: false, trackId: action.trackId, reason: 'occupee' };
+      const juge = action.judgeId && action.judgeId !== 'bassin' ? action.judgeId : null;
+      if (juge && t.ownerJudgeId && t.ownerJudgeId !== juge) return { ok: false, trackId: action.trackId, reason: 'autre_juge' };
+      if (action.participantId && t.participantId && t.participantId !== action.participantId) {
+        return { ok: false, trackId: action.trackId, reason: 'occupee' };
+      }
+    }
+    return { ok: true, action };
   }
 
   // État des pistes pour un événement : les pistes des autres événements restent visibles comme occupées, sans nom
