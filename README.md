@@ -2246,7 +2246,7 @@ Trois workflows GitHub Actions : `build.yml` (partagé) construit le bundle web 
    - **2. Rôle** adapté à l'événement (Accueil, Réparateur, Assistant, Formateur, Juge, Administrateur, Kiosque d'inscription — jamais d'Écran Public sur mobile) ;
    - **3. Identification rapide** en **1 seul champ** `Nom, prénom ou surnom *` (accepté même si le bénévole est introuvable en base), ou profil technique (Nom + Table + Spécialités) pour le Réparateur ;
    - **4. Espace dédié** avec en-tête épuré (logo Insertech = Menu principal, icône synchro seule Bleu/Jaune/Rouge, 1 seul bouton de rôle).
-4. Pour une tablette en libre-service visiteur (**Kiosque d'inscription**), cliquer sur **Verrouiller le kiosque** (maintenir le cadenas discret 2 secondes + code PIN **`0000`** par défaut pour déverrouiller). Si l'utilisateur revient au menu principal, les **sessions actives** restent accessibles directement en 1 tap.
+4. Pour une tablette en libre-service visiteur (**Kiosque d'inscription**), cliquer sur **Verrouiller le kiosque** (maintenir le cadenas discret 2 secondes + code PIN pour déverrouiller). Le code par défaut est **`0000`** : changez-le avant l'événement dans **Synchronisation réseau → Code de déverrouillage des tablettes** sur le PC hôte. Il n'est jamais affiché sur les tablettes, et c'est le PC qui le vérifie (copie locale si le PC ne répond pas en 2 s). Si l'utilisateur revient au menu principal, les **sessions actives** restent accessibles directement en 1 tap.
 
 > [!NOTE]
 > Tablettes et PC doivent être sur le **même Wi-Fi**, et le hotspot ne doit pas isoler les appareils. Aucun accès à internet n'est nécessaire. Liste à cocher la veille : [docs/android-verification-tablette.md](docs/android-verification-tablette.md).
@@ -2496,7 +2496,7 @@ faut désinstaller (exporter les données avant).
 
 1. Sur le PC (toujours en mode Administrateur avec anti-veille automatique) : ouvrir l'activité, puis la fenêtre **Réseau local**. Elle affiche un QR (`insertech://rejoindre?code=…&cle=…`).
 2. Sur la tablette : **Scanner le QR du PC** dans l'application, ou viser le QR avec l'appareil photo Samsung. Sans appareil photo, taper le code et la clé à la main.
-3. Suivre le parcours guidé en 4 étapes (événement → rôle → identification rapide en 1 champ ou profil Réparateur → vue du rôle). Le verrouillage (**Verrouiller le kiosque**) est réservé au rôle **Kiosque d'inscription** (maintenir le cadenas discret 2 secondes + code PIN **`0000`** par défaut pour déverrouiller). En revenant au menu principal (clic sur le logo Insertech), les **sessions actives** apparaissent directement pour y retourner en 1 tap.
+3. Suivre le parcours guidé en 4 étapes (événement → rôle → identification rapide en 1 champ ou profil Réparateur → vue du rôle). Le verrouillage (**Verrouiller le kiosque**) est réservé au rôle **Kiosque d'inscription** (maintenir le cadenas discret 2 secondes + code PIN pour déverrouiller). Le code par défaut est **`0000`** : changez-le avant l'événement dans **Synchronisation réseau → Code de déverrouillage des tablettes** sur le PC hôte. Il n'est jamais affiché sur les tablettes, et c'est le PC qui le vérifie (copie locale si le PC ne répond pas en 2 s). En revenant au menu principal (clic sur le logo Insertech), les **sessions actives** apparaissent directement pour y retourner en 1 tap.
 
 ### Déboguer
 

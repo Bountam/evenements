@@ -49,7 +49,7 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
       { role: 'reparateur', description: 'Prendre un appareil, suivre les 4 étapes et consulter le lexique.', icon: Wrench },
       { role: 'assistant', description: "Répondre aux demandes d'aide et orienter les visiteurs.", icon: HandHeart },
       { role: 'kiosque_formulaire', description: 'Tablette libre-service pour les visiteurs (verrouillable PIN).', icon: MonitorSmartphone },
-      { role: 'admin', description: 'Contrôle complet, carte des tables et gestion multi-événements (PIN).', icon: ShieldCheck }
+      { role: 'admin', description: 'Contrôle complet, carte des tables et gestion multi-événements (code requis).', icon: ShieldCheck }
     ];
   }
   if (eventType === 'kiosque_concours') {
@@ -57,7 +57,7 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
       { role: 'juge', description: 'Chronométrer jusqu’à 2 joueurs devant vous et lancer un départ commun.', icon: Timer },
       { role: 'accueil', description: 'Gérer les inscriptions et accueillir les participants.', icon: ClipboardList },
       { role: 'kiosque_formulaire', description: 'Tablette libre-service pour l’inscription au concours (verrouillable PIN).', icon: MonitorSmartphone },
-      { role: 'admin', description: 'Toutes les pistes, tirage au sort, prix et exports (PIN).', icon: ShieldCheck }
+      { role: 'admin', description: 'Toutes les pistes, tirage au sort, prix et exports (code requis).', icon: ShieldCheck }
     ];
   }
   if (eventType === 'install_fest_linux') {
@@ -65,14 +65,14 @@ function getRolesForEvent(eventType: EventSettings['type']): RoleOptionDef[] {
       { role: 'accueil', description: 'Accueillir les visiteurs et suivre les installations.', icon: ClipboardList },
       { role: 'reparateur', description: 'Installer Linux sur les ordinateurs des participants.', icon: Wrench },
       { role: 'kiosque_formulaire', description: 'Formulaire d’inscription seul pour les visiteurs (verrouillable PIN).', icon: MonitorSmartphone },
-      { role: 'admin', description: 'Gestion complète des bénévoles et exports (PIN).', icon: ShieldCheck }
+      { role: 'admin', description: 'Gestion complète des bénévoles et exports (code requis).', icon: ShieldCheck }
     ];
   }
   return [
     { role: 'formateur', description: 'Évaluer les participants Avant / Pendant / Après la formation.', icon: GraduationCap },
     { role: 'accueil', description: 'Inscrire les participants et confirmer les présences.', icon: ClipboardList },
     { role: 'kiosque_formulaire', description: 'Formulaire d’inscription seul pour les participants (verrouillable PIN).', icon: MonitorSmartphone },
-    { role: 'admin', description: 'Gestion complète, bilan et exports (PIN).', icon: ShieldCheck }
+    { role: 'admin', description: 'Gestion complète, bilan et exports (code requis).', icon: ShieldCheck }
   ];
 }
 
@@ -499,6 +499,7 @@ export default function MobileOnboardingWizard({
       <PinDialog
         isOpen={showAdminPin}
         pinLock={getEffectivePinLock(selectedEvent)}
+        eventId={selectedEvent?.id}
         onClose={() => setShowAdminPin(false)}
         onUnlocked={() => {
           setShowAdminPin(false);

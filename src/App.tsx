@@ -532,7 +532,7 @@ export default function App() {
     }
     saveLocked(true);
     setIsModeLocked(true);
-    showToast('Kiosque verrouillé (code 0000 par défaut). Maintenez le cadenas 2 secondes pour déverrouiller.', 'info');
+    showToast('Kiosque verrouillé. Maintenez le cadenas 2 secondes pour déverrouiller.', 'info');
   };
 
   // Tablette verrouillée : plein écran, écran toujours allumé et application épinglée (Retour et Accueil
@@ -1749,6 +1749,7 @@ export default function App() {
         <PinDialog
           isOpen={showPinDialog || isLaptopLocked}
           pinLock={getEffectivePinLock(activeEvent)}
+          eventId={activeEvent?.id}
           onClose={() => {
             setShowPinDialog(false);
             setIsLaptopLocked(false);

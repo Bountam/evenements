@@ -2,17 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
-import { checkPin, formatWait, getBlockRemainingMs, type PinLock } from '../../utils/modeLock';
+import { formatWait, getBlockRemainingMs, type PinLock } from '../../utils/modeLock';
+import { verifierCode } from '../../utils/pinCheck';
 
 interface PinDialogProps {
   isOpen: boolean;
   pinLock: PinLock | null;
+  // Activité dont le code est demandé au PC hôte (tablette reliée)
+  eventId?: string;
   onClose: () => void;
   onUnlocked: () => void;
 }
 
 // Saisie du code à 4 chiffres pour sortir d'un mode verrouillé
-export default function PinDialog({ isOpen, pinLock, onClose, onUnlocked }: PinDialogProps) {
+export default function PinDialog({ isOpen, pinLock, eventId, onClose, onUnlocked }: PinDialogProps) {
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
   const [remainingMs, setRemainingMs] = useState(() => getBlockRemainingMs());
@@ -37,7 +40,7 @@ export default function PinDialog({ isOpen, pinLock, onClose, onUnlocked }: PinD
     if (checking || blocked) return;
     setChecking(true);
     try {
-      const result = await checkPin(code, pinLock);
+      const result = await verifierCode(code, pinLock, eventId);
       if (result.status === 'ok') {
         onUnlocked();
         return;
@@ -63,7 +66,7 @@ export default function PinDialog({ isOpen, pinLock, onClose, onUnlocked }: PinD
     <Modal isOpen={isOpen} onClose={onClose} title="Déverrouiller la tablette" icon={KeyRound} maxWidth="max-w-sm" initialFocusRef={inputRef}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <label htmlFor="pin-code" className="block text-xs text-app-text-muted">
-          Code à 4 chiffres (0000 par défaut, modifiable par l'admin)
+          Code à 4 chiffres
         </label>
         <input
           ref={inputRef}

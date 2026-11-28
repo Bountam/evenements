@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import type { EventSettings } from '../../types';
-import { createPinLock, isValidPin, readEventPinLock } from '../../utils/modeLock';
+import { createPinLock, DEFAULT_PIN_CODE, getDeviceRole, isCustomPinLock, isValidPin, readEventPinLock, verifyPin } from '../../utils/modeLock';
 import { showToast } from '../shared/Toast';
 import Button from '../shared/Button';
 
@@ -16,7 +16,27 @@ export default function TabletPinSettings({ event, onSave }: TabletPinSettingsPr
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const hasPin = Boolean(readEventPinLock(event));
+  const lock = readEventPinLock(event);
+  const hasPin = Boolean(lock);
+  // Code personnalisé ? Les verrous d'avant la v1.9 n'ont pas le drapeau : on teste alors le code par défaut
+  const [isCustom, setIsCustom] = useState(() => isCustomPinLock(lock));
+  useEffect(() => {
+    let cancelled = false;
+    if (!lock) {
+      setIsCustom(false);
+    } else if (isCustomPinLock(lock)) {
+      setIsCustom(true);
+    } else {
+      verifyPin(DEFAULT_PIN_CODE, lock)
+        .then((isDefault) => !cancelled && setIsCustom(!isDefault))
+        .catch(() => !cancelled && setIsCustom(false));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [lock?.sel, lock?.empreinte, lock?.custom]);
+  // Le code par défaut n'est affiché que sur le PC hôte, jamais sur une tablette
+  const showDefaultHint = getDeviceRole() === 'hote' && !isCustom;
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +46,7 @@ export default function TabletPinSettings({ event, onSave }: TabletPinSettingsPr
     }
     setSaving(true);
     try {
-      const verrouillage = await createPinLock(code);
+      const verrouillage = await createPinLock(code, true);
       await onSave({ ...event, extraData: { ...(event.extraData || {}), verrouillage } });
       setCode('');
       setError('');
@@ -57,18 +77,18 @@ export default function TabletPinSettings({ event, onSave }: TabletPinSettingsPr
             setCode(e.target.value.replace(/\D/g, '').slice(0, 4));
             setError('');
           }}
-          placeholder={hasPin ? '••••' : '4 chiffres'}
+          placeholder={hasPin && isCustom ? '••••' : '4 chiffres'}
           aria-describedby="tablet-pin-help"
           className="flex-grow min-w-0 bg-app-card border border-app-input-border rounded-xl px-3 py-2 text-app-text text-sm font-mono tracking-widest focus:outline-none focus:border-primary"
         />
         <Button type="submit" size="sm" variant="primary" disabled={saving}>
-          {hasPin ? 'Changer' : 'Définir'}
+          {isCustom ? 'Changer' : 'Définir'}
         </Button>
       </div>
       <p id="tablet-pin-help" className="text-[10px] text-app-text-muted">
-        {hasPin
-          ? 'Un code personnalisé est défini pour cette activité. Il remplace le code par défaut (0000).'
-          : 'Code par défaut actif : 0000. Définissez un autre code à 4 chiffres si souhaité.'}
+        {showDefaultHint
+          ? "Code actuel : 0000 par défaut. Changez-le avant d'ouvrir l'événement."
+          : 'Un code personnalisé protège cette activité.'}
       </p>
       {error && <p role="alert" className="text-xs font-bold text-danger">{error}</p>}
     </form>

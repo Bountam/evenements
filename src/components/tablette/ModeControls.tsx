@@ -13,7 +13,7 @@ interface ModeControlsProps {
 
 // Commandes de verrouillage (réservées uniquement au mode Kiosque d'inscription) :
 // - Non verrouillé : bouton « Verrouiller ce mode »
-// - Verrouillé : icône cadenas discrète à maintenir 2 secondes pour demander le PIN (0000 par défaut)
+// - Verrouillé : icône cadenas discrète à maintenir 2 secondes pour demander le PIN
 export default function ModeControls({ locked, canLock = true, onLock, onRequestUnlock }: ModeControlsProps) {
   const timer = useRef<number | null>(null);
 
@@ -62,7 +62,7 @@ export default function ModeControls({ locked, canLock = true, onLock, onRequest
     <Button
       size="sm"
       onClick={onLock}
-      title="Verrouiller la tablette dans le Kiosque d'inscription (code 0000 par défaut pour en sortir)"
+      title="Verrouiller la tablette dans le Kiosque d'inscription (code requis pour en sortir)"
     >
       <LockOpen size={13} aria-hidden="true" />
       <span>Verrouiller le kiosque</span>

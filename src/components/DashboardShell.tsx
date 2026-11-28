@@ -315,7 +315,7 @@ export default function DashboardShell({
                 close();
                 onLockScreen();
               }}
-              title="Verrouiller l'écran administrateur du Laptop (code 0000 par défaut)"
+              title="Verrouiller l'écran administrateur du Laptop"
               className="w-full !justify-start"
             >
               <Lock size={13} className="text-primary" aria-hidden="true" />

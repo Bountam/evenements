@@ -102,6 +102,7 @@ export default function WorkRoleBar({ event, activeRole, onSelectRole, isTablet 
       <PinDialog
         isOpen={pendingAdminPin}
         pinLock={getEffectivePinLock(event)}
+        eventId={event?.id}
         onClose={() => setPendingAdminPin(false)}
         onUnlocked={() => {
           setPendingAdminPin(false);

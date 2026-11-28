@@ -8,7 +8,7 @@ import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } fro
 import { nouvelleCle } from './net/chiffrement';
 import { DiffusionMaj, estMessageMaj, recevoirMajTablette, reinitialiserReceptionMaj, versionCodeDe, type ApkPret, type MessageMaj } from './net/miseAJour';
 import { getNatifMaj } from './native/android';
-import { readLocked } from './utils/modeLock';
+import { matchesPin, PinAttemptTracker, readEventPinLock, readLocked } from './utils/modeLock';
 import { sauvegarderMaintenant } from './utils/sqliteBackup';
 
 // Types de messages réseau local
@@ -38,7 +38,15 @@ export type NetworkMessage =
   | { type: 'GUIDES_SYNC'; ticketId?: string; guides: OfflineRepairGuide[] }
   | { type: 'REQUEST_GUIDE_SEARCH'; requestId: string; query: string; ticketId?: string }
   | { type: 'GUIDE_SEARCH_RESULTS'; requestId: string; guides: OfflineRepairGuide[] }
+  // Code de déverrouillage vérifié par le PC hôte (le code circule dans la liaison chiffrée)
+  | { type: 'PIN_CHECK'; requestId: string; code: string; eventId?: string }
+  | { type: 'PIN_RESULT'; requestId: string; status: 'ok' | 'bad' | 'blocked'; remainingMs?: number; attemptsLeft?: number }
   | MessageMaj;
+
+export type HostPinResult = Extract<NetworkMessage, { type: 'PIN_RESULT' }>;
+
+// Délai d'attente de la réponse du PC avant de vérifier avec la copie locale
+export const PIN_CHECK_TIMEOUT_MS = 2000;
 
 export type SyncIndicatorColor = 'blue' | 'yellow' | 'red';
 
@@ -74,6 +82,8 @@ class P2PNetworkManager {
   private clientVersions = new Map<string, string>();
   private sentGuideIdsByConn = new Map<string, Set<string>>();
   private pendingGuideSearches = new Map<string, (guides: OfflineRepairGuide[]) => void>();
+  private pendingPinChecks = new Map<string, (result: HostPinResult | null) => void>();
+  private pinAttempts = new PinAttemptTracker();
 
   // PC hôte : appel des tablettes du réseau local (voir src/net/hoteLocal.ts)
   private hoteLocal: HoteLocal | null = null;
@@ -650,6 +660,8 @@ class P2PNetworkManager {
     this.sentGuideIdsByConn.clear();
     this.pendingGuideSearches.forEach((resolve) => resolve([]));
     this.pendingGuideSearches.clear();
+    this.pendingPinChecks.forEach((resolve) => resolve(null));
+    this.pendingPinChecks.clear();
     this.notifyClientVersions();
     if (wasClient) arreterServeurTablette().catch(() => {});
     this.isConnecting = false;
@@ -786,6 +798,55 @@ class P2PNetworkManager {
     }
   }
 
+  // Tablette : demander au PC hôte de vérifier le code. null = PC injoignable ou trop lent (repli sur la copie locale)
+  async requestPinCheck(code: string, eventId?: string, timeoutMs = PIN_CHECK_TIMEOUT_MS): Promise<HostPinResult | null> {
+    if (this.role !== 'client') return null;
+    const conn = this.connections[0];
+    if (!conn || !conn.open) return null;
+
+    const requestId = `pin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise<HostPinResult | null>((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.pendingPinChecks.delete(requestId)) resolve(null);
+      }, timeoutMs);
+      this.pendingPinChecks.set(requestId, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+      try {
+        conn.send({ type: 'PIN_CHECK', requestId, code, eventId });
+      } catch {
+        clearTimeout(timer);
+        this.pendingPinChecks.delete(requestId);
+        resolve(null);
+      }
+    });
+  }
+
+  // PC hôte : vérifier un code reçu d'une tablette, avec un compteur d'essais par tablette
+  private async answerPinCheck(conn: Lien, msg: Extract<NetworkMessage, { type: 'PIN_CHECK' }>, fallbackEventId: string) {
+    const key = conn.connectionId;
+    const reply = (r: Omit<HostPinResult, 'type' | 'requestId'>) => {
+      if (conn.open) conn.send({ type: 'PIN_RESULT', requestId: msg.requestId, ...r });
+    };
+    const remaining = this.pinAttempts.remainingMs(key);
+    if (remaining > 0) {
+      reply({ status: 'blocked', remainingMs: remaining });
+      return;
+    }
+    const eventId = typeof msg.eventId === 'string' && msg.eventId ? msg.eventId : fallbackEventId;
+    const event = eventId ? await db.events.get(eventId) : undefined;
+    const ok = typeof msg.code === 'string' && (await matchesPin(msg.code, readEventPinLock(event)));
+    if (ok) {
+      this.pinAttempts.reset(key);
+      reply({ status: 'ok' });
+      return;
+    }
+    const failure = this.pinAttempts.fail(key);
+    if (failure.blockedMs > 0) reply({ status: 'blocked', remainingMs: failure.blockedMs });
+    else reply({ status: 'bad', attemptsLeft: failure.attemptsLeft });
+  }
+
   // Tablette : interroger à la demande la bibliothèque locale du Laptop serveur via LAN
   async searchHostGuides(query: string, ticketId?: string): Promise<OfflineRepairGuide[]> {
     if (this.role !== 'client') return [];
@@ -861,6 +922,10 @@ class P2PNetworkManager {
 
         case 'CLOCK_PING':
           conn.send({ type: 'CLOCK_PONG', t0: msg.t0, hostTime: Date.now() });
+          break;
+
+        case 'PIN_CHECK':
+          await this.answerPinCheck(conn, msg, eventId);
           break;
 
         case 'REQUEST_INITIAL_SYNC':
@@ -1064,6 +1129,15 @@ class P2PNetworkManager {
             notifySync();
           }
           break;
+
+        case 'PIN_RESULT': {
+          const resolve = this.pendingPinChecks.get(msg.requestId);
+          if (resolve) {
+            this.pendingPinChecks.delete(msg.requestId);
+            resolve(msg);
+          }
+          break;
+        }
 
         case 'GUIDE_SEARCH_RESULTS': {
           const guides = Array.isArray(msg.guides) ? msg.guides : [];
