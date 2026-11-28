@@ -1,20 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Wrench, BookOpen, HandHeart, Megaphone, Check, CheckCircle, ArrowRight, ArrowLeft, Plus, Star,
-  FileText, Stethoscope, BookOpenCheck
+  Wrench,
+  BookOpen,
+  HandHeart,
+  Megaphone,
+  Check,
+  CheckCircle,
+  ArrowRight,
+  ArrowLeft,
+  Plus,
+  Star,
+  Timer,
+  Zap
 } from 'lucide-react';
-import type { EventSettings, FollowUpType, RepairStage, RepairTicket, Technician, TicketStatus } from '../../../types';
+import type { EventSettings, FollowUpType, RepairTicket, Technician, TicketStatus } from '../../../types';
 import { networkManager } from '../../../network';
 import {
   FOLLOW_UP_LABELS,
   REPAIR_ACTIONS_CATALOG,
   REPLACEMENT_PARTS_OPTIONS,
-  getDiagnosticSuggestions,
   getLexiconEntriesForSymptoms
 } from '../../../utils/repairLexicon';
 import Modal from '../../shared/Modal';
 import { showToast } from '../../shared/Toast';
-import TicketDiagnosticPanel from './TicketDiagnosticPanel';
+import DiagnosticDecisionTree from './DiagnosticDecisionTree';
 import IfixitGuidesPanel from './IfixitGuidesPanel';
 
 interface ReparateurCockpitProps {
@@ -25,13 +34,6 @@ interface ReparateurCockpitProps {
   onReload: () => Promise<void>;
   onCelebrate: (payload: { visitorName: string; objectName: string; techName: string; weightKg: number }) => void;
 }
-
-const STAGES: { id: RepairStage; label: string }[] = [
-  { id: 'accueil_table', label: '1. Accueil' },
-  { id: 'diagnostic', label: '2. Diagnostic' },
-  { id: 'reparation', label: '3. Réparation' },
-  { id: 'rapport', label: '4. Rapport' }
-];
 
 export default function ReparateurCockpit({
   event,
@@ -51,9 +53,12 @@ export default function ReparateurCockpit({
       setSelectedTechId(preselectedTechId);
     }
   }, [preselectedTechId, technicians]);
+
   const [activeTicketId, setActiveTicketId] = useState<string>('');
-  const [activeSubTab, setActiveSubTab] = useState<'fiche' | 'diagnostic' | 'ifixit'>('fiche');
   const [showLexicon, setShowLexicon] = useState(false);
+  const [showReportWizard, setShowReportWizard] = useState(false);
+  const [guideFocusKeyword, setGuideFocusKeyword] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Création rapide de profil si besoin
   const [newName, setNewName] = useState('');
@@ -70,6 +75,11 @@ export default function ReparateurCockpit({
   const [followUpDetail, setFollowUpDetail] = useState('');
 
   useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (selectedTechId) localStorage.setItem(storageKey, selectedTechId);
   }, [selectedTechId, storageKey]);
 
@@ -82,7 +92,9 @@ export default function ReparateurCockpit({
     myActiveTickets.find((t) => t.id === activeTicketId) || myActiveTickets[0] || null;
 
   useEffect(() => {
-    setActiveSubTab('fiche');
+    setShowReportWizard(false);
+    setReportSubStep(1);
+    setGuideFocusKeyword(null);
   }, [activeTicket?.id]);
 
   const isCompatible = (t: RepairTicket, tech: Technician) => {
@@ -140,7 +152,7 @@ export default function ReparateurCockpit({
         assignedAt: now,
         serviceStartedAt: now,
         tableNumber: activeTech.tableNumber ?? null,
-        repairStage: 'accueil_table'
+        repairStage: 'diagnostic'
       }
     };
     await networkManager.writeToDatabase('tickets', 'put', updated);
@@ -150,34 +162,11 @@ export default function ReparateurCockpit({
       currentTicketId: updated.id
     });
     setActiveTicketId(updated.id);
+    setShowReportWizard(false);
     setReportSubStep(1);
     setReportActions([]);
     setReportNote('');
     setFollowUpType('aucune');
-    await onReload();
-  };
-
-  const updateStage = async (stage: RepairStage) => {
-    if (!activeTicket) return;
-    await networkManager.writeToDatabase('tickets', 'put', {
-      ...activeTicket,
-      updatedAt: Date.now(),
-      extraData: { ...activeTicket.extraData, repairStage: stage }
-    });
-    await onReload();
-  };
-
-  const toggleDiagCheck = async (step: string) => {
-    if (!activeTicket) return;
-    const current = Array.isArray(activeTicket.extraData?.checkedDiagSteps)
-      ? activeTicket.extraData.checkedDiagSteps
-      : [];
-    const next = current.includes(step) ? current.filter((s: string) => s !== step) : [...current, step];
-    await networkManager.writeToDatabase('tickets', 'put', {
-      ...activeTicket,
-      updatedAt: Date.now(),
-      extraData: { ...activeTicket.extraData, checkedDiagSteps: next }
-    });
     await onReload();
   };
 
@@ -230,21 +219,26 @@ export default function ReparateurCockpit({
     await onReload();
   };
 
-  const handleSaveFinalReport = async () => {
+  const persistTicketCompletion = async (
+    statusToSave: TicketStatus,
+    followUpToSave: FollowUpType,
+    toastLabel: string
+  ) => {
     if (!activeTicket || !activeTech) return;
     const now = Date.now();
     const updated: RepairTicket = {
       ...activeTicket,
-      status: reportStatus,
+      status: statusToSave,
       resultRemarks: reportNote.trim(),
       updatedAt: now,
       extraData: {
         ...activeTicket.extraData,
         completedAt: now,
+        repairStage: 'rapport',
         actionsPerformed: reportActions,
-        followUpType,
-        followUpPart: followUpType === 'piece_rechange' ? followUpPart : '',
-        followUpDetail: followUpType === 'boutique_insertech' ? followUpDetail : '',
+        followUpType: followUpToSave,
+        followUpPart: followUpToSave === 'piece_rechange' ? followUpPart : '',
+        followUpDetail: followUpToSave === 'boutique_insertech' ? followUpDetail : '',
         helpRequest: activeTicket.extraData?.helpRequest
           ? { ...activeTicket.extraData.helpRequest, active: false }
           : null
@@ -257,7 +251,7 @@ export default function ReparateurCockpit({
       status: remaining.length > 0 ? 'occupe' : 'libre',
       currentTicketId: remaining[0]?.id ?? null
     });
-    if (reportStatus === 'repare' || reportStatus === 'semi_repare') {
+    if (statusToSave === 'repare' || statusToSave === 'semi_repare') {
       onCelebrate({
         visitorName: activeTicket.visitorName,
         objectName: activeTicket.objectName,
@@ -265,10 +259,19 @@ export default function ReparateurCockpit({
         weightKg: activeTicket.weightKg || 1.5
       });
     }
-    showToast('Rapport de réparation enregistré !', 'success');
+    showToast(toastLabel, 'success');
     setActiveTicketId('');
+    setShowReportWizard(false);
     setReportSubStep(1);
     await onReload();
+  };
+
+  const handleSaveFinalReport = async () => {
+    await persistTicketCompletion(reportStatus, followUpType, 'Rapport de réparation enregistré !');
+  };
+
+  const handleQuickValidate = async () => {
+    await persistTicketCompletion('repare', 'aucune', 'Appareil validé comme réparé !');
   };
 
   if (!activeTech) {
@@ -396,7 +399,7 @@ export default function ReparateurCockpit({
             <div className="space-y-3">
               {waitingTickets.map((t) => {
                 const compat = isCompatible(t, activeTech);
-                const waitMin = Math.max(0, Math.round((Date.now() - t.createdAt) / 60000));
+                const waitMin = Math.max(0, Math.round((nowMs - t.createdAt) / 60000));
                 return (
                   <div
                     key={t.id}
@@ -442,21 +445,12 @@ export default function ReparateurCockpit({
     );
   }
 
-  const currentStage: RepairStage = activeTicket.extraData?.repairStage || 'accueil_table';
   const lexiconEntries = getLexiconEntriesForSymptoms(activeTicket.extraData?.symptoms || []);
-  const checkedSteps: string[] = Array.isArray(activeTicket.extraData?.checkedDiagSteps)
-    ? activeTicket.extraData.checkedDiagSteps
-    : [];
   const diagnosticChecks: string[] = Array.isArray(activeTicket.extraData?.diagnosticChecks)
     ? activeTicket.extraData.diagnosticChecks
     : [];
-  const diagnosticSuggestions = getDiagnosticSuggestions(activeTicket);
-  const totalDiagItems =
-    diagnosticSuggestions.questions.length + diagnosticSuggestions.quickChecks.length;
-  const doneDiagItems = [
-    ...diagnosticSuggestions.questions.map((q) => q.id),
-    ...diagnosticSuggestions.quickChecks.map((c) => c.id)
-  ].filter((id) => diagnosticChecks.includes(id)).length;
+  const serviceStartMs = activeTicket.extraData?.serviceStartedAt || activeTicket.updatedAt || activeTicket.createdAt;
+  const elapsedMinutes = Math.max(0, Math.round((nowMs - serviceStartMs) / 60000));
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -480,263 +474,135 @@ export default function ReparateurCockpit({
         </div>
       )}
 
-      {/* En-tête Piste Temps Réel + Lexique + Demande Assistant */}
-      <div className="bg-app-card border border-app-card-border p-4 rounded-3xl shadow-lg space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <span className="text-micro uppercase font-black text-primary block">
-              Piste Temps Réel • {activeTech.name} {activeTech.tableNumber ? `(Table ${activeTech.tableNumber})` : ''}
-            </span>
-            <h3 className="text-lg font-display font-bold uppercase text-app-text">
-              {activeTicket.objectName} — {activeTicket.visitorName}
+      {/* FICHE TECHNIQUE PERMANENTE TOUJOURS VISIBLE DÈS LE DÉPART */}
+      <section
+        aria-label="Fiche technique de l'appareil"
+        className="bg-app-card border border-app-card-border p-4 sm:p-5 rounded-3xl shadow-lg space-y-3.5"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2.5">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-micro uppercase font-black text-primary">
+                {activeTech.name} {activeTech.tableNumber ? `• Table ${activeTech.tableNumber}` : ''}
+              </span>
+              <span
+                className={`text-micro px-2 py-0.5 rounded-full font-mono font-bold inline-flex items-center gap-1 border ${
+                  elapsedMinutes > 45
+                    ? 'bg-danger/15 border-danger/40 text-danger'
+                    : elapsedMinutes >= 25
+                      ? 'bg-warning/15 border-warning/40 text-warning'
+                      : 'bg-success/15 border-success/40 text-success'
+                }`}
+              >
+                <Timer size={11} aria-hidden="true" />
+                <span>{elapsedMinutes} min</span>
+              </span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-display font-black uppercase text-app-text">
+              {activeTicket.objectName}
             </h3>
+            <p className="text-xs sm:text-sm text-app-text">
+              Participant : <strong>{activeTicket.visitorName}</strong>
+              {activeTicket.extraData?.contact?.pronouns ? ` (${activeTicket.extraData.contact.pronouns})` : ''}
+              {' · '}
+              <span className="uppercase font-semibold text-app-text-muted">
+                {activeTicket.objectCategory.replace('_', ' ')} · {activeTicket.operatingSystem}
+              </span>
+            </p>
           </div>
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setShowLexicon(true)}
-              className="min-h-11 px-3.5 py-2 rounded-xl bg-primary/15 border border-primary text-primary font-display font-bold uppercase text-xs cursor-pointer flex items-center gap-1.5"
+              onClick={handleCallTable}
+              className="min-h-11 px-3.5 py-2 rounded-xl bg-primary/15 border border-primary text-primary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
             >
-              <BookOpen size={15} aria-hidden="true" />
-              <span>Lexique & Aide</span>
+              <Megaphone size={15} aria-hidden="true" />
+              <span>Appeler Table {activeTech.tableNumber || '?'}</span>
             </button>
             <button
               type="button"
               onClick={handleRequestHelp}
-              className="min-h-11 px-3.5 py-2 rounded-xl bg-warning/15 border border-warning/40 text-warning font-display font-bold uppercase text-xs cursor-pointer flex items-center gap-1.5"
+              className="min-h-11 px-3.5 py-2 rounded-xl bg-warning/15 border border-warning/40 text-warning font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
             >
               <HandHeart size={15} aria-hidden="true" />
-              <span>Demander Assistant</span>
+              <span>Assistant</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLexicon(true)}
+              className="min-h-11 px-3.5 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <BookOpen size={15} aria-hidden="true" />
+              <span>Lexique</span>
             </button>
           </div>
         </div>
 
-        {/* Navigation par onglets du ticket actif : [Fiche], [Diagnostic], [Guides iFixit] */}
-        <div
-          role="tablist"
-          aria-label="Vues du ticket actif"
-          className="grid grid-cols-3 gap-2 pt-1"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeSubTab === 'fiche'}
-            onClick={() => setActiveSubTab('fiche')}
-            className={`min-h-11 px-3 py-2 rounded-xl border-2 font-display font-bold uppercase text-xs cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeSubTab === 'fiche'
-                ? 'bg-primary text-secondary border-primary'
-                : 'bg-app-input text-app-text border-app-card-border hover:border-primary/50'
-            }`}
-          >
-            <FileText size={14} aria-hidden="true" />
-            <span>Fiche</span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeSubTab === 'diagnostic'}
-            onClick={() => setActiveSubTab('diagnostic')}
-            className={`min-h-11 px-3 py-2 rounded-xl border-2 font-display font-bold uppercase text-xs cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeSubTab === 'diagnostic'
-                ? 'bg-primary text-secondary border-primary'
-                : 'bg-app-input text-app-text border-app-card-border hover:border-primary/50'
-            }`}
-          >
-            <Stethoscope size={14} aria-hidden="true" />
-            <span>Diagnostic</span>
-            <span
-              className={`text-micro px-1.5 py-0.5 rounded-full font-mono ${
-                activeSubTab === 'diagnostic'
-                  ? 'bg-secondary/20 text-secondary'
-                  : 'bg-app-card text-app-text-muted'
-              }`}
-            >
-              {doneDiagItems}/{totalDiagItems}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeSubTab === 'ifixit'}
-            onClick={() => setActiveSubTab('ifixit')}
-            className={`min-h-11 px-3 py-2 rounded-xl border-2 font-display font-bold uppercase text-xs cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeSubTab === 'ifixit'
-                ? 'bg-primary text-secondary border-primary'
-                : 'bg-app-input text-app-text border-app-card-border hover:border-primary/50'
-            }`}
-          >
-            <BookOpenCheck size={14} aria-hidden="true" />
-            <span>Guides iFixit</span>
-          </button>
-        </div>
-
-        {activeSubTab === 'fiche' && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {STAGES.map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => updateStage(st.id)}
-                className={`min-h-11 px-3 py-2 rounded-xl font-display font-bold uppercase text-xs cursor-pointer border ${
-                  currentStage === st.id
-                    ? 'bg-primary text-secondary border-primary'
-                    : 'bg-app-input text-app-text-muted border-app-card-border'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {activeSubTab === 'diagnostic' && (
-        <TicketDiagnosticPanel
-          ticket={activeTicket}
-          checkedIds={diagnosticChecks}
-          onToggleCheck={toggleDiagnosticCheck}
-          onOpenIfixit={() => setActiveSubTab('ifixit')}
-        />
-      )}
-
-      {activeSubTab === 'ifixit' && (
-        <IfixitGuidesPanel
-          ticket={activeTicket}
-          onOpenDiagnostic={() => setActiveSubTab('diagnostic')}
-        />
-      )}
-
-      {/* ÉTAPE 1 : ACCUEIL À LA TABLE */}
-      {activeSubTab === 'fiche' && currentStage === 'accueil_table' && (
-        <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-4">
-          <h4 className="text-lg font-display font-bold uppercase text-app-text">
-            1. Accueil bienveillant à la table
-          </h4>
-          <p className="text-sm text-app-text">
-            Accueillez chaleureusement <strong>{activeTicket.visitorName}</strong>
-            {activeTicket.extraData?.contact?.pronouns ? ` (${activeTicket.extraData.contact.pronouns})` : ''}, et
-            validez ensemble le symptôme noté : <strong>{activeTicket.initialDiagnosis}</strong>.
+        <div className="p-3 rounded-2xl bg-app-input border border-app-card-border">
+          <span className="text-micro uppercase font-black text-app-text-muted block">Symptôme noté à l'accueil</span>
+          <p className="text-sm font-semibold text-app-text mt-0.5">
+            {activeTicket.initialDiagnosis || 'Aucun symptôme précisé.'}
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleCallTable}
-              className="min-h-14 px-5 py-3 rounded-2xl bg-primary/15 border-2 border-primary text-primary font-display font-black uppercase text-sm cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Megaphone size={18} aria-hidden="true" />
-              <span>Appeler à la Table {activeTech.tableNumber || '?'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => updateStage('diagnostic')}
-              className="min-h-14 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>Passer au diagnostic</span>
-              <ArrowRight size={18} aria-hidden="true" />
-            </button>
-          </div>
         </div>
-      )}
+      </section>
 
-      {/* ÉTAPE 2 : DIAGNOSTIC GUIDÉ */}
-      {activeSubTab === 'fiche' && currentStage === 'diagnostic' && (
-        <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-4">
-          <h4 className="text-lg font-display font-bold uppercase text-app-text">2. Diagnostic étape par étape</h4>
-          {lexiconEntries.map((entry) => (
-            <div key={entry.problemId} className="space-y-2.5 p-4 rounded-2xl bg-app-input border border-app-card-border">
-              <div className="font-display font-bold text-sm uppercase text-primary">{entry.problemId}</div>
-              <p className="text-xs text-app-text">{entry.plainExplanation}</p>
-              <p className="text-xs font-bold text-warning">Sécurité : {entry.safetyWarning}</p>
-              <div className="space-y-2 pt-1">
-                {entry.diagnosticSteps.map((step) => {
-                  const checked = checkedSteps.includes(step);
-                  return (
-                    <button
-                      key={step}
-                      type="button"
-                      onClick={() => toggleDiagCheck(step)}
-                      className={`w-full min-h-12 px-4 py-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer flex items-center justify-between gap-2 ${
-                        checked
-                          ? 'bg-primary text-secondary border-primary'
-                          : 'bg-app-card text-app-text border-app-card-border'
-                      }`}
-                    >
-                      <span>{step}</span>
-                      {checked && <Check size={16} className="shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          <div className="flex justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => updateStage('accueil_table')}
-              className="min-h-12 px-4 py-2 rounded-2xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer flex items-center gap-2"
-            >
-              <ArrowLeft size={16} />
-              <span>Retour</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => updateStage('reparation')}
-              className="min-h-14 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center gap-2"
-            >
-              <span>Passer à la réparation</span>
-              <ArrowRight size={18} />
-            </button>
-          </div>
-        </div>
-      )}
+      {!showReportWizard ? (
+        <>
+          {/* DIAGNOSTIC INTERACTIF OUI / NON + POINTS DE CONTRÔLE */}
+          <DiagnosticDecisionTree
+            ticket={activeTicket}
+            checkedIds={diagnosticChecks}
+            onToggleCheck={toggleDiagnosticCheck}
+            onSelectGuideKeyword={(kw) => setGuideFocusKeyword(kw)}
+          />
 
-      {/* ÉTAPE 3 : RÉPARATION */}
-      {activeSubTab === 'fiche' && currentStage === 'reparation' && (
-        <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-4">
-          <h4 className="text-lg font-display font-bold uppercase text-app-text">3. Réparation & Pédagogie</h4>
-          {lexiconEntries.map((entry) => (
-            <div key={entry.problemId} className="space-y-2 p-4 rounded-2xl bg-app-input border border-app-card-border">
-              <div className="font-display font-bold text-sm uppercase text-primary">{entry.problemId}</div>
-              <ul className="list-disc pl-5 space-y-1 text-xs text-app-text">
-                {entry.repairSteps.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ul>
-              <p className="text-xs text-app-text-muted pt-1">{entry.whenToReferShopOrPart}</p>
-            </div>
-          ))}
-          <div className="flex justify-between gap-3">
+          {/* GUIDES PERTINENTS EN LIGNE / HORS-LIGNE (DIRECTEMENT SOUS LE DIAGNOSTIC) */}
+          <IfixitGuidesPanel
+            ticket={activeTicket}
+            embedded
+            focusKeyword={guideFocusKeyword}
+          />
+
+          {/* CLÔTURE DIRECTE EN BAS DU PARCOURS */}
+          <div className="pt-2 flex flex-col sm:flex-row justify-end gap-3">
             <button
               type="button"
-              onClick={() => updateStage('diagnostic')}
-              className="min-h-12 px-4 py-2 rounded-2xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer flex items-center gap-2"
+              onClick={handleQuickValidate}
+              className="min-h-14 px-6 py-3 rounded-2xl bg-success/15 border-2 border-success/60 text-success font-display font-black uppercase text-sm cursor-pointer inline-flex items-center justify-center gap-2"
             >
-              <ArrowLeft size={16} />
-              <span>Retour</span>
+              <Zap size={18} aria-hidden="true" />
+              <span>Valider rapidement (Réparé)</span>
             </button>
             <button
               type="button"
               onClick={() => {
                 setReportSubStep(1);
-                updateStage('rapport');
+                setShowReportWizard(true);
               }}
-              className="min-h-14 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center gap-2"
+              className="min-h-14 px-7 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer inline-flex items-center justify-center gap-2 shadow-lg"
             >
+              <CheckCircle size={18} aria-hidden="true" />
               <span>Clôturer et faire le rapport</span>
-              <ArrowRight size={18} />
             </button>
           </div>
-        </div>
-      )}
-
-      {/* ÉTAPE 4 : RAPPORT FINAL EN 3 ÉCRANS */}
-      {activeSubTab === 'fiche' && currentStage === 'rapport' && (
+        </>
+      ) : (
+        /* RAPPORT FINAL EN 3 QUESTIONS (1 À LA FOIS) + RACCOURCI VALIDER RAPIDEMENT */
         <div className="bg-app-card border border-app-card-border p-5 sm:p-6 rounded-3xl shadow-lg space-y-5">
-          <span className="text-micro uppercase font-black text-primary block">
-            Rapport final • Question {reportSubStep} sur 3
-          </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-micro uppercase font-black text-primary" aria-live="polite">
+              Rapport final • Question {reportSubStep} sur 3
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowReportWizard(false)}
+              className="min-h-9 px-3 py-1 rounded-xl bg-app-input border border-app-card-border text-xs font-display font-bold uppercase text-app-text-muted hover:text-app-text cursor-pointer inline-flex items-center gap-1"
+            >
+              <ArrowLeft size={13} aria-hidden="true" />
+              <span>Revenir à la fiche</span>
+            </button>
+          </div>
 
           {reportSubStep === 1 && (
             <div className="space-y-4">
@@ -764,6 +630,16 @@ export default function ReparateurCockpit({
                   </button>
                 ))}
               </div>
+              <div className="pt-2 border-t border-app-card-border flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleQuickValidate}
+                  className="min-h-12 px-5 py-2.5 rounded-2xl bg-success/15 border-2 border-success/60 text-success font-display font-black uppercase text-xs sm:text-sm cursor-pointer inline-flex items-center gap-2"
+                >
+                  <Zap size={16} aria-hidden="true" />
+                  <span>Valider rapidement</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -789,7 +665,7 @@ export default function ReparateurCockpit({
                       }`}
                     >
                       <span>{act}</span>
-                      {selected && <Check size={16} />}
+                      {selected && <Check size={16} aria-hidden="true" />}
                     </button>
                   );
                 })}
@@ -815,7 +691,7 @@ export default function ReparateurCockpit({
                   className="min-h-14 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center gap-2"
                 >
                   <span>Continuer</span>
-                  <ArrowRight size={18} />
+                  <ArrowRight size={18} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -894,7 +770,7 @@ export default function ReparateurCockpit({
                   onClick={handleSaveFinalReport}
                   className="min-h-14 px-8 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer flex items-center gap-2 shadow-xl"
                 >
-                  <CheckCircle size={18} />
+                  <CheckCircle size={18} aria-hidden="true" />
                   <span>Enregistrer le rapport</span>
                 </button>
               </div>

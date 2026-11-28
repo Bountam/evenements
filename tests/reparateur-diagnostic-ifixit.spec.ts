@@ -32,7 +32,9 @@ test('ReparateurCockpit : onglets Fiche / Diagnostic local / Guides iFixit (FR->
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
 
   await page.locator('#rp-displayName').fill('Marc Tremblay');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-phone').fill('514 555-7788');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-consentActivity').check();
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();
   await expect(page.getByText('Appareil enregistré pour Marc Tremblay !')).toBeVisible();
@@ -43,43 +45,7 @@ test('ReparateurCockpit : onglets Fiche / Diagnostic local / Guides iFixit (FR->
   await page.getByRole('button', { name: /Animateur Réparateur/i }).click();
   await page.getByRole('button', { name: /Alexandre Tremblay/i }).click();
 
-  await page
-    .locator('.p-4.rounded-2xl')
-    .filter({ hasText: 'Marc Tremblay' })
-    .getByRole('button', { name: /Prendre cet appareil/i })
-    .click();
-
-  // 3. Vérifier les 3 onglets [Fiche], [Diagnostic], [Guides iFixit]
-  const tabList = page.getByRole('tablist', { name: 'Vues du ticket actif' });
-  await expect(tabList).toBeVisible();
-  const tabFiche = tabList.getByRole('tab', { name: /^Fiche/ });
-  const tabDiag = tabList.getByRole('tab', { name: /^Diagnostic/ });
-  const tabIfixit = tabList.getByRole('tab', { name: /^Guides iFixit/ });
-  await expect(tabFiche).toBeVisible();
-  await expect(tabDiag).toBeVisible();
-  await expect(tabIfixit).toBeVisible();
-
-  // 4. Onglet Diagnostic hors-ligne : questions contextuelles + cochage + persistance
-  await tabDiag.click();
-  const qSector = page.getByRole('button', { name: /L'appareil réagit-il sur secteur sans batterie/i });
-  const qThermal = page.getByRole('button', { name: /L’appareil s’éteint-il brusquement/i });
-  await expect(qSector).toBeVisible();
-  await expect(qThermal).toBeVisible();
-
-  await qSector.click();
-  await qThermal.click();
-  await expect(qSector).toHaveAttribute('aria-pressed', 'true');
-  await expect(qThermal).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('diag-progress-count')).toContainText('2 /');
-
-  // Persistance après aller-retour sur Fiche
-  await tabFiche.click();
-  await expect(page.getByRole('button', { name: '1. Accueil' })).toBeVisible();
-  await tabDiag.click();
-  await expect(qSector).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('diag-progress-count')).toContainText('2 /');
-
-  // 5. Mock réseau iFixit v2.0 : priorité FR (1 seul résultat -> repli auto EN + déduplication)
+  // Mock réseau iFixit v2.0 avant la prise du ticket (le panneau intégré recherche dès l'ouverture)
   let offlineMode = false;
   const capturedFrAuthHeaders: Array<string | undefined> = [];
   await page.route('https://fr.ifixit.com/api/2.0/**', async (route) => {
@@ -199,8 +165,41 @@ test('ReparateurCockpit : onglets Fiche / Diagnostic local / Guides iFixit (FR->
     await route.fulfill({ status: 404, json: {} });
   });
 
-  // 6. Ouvrir l'onglet Guides iFixit : vérifier FR + repli EN dédupliqué + filtres + lecteur intégré
-  await tabIfixit.click();
+  await page
+    .locator('.p-4.rounded-2xl')
+    .filter({ hasText: 'Marc Tremblay' })
+    .getByRole('button', { name: /Prendre cet appareil/i })
+    .click();
+
+  // 3. Vue unifiée sans sous-onglets : Fiche permanente + Diagnostic Oui/Non + Guides iFixit directement visibles
+  await expect(page.getByRole('region', { name: "Fiche technique de l'appareil" })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Vues du ticket actif' })).toHaveCount(0);
+
+  // 4. Diagnostic interactif Oui / Non + points de contrôle complémentaires persistés
+  const diagSection = page.getByRole('region', { name: 'Diagnostic guidé interactif' });
+  await expect(diagSection).toBeVisible();
+  await diagSection.getByRole('button', { name: /Ne démarre pas/i }).click();
+  await expect(diagSection.getByText(/Un voyant de charge/i)).toBeVisible();
+  await diagSection.getByRole('button', { name: 'Non', exact: true }).click();
+  await diagSection.getByRole('button', { name: 'Non', exact: true }).click();
+  await expect(diagSection.getByText(/Bloc d’alimentation \/ chargeur défectueux/i)).toBeVisible();
+  const actionDoneBtn = diagSection.getByRole('button', { name: /Marquer cette action faite/i });
+  await actionDoneBtn.click();
+  await expect(diagSection.getByRole('button', { name: /Vérification faite/i })).toHaveAttribute('aria-pressed', 'true');
+
+  // Liste repliable des points de contrôle complémentaires
+  await diagSection.getByRole('button', { name: /Points de contrôle complémentaires/i }).click();
+  const qSector = diagSection.getByRole('button', { name: /L'appareil réagit-il sur secteur sans batterie/i });
+  const qThermal = diagSection.getByRole('button', { name: /L’appareil s’éteint-il brusquement/i });
+  await expect(qSector).toBeVisible();
+  await expect(qThermal).toBeVisible();
+  await qSector.click();
+  await qThermal.click();
+  await expect(qSector).toHaveAttribute('aria-pressed', 'true');
+  await expect(qThermal).toHaveAttribute('aria-pressed', 'true');
+  await expect(diagSection.getByRole('button', { name: /Points de contrôle complémentaires \(2\//i })).toBeVisible();
+
+  // 6. Guides iFixit affichés directement : vérifier FR + repli EN dédupliqué + filtres via Recherche manuelle + lecteur intégré
   const cardFr = page.getByRole('button', { name: /Remplacement de la batterie ThinkPad/i });
   const cardEn = page.getByRole('button', { name: /ThinkPad Thermal Fan Cleaning/i });
   await expect(cardFr).toBeVisible();
@@ -208,7 +207,8 @@ test('ReparateurCockpit : onglets Fiche / Diagnostic local / Guides iFixit (FR->
   // Le doublon anglais 1001 ne doit pas apparaître en double
   await expect(page.getByRole('button', { name: /ThinkPad Battery Replacement/i })).toHaveCount(0);
 
-  // Tester les filtres FR / EN / Tous
+  // Déplier la recherche manuelle pour accéder aux filtres FR / EN / Tous et Clé API
+  await page.getByRole('button', { name: 'Recherche manuelle' }).click();
   const filterGroup = page.getByRole('group', { name: 'Filtrer par langue' });
   await filterGroup.getByRole('button', { name: 'EN', exact: true }).click();
   await expect(cardFr).toHaveCount(0);
@@ -256,6 +256,11 @@ test('ReparateurCockpit : onglets Fiche / Diagnostic local / Guides iFixit (FR->
   await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
   await expect(page.getByText('Mode hors-ligne — le diagnostic local reste disponible')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Réessayer' })).toBeVisible();
+
+  // 8. Validation rapide en 1 clic (« Valider rapidement ») -> appareil marqué réparé et file d'attente réaffichée
+  await page.getByRole('button', { name: /Valider rapidement/i }).click();
+  await expect(page.getByText('Appareil validé comme réparé !')).toBeVisible();
+  await expect(page.getByText(/File d'attente/i)).toBeVisible();
 
   expect(errors).toEqual([]);
 });

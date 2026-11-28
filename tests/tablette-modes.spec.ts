@@ -79,11 +79,13 @@ test('Tablette : seul le Kiosque d\'inscription est verrouillable, code 0000 par
   await expect(page.locator('#participant-displayName')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Déverrouiller (maintenir 2 secondes)' })).toBeVisible();
 
-  // Inscription depuis le kiosque (étapes 1 -> 2)
+  // Inscription depuis le kiosque (1 question par écran -> Récapitulatif -> M'inscrire)
   await page.locator('#participant-displayName').fill('Léa Tremblay');
   await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#participant-email').fill('lea@example.com');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#participant-consentActivity').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.getByRole('button', { name: 'Inscrire le participant' }).click();
   await expect(page.getByText('Léa Tremblay inscrit avec succès !')).toBeVisible();
 

@@ -2244,45 +2244,38 @@ export default function ReparothonMatrix({
                   idPrefix="rp"
                   mode="activity"
                   section="coordinates"
+                  stepped
                   value={contactDraft}
                   onChange={(next) => {
                     setContactDraft(next);
                     setContactErrors({});
                   }}
                   errors={contactErrors}
+                  onStepBackFromFirst={() => setWizardScreen('cart')}
+                  firstStepBackLabel="Appareils"
+                  renderSubmitActions={() => (
+                    <button
+                      type="submit"
+                      className="min-h-12 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase tracking-wider text-xs sm:text-sm hover:opacity-95 active:scale-95 transition cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      {showVolunteerStep ? (
+                        <>
+                          <span>Étape 4 : Bénévolat</span>
+                          <ArrowRight size={16} aria-hidden="true" />
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={18} aria-hidden="true" />
+                          <span>
+                            {kioskForm
+                              ? "M'inscrire"
+                              : `Valider et enregistrer ${queuedDevices.length} appareil${queuedDevices.length > 1 ? 's' : ''}`}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 />
-
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setWizardScreen('cart')}
-                    className="min-h-14 px-5 py-3 rounded-2xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs sm:text-sm hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <ArrowLeft size={16} aria-hidden="true" />
-                    <span>Retour aux appareils</span>
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="min-h-14 px-8 py-3.5 rounded-2xl bg-primary text-secondary font-display font-black uppercase tracking-wider text-base hover:opacity-95 active:scale-95 transition cursor-pointer flex items-center justify-center gap-2.5 shadow-xl"
-                  >
-                    {showVolunteerStep ? (
-                      <>
-                        <span>Étape 4 : Questions bénévolat</span>
-                        <ArrowRight size={18} aria-hidden="true" />
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle size={20} aria-hidden="true" />
-                        <span>
-                          {kioskForm
-                            ? "M'inscrire"
-                            : `Valider et enregistrer ${queuedDevices.length} appareil${queuedDevices.length > 1 ? 's' : ''}`}
-                        </span>
-                      </>
-                    )}
-                  </button>
-                </div>
               </form>
             </div>
           )}
@@ -2318,36 +2311,29 @@ export default function ReparothonMatrix({
                   idPrefix="rp"
                   mode="activity"
                   section="volunteer"
+                  stepped
                   value={contactDraft}
                   onChange={(next) => {
                     setContactDraft(next);
                     setContactErrors({});
                   }}
                   errors={contactErrors}
+                  onStepBackFromFirst={() => setWizardScreen('participant')}
+                  firstStepBackLabel="Étape 3"
+                  renderSubmitActions={() => (
+                    <button
+                      type="submit"
+                      className="min-h-12 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase tracking-wider text-xs sm:text-sm hover:opacity-95 active:scale-95 transition cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <CheckCircle size={18} aria-hidden="true" />
+                      <span>
+                        {kioskForm
+                          ? "M'inscrire"
+                          : `Valider et enregistrer ${queuedDevices.length} appareil${queuedDevices.length > 1 ? 's' : ''}`}
+                      </span>
+                    </button>
+                  )}
                 />
-
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setWizardScreen('participant')}
-                    className="min-h-14 px-5 py-3 rounded-2xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs sm:text-sm hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <ArrowLeft size={16} aria-hidden="true" />
-                    <span>Retour à l'Étape 3</span>
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="min-h-14 px-8 py-3.5 rounded-2xl bg-primary text-secondary font-display font-black uppercase tracking-wider text-base hover:opacity-95 active:scale-95 transition cursor-pointer flex items-center justify-center gap-2.5 shadow-xl"
-                  >
-                    <CheckCircle size={20} aria-hidden="true" />
-                    <span>
-                      {kioskForm
-                        ? "M'inscrire"
-                        : `Valider et enregistrer ${queuedDevices.length} appareil${queuedDevices.length > 1 ? 's' : ''}`}
-                    </span>
-                  </button>
-                </div>
               </form>
             </div>
           )}

@@ -111,12 +111,14 @@ test('Bibliothèque hors-ligne : filtrage strict selon l’inscription, zoom ima
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
 
   await page.locator('#rp-displayName').fill('Claire Gagnon');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-phone').fill('514 555-3344');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-consentActivity').check();
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();
   await expect(page.getByText('Appareil enregistré pour Claire Gagnon !')).toBeVisible();
 
-  // 3. Passer sur mobile Réparateur, prendre le ticket de Claire, ouvrir l'onglet Guides iFixit
+  // 3. Passer sur mobile Réparateur, prendre le ticket de Claire (vue unifiée : guides affichés directement)
   await page.addInitScript(SIMULATE_ANDROID);
   await page.reload();
   await page.getByRole('button', { name: /Animateur Réparateur/i }).click();
@@ -128,12 +130,7 @@ test('Bibliothèque hors-ligne : filtrage strict selon l’inscription, zoom ima
     .getByRole('button', { name: /Prendre cet appareil/i })
     .click();
 
-  await page
-    .getByRole('tablist', { name: 'Vues du ticket actif' })
-    .getByRole('tab', { name: /^Guides iFixit/ })
-    .click();
-
-  // Filtrage strict : le guide Lenovo Linux Lenteur est affiché, le guide Dell Batterie N'APPARAÎT JAMAIS
+  // Filtrage strict : le guide Lenovo Linux Lenteur est affiché directement, le guide Dell Batterie N'APPARAÎT JAMAIS
   const relevantGuideCard = page.getByRole('button', {
     name: /Lenovo ThinkPad sous Linux : diagnostic disque lent/i
   });

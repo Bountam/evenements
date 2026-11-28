@@ -17,7 +17,7 @@ async function openContest(page: Page) {
 
 const submit = (page: Page) => page.getByRole('button', { name: 'Inscrire le participant' }).click();
 
-test('Formulaire de contact : identité unique, étapes 1-2-3, auto-complétion QC/courriel et marché canadien', async ({
+test('Formulaire de contact : identité unique, micro-étapes 1 question à la fois, auto-complétion QC/courriel et récapitulatif', async ({
   page
 }) => {
   const errors: string[] = [];
@@ -27,7 +27,7 @@ test('Formulaire de contact : identité unique, étapes 1-2-3, auto-complétion 
   // Aucune option « Hors Canada »
   await expect(page.getByText(/Hors Canada/i)).toHaveCount(0);
 
-  // Étape 1 : un seul champ Nom, prénom ou surnom + petites bulles de pronoms neutres
+  // Question 1 : Identité + pronoms
   await page.getByRole('button', { name: 'Suivant' }).click();
   await expect(page.getByText('Indiquez le nom, prénom ou surnom.')).toBeVisible();
   await expect(page.locator('#participant-displayName')).toBeFocused();
@@ -36,55 +36,65 @@ test('Formulaire de contact : identité unique, étapes 1-2-3, auto-complétion 
   await page.getByRole('button', { name: 'Elle / elle' }).click();
   await page.getByRole('button', { name: 'Suivant' }).click();
 
-  // Étape 2 : les 2 champs Téléphone et Courriel sont affichés, 1 seul est obligatoire + pas de Hors Canada
+  // Question 2 : Téléphone ou courriel (1 seul obligatoire)
   await expect(page.getByText(/Hors Canada/i)).toHaveCount(0);
-  await submit(page);
-  await expect(page.getByText('Indiquez un téléphone ou un courriel.')).toBeVisible();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.getByText('Indiquez un téléphone ou un courriel.', { exact: true })).toBeVisible();
 
-  // Auto-complétion Québec : puce 514 + formatage live
   await page.getByRole('button', { name: '514', exact: true }).click();
   await expect(page.locator('#participant-phone')).toHaveValue('514');
   await page.locator('#participant-phone').fill('5145551234');
   await expect(page.locator('#participant-phone')).toHaveValue('514 555-1234');
 
-  // Auto-complétion Courriel
   await page.locator('#participant-email').fill('martine');
   await page.getByRole('button', { name: '@gmail.com' }).click();
   await expect(page.locator('#participant-email')).toHaveValue('martine@gmail.com');
+  await page.getByRole('button', { name: 'Suivant' }).click();
 
+  // Question 3 : Code postal CA & Loi 25 + bénévolat conditionnel
   await page.locator('#participant-postalCode').fill('h2w1y4');
   await expect(page.locator('#participant-postalCode')).toHaveValue('H2W 1Y4');
-
-  // Consentement concours requis
-  await submit(page);
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await expect(page.getByText('Cochez ce consentement ou retirez les coordonnées.')).toBeVisible();
   await page.locator('#participant-consentActivity').check();
-
-  // Activer Étape 3 : Bénévolat conditionnelle
   await page.getByLabel('Je souhaite donner des heures de bénévolat').check();
   await page.getByRole('button', { name: 'Suivant' }).click();
+
+  // Question 4 (Bénévolat) : Rôles -> Compétences (conditionnel à Technique)
   await expect(page.getByRole('group', { name: /Comment aimeriez-vous aider/ })).toBeVisible();
-  await page.getByLabel('Technique', { exact: true }).check();
-  await expect(page.getByLabel('Soudure')).toBeVisible();
-  await page.getByLabel('Technique', { exact: true }).uncheck();
-  await expect(page.getByLabel('Soudure')).toHaveCount(0);
-
-  await submit(page);
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await expect(page.getByText('Choisissez au moins un rôle.')).toBeVisible();
-  await expect(page.getByText('Ce consentement est requis pour le bénévolat.')).toBeVisible();
-  await page.getByLabel('Accueil', { exact: true }).check();
-  await page.locator('#participant-consentVolunteer').check();
 
+  await page.getByLabel('Technique', { exact: true }).check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.getByLabel('Soudure')).toBeVisible();
+  await page.getByRole('button', { name: 'Précédent' }).click();
+  await page.getByLabel('Technique', { exact: true }).uncheck();
+  await page.getByLabel('Accueil', { exact: true }).check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+
+  // Logistique -> Alimentation -> Consentement bénévole -> Récapitulatif
+  await expect(page.getByLabel("J'ai un véhicule")).toBeVisible();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.locator('#participant-dietaryRestrictions')).toBeVisible();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.getByText('Ce consentement est requis pour le bénévolat.')).toBeVisible();
+  await page.locator('#participant-consentVolunteer').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+
+  await expect(page.getByText(/Récapitulatif avant validation/i)).toBeVisible();
   await submit(page);
   await expect(page.getByText('Martine Bouchard inscrit avec succès !')).toBeVisible();
-  // Retour automatique à l'étape 1 vide
   await expect(page.locator('#participant-displayName')).toHaveValue('');
 
-  // Un surnom seul (« Alex ») + téléphone seul fonctionne et signale un doublon si même téléphone
+  // Doublon avec surnom + téléphone seul
   await page.locator('#participant-displayName').fill('Alex');
   await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#participant-phone').fill('514 555-1234');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#participant-consentActivity').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await submit(page);
   await expect(page.getByText('Participant déjà inscrit')).toBeVisible();
 
@@ -108,8 +118,11 @@ test('Formulaire de contact : réparothon et activité générique', async ({ pa
   await page.getByRole('group', { name: "Symptômes de l'appareil" }).getByRole('button', { name: /Écran \/ Clavier \/ Boîtier/i }).click();
   await page.getByRole('button', { name: /^Continuer/i }).click();
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
+
   await page.locator('#rp-displayName').fill('Sophie Côté');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-phone').fill('4385559876');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('form button[type="submit"]').first().click();
   await expect(page.getByText('Cochez ce consentement ou retirez les coordonnées.')).toBeVisible();
   await page.locator('#rp-consentActivity').check();
@@ -127,14 +140,16 @@ test('Formulaire de contact : réparothon et activité générique', async ({ pa
   await page.locator('#att-email').fill('jean');
   await page.getByRole('button', { name: '@proton.me' }).click();
   await expect(page.locator('#att-email')).toHaveValue('jean@proton.me');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#att-consentActivity').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('form button[type="submit"]').first().click();
   await expect(page.getByText('Jean Tremblay').first()).toBeVisible();
 
   expect(errors).toEqual([]);
 });
 
-test('Devenir bénévole : sondage autonome en 3 étapes et registre des bénévoles', async ({ page }) => {
+test('Devenir bénévole : sondage autonome pas à pas et registre des bénévoles', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
   await page.setViewportSize({ width: 1366, height: 768 });
@@ -144,22 +159,31 @@ test('Devenir bénévole : sondage autonome en 3 étapes et registre des bénév
   const dialog = page.getByRole('dialog', { name: 'Devenir bénévole' });
   await expect(dialog).toBeVisible();
 
-  // Étape 1 -> Étape 2 -> Étape 3
   await dialog.locator('#vol-displayName').fill('Gabriel Roy');
   await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.locator('#vol-email').fill('gabriel@exemple.com');
   await dialog.getByRole('button', { name: 'Suivant' }).click();
+  // Code postal & infolettre
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
 
-  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  // Rôles
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await expect(dialog.getByText('Choisissez au moins un rôle.')).toBeVisible();
-
   await dialog.getByLabel('Accueil', { exact: true }).check();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
+
+  // Logistique -> Alimentation & anniversaire
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.locator('#vol-birthDay').selectOption('31');
   await dialog.locator('#vol-birthMonth').selectOption('2');
-  await dialog.locator('#vol-consentVolunteer').check();
-  await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await expect(dialog.getByText("Date d'anniversaire invalide.")).toBeVisible();
   await dialog.locator('#vol-birthDay').selectOption('29');
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
+
+  // Consentement -> Récapitulatif -> Enregistrer
+  await dialog.locator('#vol-consentVolunteer').check();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByText('Merci ! Fiche bénévole enregistrée.')).toBeVisible();
   await expect(dialog.locator('#vol-displayName')).toHaveValue('');
@@ -179,9 +203,15 @@ test('Exporter tous les contacts : un onglet, colonnes de ciblage avec découpag
   await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.locator('#vol-phone').fill('5145551234');
   await dialog.getByRole('button', { name: 'Suivant' }).click();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.getByLabel('Technique', { exact: true }).check();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.getByLabel('Linux', { exact: true }).check();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.locator('#vol-consentVolunteer').check();
+  await dialog.getByRole('button', { name: 'Suivant' }).click();
   await dialog.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByText('Merci ! Fiche bénévole enregistrée.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Annuler' }).click();
@@ -231,17 +261,21 @@ test("Réparothon : Étape 4 bénévolat conditionnelle et sobriété de l'Étap
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
 
   await expect(page.getByRole('heading', { name: /3\. Inscription d'un participant/i })).toBeVisible();
-  await page.getByLabel('Je souhaite donner des heures de bénévolat').check();
-
-  const nextStep4Btn = page.getByRole('button', { name: /Étape 4 : Questions bénévolat/i });
-  await nextStep4Btn.click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await expect(page.getByText('Indiquez le nom, prénom ou surnom.')).toBeVisible();
-  await expect(page.getByText('Indiquez un téléphone ou un courriel.')).toBeVisible();
 
   await page.locator('#rp-displayName').fill('Marc Lavoie');
   await page.getByRole('button', { name: 'Autre', exact: true }).click();
   await page.locator('#rp-pronounsCustom').fill('il / iel');
+  await page.getByRole('button', { name: 'Suivant' }).click();
+
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.getByText('Indiquez un téléphone ou un courriel.', { exact: true })).toBeVisible();
   await page.locator('#rp-phone').fill('5145552468');
+  await page.getByRole('button', { name: 'Suivant' }).click();
+
+  await page.getByLabel('Je souhaite donner des heures de bénévolat').check();
+  const nextStep4Btn = page.getByRole('button', { name: /Étape 4 : Bénévolat/i });
   await nextStep4Btn.click();
   await expect(page.getByText('Cochez ce consentement ou retirez les coordonnées.')).toBeVisible();
   await page.locator('#rp-consentActivity').check();
@@ -250,9 +284,13 @@ test("Réparothon : Étape 4 bénévolat conditionnelle et sobriété de l'Étap
   await expect(page.getByRole('heading', { name: /4\. Questions de bénévolat Insertech/i })).toBeVisible();
   await expect(page.getByText('Marc Lavoie (il / iel)')).toBeVisible();
   await page.getByLabel('Technique', { exact: true }).check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.getByLabel('Linux', { exact: true }).check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.getByLabel("J'ai un véhicule").check();
   await page.getByRole('button', { name: 'M', exact: true }).click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-consentVolunteer').check();
 
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();

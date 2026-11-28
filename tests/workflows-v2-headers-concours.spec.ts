@@ -53,19 +53,23 @@ test('Kiosque-Concours Animateur Juge (2 joueurs max, départ commun, 2 arrêts 
   await expect(page.getByTestId('btn-open-impact-report')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Animateur Juge' })).toBeVisible();
 
-  // 4. Inscrire 2 joueurs directement devant le juge (étapes 1 -> 2)
+  // 4. Inscrire 2 joueurs directement devant le juge (1 question par écran -> Récapitulatif)
   await page.getByRole('button', { name: /Inscrire mon 1er joueur/i }).click();
   await page.locator('#juge-displayName').fill('Alice Roy');
   await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#juge-phone').fill('514 555-1111');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#juge-consentActivity').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.getByRole('button', { name: /Inscrire et placer devant moi/i }).click();
 
   await page.getByRole('button', { name: /\+ Inscrire un joueur devant moi/i }).click();
   await page.locator('#juge-displayName').fill('Bob Leduc');
   await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#juge-phone').fill('514 555-2222');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#juge-consentActivity').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.getByRole('button', { name: /Inscrire et placer devant moi/i }).click();
 
   // Max 2 joueurs devant le juge : le bouton + Inscrire disparaît

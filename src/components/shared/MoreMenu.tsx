@@ -4,6 +4,8 @@ import Button from './Button';
 
 interface MoreMenuProps {
   label?: string;
+  // Affichage icône seule pour l'en-tête compact (le aria-label reste conservé)
+  iconOnly?: boolean;
   // Point d'alerte sur le bouton quand un élément du volet demande l'attention
   alert?: boolean;
   alertText?: string;
@@ -12,7 +14,7 @@ interface MoreMenuProps {
 
 // Volet « Plus » (motif disclosure) : regroupe les commandes rares d'une barre d'outils.
 // Se ferme sur Échap (le focus revient au bouton), sur un clic à l'extérieur ou après une action.
-export default function MoreMenu({ label = 'Plus', alert = false, alertText, children }: MoreMenuProps) {
+export default function MoreMenu({ label = 'Plus', iconOnly = false, alert = false, alertText, children }: MoreMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -42,14 +44,16 @@ export default function MoreMenu({ label = 'Plus', alert = false, alertText, chi
     <div ref={rootRef} className="relative">
       <Button
         ref={triggerRef}
-        size="sm"
+        size={iconOnly ? 'icon-sm' : 'sm'}
         onClick={() => setIsOpen((open) => !open)}
+        aria-label={label}
+        title={label}
         aria-expanded={isOpen}
         aria-controls={panelId}
-        className="relative"
+        className="relative shrink-0"
       >
-        <Ellipsis size={14} aria-hidden="true" />
-        <span>{label}</span>
+        <Ellipsis size={15} aria-hidden="true" />
+        {!iconOnly && <span>{label}</span>}
         {alert && (
           <>
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-warning border-2 border-app-header" aria-hidden="true" />

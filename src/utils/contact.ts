@@ -225,6 +225,14 @@ export const IDENTITY_ERROR_KEYS = new Set<ContactErrorKey>([
   'displayName', 'firstName', 'lastName', 'pronounsCustom'
 ]);
 
+export const PHONE_EMAIL_ERROR_KEYS = new Set<ContactErrorKey>([
+  'phone', 'email', 'contact'
+]);
+
+export const LOI25_ERROR_KEYS = new Set<ContactErrorKey>([
+  'postalCode', 'consentActivity'
+]);
+
 export const CONTACT_ONLY_ERROR_KEYS = new Set<ContactErrorKey>([
   'phone', 'email', 'contact', 'postalCode', 'consentActivity'
 ]);
@@ -237,20 +245,38 @@ export const VOLUNTEER_ERROR_KEYS = new Set<ContactErrorKey>([
   'roles', 'dietaryRestrictions', 'birthDay', 'consentVolunteer'
 ]);
 
+export type ContactStepValidationKey =
+  | 'identity'
+  | 'contact'
+  | 'loi25'
+  | 'vol_roles'
+  | 'vol_skills'
+  | 'vol_logistics'
+  | 'vol_extra'
+  | 'vol_consent'
+  | 'coordinates'
+  | 'volunteer';
+
+const STEP_ERROR_KEYS: Record<ContactStepValidationKey, Set<ContactErrorKey>> = {
+  identity: IDENTITY_ERROR_KEYS,
+  contact: PHONE_EMAIL_ERROR_KEYS,
+  loi25: LOI25_ERROR_KEYS,
+  vol_roles: new Set<ContactErrorKey>(['roles']),
+  vol_skills: new Set<ContactErrorKey>(),
+  vol_logistics: new Set<ContactErrorKey>(),
+  vol_extra: new Set<ContactErrorKey>(['dietaryRestrictions', 'birthDay']),
+  vol_consent: new Set<ContactErrorKey>(['consentVolunteer']),
+  coordinates: COORDINATE_ERROR_KEYS,
+  volunteer: VOLUNTEER_ERROR_KEYS,
+};
+
 export const validateContactStep = (
   draft: ContactDraft,
   mode: ContactMode,
-  section: 'identity' | 'contact' | 'coordinates' | 'volunteer'
+  section: ContactStepValidationKey
 ): ContactErrors => {
   const allErrors = validateContact(draft, mode);
-  const allowedKeys =
-    section === 'identity'
-      ? IDENTITY_ERROR_KEYS
-      : section === 'contact'
-        ? CONTACT_ONLY_ERROR_KEYS
-        : section === 'coordinates'
-          ? COORDINATE_ERROR_KEYS
-          : VOLUNTEER_ERROR_KEYS;
+  const allowedKeys = STEP_ERROR_KEYS[section];
   const filtered: ContactErrors = {};
   for (const key of CONTACT_FIELD_ORDER) {
     if (allowedKeys.has(key) && allErrors[key]) {

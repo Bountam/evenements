@@ -1,6 +1,6 @@
 # GEMINI.md — Guide Architecture & Conventions (`insertech-tableau-evenements`)
 
-Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.8.0.
+Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC Windows/Linux, PWA et application native Android Capacitor), v1.8.1.
 
 ---
 
@@ -25,33 +25,31 @@ Définis dans `src/types.ts` et gérés par `src/utils/modeLock.ts` + `src/compo
   1. Choix de l'événement actif *(sauté automatiquement s'il n'y en a qu'un seul)*
   2. Choix du rôle adapté à l'événement *(sans Écran Public sur mobile)*
   3. Identification rapide : **1 seul champ** `Nom, prénom ou surnom *` (`#mob-vol-displayName`, accepté même si le bénévole est introuvable en base) pour tous les rôles sauf `reparateur` (qui choisit/crée sa fiche technique Nom + Table + Spécialités) ; `kiosque_formulaire` saute directement au formulaire visiteur ; `admin` passe par le code PIN
-  4. Vue dédiée au rôle avec en-tête minimaliste : logo Insertech = Menu principal, icône synchro seule (Bleu/Jaune/Rouge), 1 seul bouton de rôle, et verrouillage réservé au mode `kiosque_formulaire` (maintenir le cadenas 2 s + PIN `0000` par défaut).
+  4. Vue dédiée au rôle avec en-tête permanent compact sur 1 ligne (`h-14`) : logo Insertech = Menu principal, icône synchro seule (Bleu/Jaune/Rouge), 1 seul bouton de rôle, toggles accessibilité (`Texte agrandi` / `Contraste élevé` via `src/utils/accessibility.ts`) dans `MoreMenu` (`Plus`), barre d'onglets fixe en bas sur `< 640px`, et verrouillage réservé au mode `kiosque_formulaire` (maintenir le cadenas 2 s + PIN `0000` par défaut).
 - **Retour aux sessions actives sur tablette (`src/App.tsx`) :** si l'utilisateur revient à l'écran d'accueil tablette (*Rejoindre un événement*) alors que l'appareil est connecté ou synchronisé, les activités actives s'affichent directement en boutons cliquables pour y revenir en 1 tap.
 - **`juge` (Animateur Juge Kiosque-Concours) :** `src/components/matrices/concours/JudgeConcoursCockpit.tsx` — inscription directe des 1 ou 2 joueurs devant le juge, bassin multi-animateurs pour départ commun synchronisé (10 pistes réseau), 2 arrêts séparés contrôlés uniquement par le juge, puis écran temps + rang cumulé + rappel des prix + `Nouvelle compétition`. L'onglet `Tirage` reste réservé à `admin`.
 
 1. **`admin` (Administrateur / God Mode) :**
    - Protégé par le code PIN à 4 chiffres de l'événement sur tablette/cellulaire.
-   - **Multi-événements :** `src/components/shared/MultiEventControlBar.tsx` permet d'épingler et basculer entre 2+ événements actifs avec une **Tour de contrôle unifiée**.
+   - **Multi-événements :** `MultiEventHeaderSelector` (`src/components/shared/MultiEventControlBar.tsx`) intégré au titre cliquable sur Laptop permet d'épingler et basculer entre 2+ événements actifs avec une **Tour de contrôle unifiée**.
    - **Vue « Map » des Tables :** `src/components/matrices/reparothon/AdminMapAndGodMode.tsx` affiche chaque table avec chrono de service en direct (`< 25 min`, `25–45 min`, `> 45 min`), assignation d'un **2e appareil**, transfert de table en 2 taps, priorisation et messages flash vers l'Écran Public.
 2. **`accueil` (Animateur d'Accueil) :**
-   - Assistant **1 question par écran** dans `src/components/matrices/ReparothonMatrix.tsx` : `Catégorie` → `Marque` → `Modèle` → `Matériel / Logiciel` → `4 cartes à icônes` → `Panier (Un autre appareil ?)` → `3. Inscription d'un participant` (`ContactForm` Loi 25 + pronoms) → `4. Questions de bénévolat Insertech` (conditionnel).
-   - Bouton permanent `Devenir bénévole` dans l'en-tête (`VolunteerSurveyButton.tsx`).
+   - Assistant **1 question par écran** dans `src/components/matrices/ReparothonMatrix.tsx` : `Catégorie` → `Marque` → `Modèle` → `Matériel / Logiciel` → `4 cartes à icônes` → `Panier (Un autre appareil ?)` → `3. Inscription d'un participant` (`ContactForm` en micro-étapes Identité / Contact / Code postal & Loi 25) → `4. Questions de bénévolat Insertech` (conditionnel, 1 question à la fois).
+   - Bouton permanent `Devenir bénévole` dans l'en-tête (`VolunteerSurveyButton.tsx`, icône seule avec libellé accessible).
 3. **`reparateur` (Animateur Réparateur) :**
-   - `src/components/matrices/reparothon/ReparateurCockpit.tsx` : file d'attente intelligente (`Recommandé pour toi`), 3 onglets sur le ticket actif (**`[Fiche]`** avec Piste Temps Réel en 4 étapes, **`[Diagnostic]`** local hors-ligne dans `TicketDiagnosticPanel.tsx` via `src/utils/repairLexicon.ts`, et **`[Guides iFixit]`** via `IfixitGuidesPanel.tsx` / `IfixitGuideViewer.tsx` combinant la bibliothèque locale `src/utils/offlineGuideLibrary.ts` à filtrage strict marque/catégorie/OS/symptômes, le relais LAN Laptop et l'API iFixit `src/services/ifixitService.ts` avec zoom image pleine résolution au clic si disponible), appel de table sur l'Écran Public et demande d'Assistant. Gestionnaire Laptop `OfflineGuidesLibraryModal.tsx` accessible depuis `MoreMenu` (**Bibliothèque de guides hors-ligne**).
+   - `src/components/matrices/reparothon/ReparateurCockpit.tsx` : file d'attente intelligente (`Recommandé pour toi`), puis **vue unifiée sans sous-onglets** : fiche technique permanente en haut (participant, symptôme, minuteur, boutons `Appeler Table`, `Assistant` et `Lexique`), arbre de diagnostic interactif **Oui / Non** (`DiagnosticDecisionTree.tsx` via `DIAGNOSTIC_DECISION_TREES` dans `src/utils/repairLexicon.ts` + vérifications complémentaires repliables persistées dans `ticket.extraData.diagnosticChecks`), guides pertinents juste en dessous (`IfixitGuidesPanel.tsx` en mode `embedded` + `IfixitGuideViewer.tsx` combinant `src/utils/offlineGuideLibrary.ts`, le relais LAN Laptop et l'API iFixit `src/services/ifixitService.ts` avec zoom HD au clic), et clôture 3 questions avec raccourci **`Valider rapidement`**. Gestionnaire Laptop `OfflineGuidesLibraryModal.tsx` accessible depuis `MoreMenu` (**Bibliothèque de guides hors-ligne**).
 4. **`assistant` (Animateur Assistant) :**
-   - `src/components/matrices/reparothon/AssistantCockpit.tsx` : réception des alertes `Demander Assistant`, accompagnement des visiteurs appelés aux tables et orientation de sortie (pièce de rechange / boutique Insertech).
+   - `src/components/matrices/reparothon/AssistantCockpit.tsx` : vue guidée par défaut sur **1 action prioritaire à la fois** (`Action 1 sur N` : alertes `Demander Assistant`, accompagnement aux tables, orientation de sortie/boutique Insertech), avec bascule `Voir toute la file`.
 5. **`formateur` (Formateur) :**
-   - `src/components/matrices/generic/FormateurEvaluationPanel.tsx` dans `GenericMatrix.tsx` : suivi **1. Avant** (niveau `1`–`4`), **2. Pendant** (4 jalons pratiques + statut), **3. Après** (niveau `1`–`4`, calcul du gain `+X niveaux` et pastille `Prêt Réparothon`).
+   - `src/components/matrices/generic/FormateurEvaluationPanel.tsx` dans `GenericMatrix.tsx` : mode guidé par défaut (**1 apprenant et 1 phase à la fois** avec auto-avance `1. Avant` → `2. Pendant` → `3. Après` → `Récapitulatif`, bascule `Vue liste` incluse), calcul du gain `+X niveaux` et pastille `Prêt Réparothon`.
 6. **`kiosque_formulaire`** : seul mode verrouillable sur tablette (`ModeControls.tsx`, cadenas discret à maintenir 2 s + PIN `0000` par défaut). L'**Écran Public** est réservé au Laptop.
 
 ---
 
 ## 3. Formulaires uniformisés, Loi 25, Anonymisation & Exports
 
-- **Formulaires uniformisés `1 - 2 - (3)` (`src/utils/contact.ts`, `src/components/shared/ContactForm.tsx`) :**
-  - `1. Identité` : champ unique `Nom, prénom ou surnom *` (`displayName`, découpé automatiquement par `splitDisplayName` pour les exports) + petites bulles de pronoms neutres sans icône genrée.
-  - `2. Contact` : marché canadien uniquement (aucune option `Hors Canada`), **1 seul moyen requis** entre Téléphone (formatage live `XXX XXX-XXXX` + puces indicatifs Québec) et Courriel (puces `@gmail.com`, `@hotmail.com`, `@hotmail.fr`, `@outlook.com`, `@yahoo.ca`, `@icloud.com`, `@proton.me`, `@videotron.ca`, `@bell.net`), plus consentement Loi 25.
-  - `3. Bénévolat` : étape conditionnelle affichée uniquement si cochée (ou en mode `volunteer`).
+- **Formulaires uniformisés « 1 question à la fois » (`src/utils/contact.ts`, `src/components/shared/ContactForm.tsx`, `InstallFestMatrix.tsx`) :**
+  - Micro-étapes séquentielles avec aides FALC et écran **`Récapitulatif avant validation`** (avec boutons `Modifier`) : `Identité` (`Nom, prénom ou surnom *` + pronoms neutres) → `Contact` (Téléphone QC ou Courriel @domaines, **1 seul requis**, marché canadien uniquement) → `Code postal & Loi 25` → micro-étapes `Bénévolat` conditionnelles (`Rôles`, `Compétences`, `Véhicule & t-shirt`, `Alimentation & anniversaire`, `Consentement`). `InstallFestMatrix` suit également 6 étapes séquentielles avec auto-avance sur choix unique.
 - **Installeur Windows NSIS (`packaging/windows/installer.nsi`) :** ferme automatiquement `InsertechEvenements.exe` (y compris le compagnon SQLite actif 2 min en arrière-plan) avant d'écrire ou supprimer l'exécutable.
 - **Écran Public :** ne jamais afficher de nom complet, courriel ou téléphone ; toujours utiliser `formatPublicShortName(name)` (`"Sophie Côté"` → `"Sophie C."`).
 - **Exports Excel / CSV & Centre de Rapport d'Impact (`src/utils/impactReport.ts`, `src/components/shared/ImpactReportModal.tsx`, `src/utils/contactExport.ts`) :**

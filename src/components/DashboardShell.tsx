@@ -15,23 +15,37 @@ import {
   Moon,
   Lock,
   UserCheck,
-  Library
+  Library,
+  Type,
+  Contrast,
+  Check,
+  ClipboardList,
+  Wrench,
+  Users,
+  Monitor,
+  Timer,
+  Ticket,
+  ClipboardCheck,
+  BarChart3
 } from 'lucide-react';
 import type { FileBackupState } from '../utils/backupFile';
 import type { SqliteBackupStatus } from '../utils/sqliteBackup';
 import type { SyncIndicatorColor } from '../network';
 import { WORK_ROLE_LABELS } from '../utils/modeLock';
+import { readA11yPrefs, subscribeA11yPrefs, toggleA11yPref, type A11yPrefs } from '../utils/accessibility';
 import { motion, AnimatePresence } from 'motion/react';
 import ThemeToggle from './shared/ThemeToggle';
 import EventMetaBadges from './shared/EventMetaBadges';
 import MoreMenu from './shared/MoreMenu';
 import VolunteerSurveyButton from './shared/VolunteerSurveyButton';
 import TabSwitcher, { type TabBadge, type TabItem } from './shared/TabSwitcher';
+import { MultiEventHeaderSelector } from './shared/MultiEventControlBar';
 import BrandLogo from './shared/BrandLogo';
 import Button from './shared/Button';
 
 interface DashboardShellProps {
   event: EventSettings;
+  onSelectEvent?: (evt: EventSettings) => void;
   currentTab: string;
   onTabChange: (tab: string) => void;
   // Pastilles d'état fournies par le module actif, par id d'onglet
@@ -84,6 +98,7 @@ const SYNC_INDICATOR_LABELS: Record<SyncIndicatorColor, string> = {
 
 export default function DashboardShell({
   event,
+  onSelectEvent,
   currentTab,
   onTabChange,
   tabBadges = {},
@@ -117,9 +132,24 @@ export default function DashboardShell({
   const matrixInfo = MATRICES_LIST.find((m) => m.type === event.type) || MATRICES_LIST[0];
   const Icon = matrixInfo.icon;
   const isPublicView = currentTab === 'public';
-  // Mode « Kiosque formulaire » d'une tablette : en-tête réduit, sans onglets ni menu
+  // Mode « Kiosque formulaire » d'une tablette : en-tête permanent épuré
   const isKioskFormView = currentTab === 'formulaire';
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [a11yPrefs, setA11yPrefs] = useState<A11yPrefs>(readA11yPrefs);
+  const [isNarrowScreen, setIsNarrowScreen] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 639px)').matches : false
+  );
+
+  useEffect(() => subscribeA11yPrefs(setA11yPrefs), []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 639px)');
+    const sync = () => setIsNarrowScreen(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   // Écran public : commandes et curseur masqués après quelques secondes sans pointeur ni clavier
   const [isPointerIdle, setIsPointerIdle] = useState(false);
@@ -197,49 +227,205 @@ export default function DashboardShell({
       tabs = [];
     } else {
       tabs = [
-        { id: 'accueil', label: "Console d'accueil" },
-        { id: 'techniciens', label: workRole === 'accueil' ? "File d'attente & Tables" : 'Gestion Techniciens' },
-        ...(!isMobileDevice ? [{ id: 'public', label: 'Écran Public' }] : [])
+        { id: 'accueil', label: "Console d'accueil", icon: ClipboardList },
+        { id: 'techniciens', label: workRole === 'accueil' ? "File d'attente & Tables" : 'Gestion Techniciens', icon: Wrench },
+        ...(!isMobileDevice ? [{ id: 'public', label: 'Écran Public', icon: Monitor }] : [])
       ];
     }
   } else if (event.type === 'install_fest_linux') {
     tabs = [
-      { id: 'accueil', label: 'Accueil et suivi' },
-      { id: 'techniciens', label: 'Bénévoles' },
-      ...(!isMobileDevice ? [{ id: 'public', label: 'Écran public' }] : [])
+      { id: 'accueil', label: 'Accueil et suivi', icon: ClipboardList },
+      { id: 'techniciens', label: 'Bénévoles', icon: Users },
+      ...(!isMobileDevice ? [{ id: 'public', label: 'Écran public', icon: Monitor }] : [])
     ];
   } else if (event.type === 'kiosque_concours') {
     if (workRole === 'juge') {
       tabs = [];
     } else {
       tabs = [
-        { id: 'pistes', label: 'Pistes' },
-        { id: 'participants', label: 'Participants' },
-        ...(workRole === 'admin' ? [{ id: 'tirage', label: 'Tirage' }] : []),
-        ...(!isMobileDevice ? [{ id: 'public', label: 'Écran public' }] : [])
+        { id: 'pistes', label: 'Pistes', icon: Timer },
+        { id: 'participants', label: 'Participants', icon: Users },
+        ...(workRole === 'admin' ? [{ id: 'tirage', label: 'Tirage', icon: Ticket }] : []),
+        ...(!isMobileDevice ? [{ id: 'public', label: 'Écran public', icon: Monitor }] : [])
       ];
     }
   } else {
     tabs = [
-      { id: 'enregistrements', label: 'Présences & Inscriptions' },
-      { id: 'bilan', label: 'Bilan & Évaluation' },
-      ...(!isMobileDevice ? [{ id: 'public', label: 'Écran Public' }] : [])
+      { id: 'enregistrements', label: 'Présences & Inscriptions', icon: ClipboardCheck },
+      { id: 'bilan', label: 'Bilan & Évaluation', icon: BarChart3 },
+      ...(!isMobileDevice ? [{ id: 'public', label: 'Écran Public', icon: Monitor }] : [])
     ];
   }
+
+  const tabsWithBadges = tabs.map((tab) => (tabBadges[tab.id] ? { ...tab, badge: tabBadges[tab.id] } : tab));
+
+  const renderMoreMenu = () => (
+    <MoreMenu
+      iconOnly
+      alert={sqliteStatus === 'error' || fileBackupState === 'needs-permission'}
+      alertText={sqliteStatus === 'error' ? 'sauvegarde SQLite hors ligne' : 'fichier de secours à réactiver'}
+    >
+      {(close) => (
+        <>
+          <Button
+            size="sm"
+            aria-pressed={a11yPrefs.largeText}
+            onClick={() => toggleA11yPref('largeText')}
+            className={`w-full !justify-between ${a11yPrefs.largeText ? '!bg-primary/15 !border-primary text-primary' : ''}`}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Type size={13} aria-hidden="true" />
+              <span>Texte agrandi</span>
+            </span>
+            {a11yPrefs.largeText && <Check size={13} aria-hidden="true" />}
+          </Button>
+
+          <Button
+            size="sm"
+            aria-pressed={a11yPrefs.highContrast}
+            onClick={() => toggleA11yPref('highContrast')}
+            className={`w-full !justify-between ${a11yPrefs.highContrast ? '!bg-primary/15 !border-primary text-primary' : ''}`}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Contrast size={13} aria-hidden="true" />
+              <span>Contraste élevé</span>
+            </span>
+            {a11yPrefs.highContrast && <Check size={13} aria-hidden="true" />}
+          </Button>
+
+          {!isMobileDevice && !isNetworkClient && (
+            <Button
+              size="sm"
+              onClick={() => {
+                close();
+                onOpenPublicWindow();
+              }}
+              title="Ouvrir l'écran public dans une nouvelle fenêtre, à glisser sur le projecteur ou la télé"
+              className="w-full !justify-start"
+            >
+              <MonitorUp size={13} className="text-primary" aria-hidden="true" />
+              <span>Ouvrir le projecteur</span>
+            </Button>
+          )}
+
+          {!isMobileDevice && onLockScreen && (
+            <Button
+              size="sm"
+              onClick={() => {
+                close();
+                onLockScreen();
+              }}
+              title="Verrouiller l'écran administrateur du Laptop (code 0000 par défaut)"
+              className="w-full !justify-start"
+            >
+              <Lock size={13} className="text-primary" aria-hidden="true" />
+              <span>Verrouiller le poste (PIN)</span>
+            </Button>
+          )}
+
+          <Button size="sm" onClick={onToggleTheme} className="w-full !justify-start">
+            {isLightTheme ? <Moon size={13} aria-hidden="true" /> : <Sun size={13} aria-hidden="true" />}
+            <span>{isLightTheme ? 'Passer au thème sombre' : 'Passer au thème clair'}</span>
+          </Button>
+
+          {workRole === 'admin' && (
+            <Button
+              size="sm"
+              onClick={() => {
+                close();
+                onExportData();
+              }}
+              title="Ouvrir le Centre de Rapport d'Impact et Exports"
+              className="w-full !justify-start"
+            >
+              <Download size={13} aria-hidden="true" />
+              <span>Rapport d'Impact & Exports</span>
+            </Button>
+          )}
+
+          {!isMobileDevice && workRole === 'admin' && onOpenGuidesLibrary && (
+            <Button
+              size="sm"
+              onClick={() => {
+                close();
+                onOpenGuidesLibrary();
+              }}
+              title="Gérer et pré-télécharger les guides de réparation hors-ligne"
+              className="w-full !justify-start"
+            >
+              <Library size={13} className="text-primary" aria-hidden="true" />
+              <span>Bibliothèque de guides hors-ligne</span>
+            </Button>
+          )}
+
+          {fileBackupState !== 'unsupported' && onFileBackupClick && (
+            <Button
+              size="sm"
+              onClick={() => {
+                close();
+                onFileBackupClick();
+              }}
+              title={
+                fileBackupState === 'on'
+                  ? `Fichier de secours actif${fileBackupName ? ` (${fileBackupName})` : ''}, mis à jour chaque minute. Cliquez pour en choisir un autre.`
+                  : fileBackupState === 'needs-permission'
+                    ? "Le fichier de secours n'est plus mis à jour depuis le redémarrage : cliquez pour l'autoriser à nouveau"
+                    : 'Choisir un fichier sur le disque, mis à jour chaque minute avec les données de cette activité'
+              }
+              className={`w-full !justify-start ${
+                fileBackupState === 'on'
+                  ? '!bg-success/15 !border-success/50 text-success'
+                  : fileBackupState === 'needs-permission'
+                    ? '!bg-warning/15 !border-warning/50 text-warning'
+                    : ''
+              }`}
+            >
+              <HardDriveDownload size={13} aria-hidden="true" />
+              <span>
+                {fileBackupState === 'on' ? 'Secours actif' : fileBackupState === 'needs-permission' ? 'Réactiver le secours' : 'Fichier de secours'}
+              </span>
+            </Button>
+          )}
+
+          {sqliteStatus !== 'unavailable' && (
+            <span
+              role="status"
+              title={
+                sqliteStatus === 'ok'
+                  ? `Sauvegarde SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA')})` : ''} : les données sont aussi gardées hors du navigateur`
+                  : sqliteStatus === 'error'
+                    ? 'Sauvegarde SQLite injoignable : les données restent dans le navigateur, nouvel essai automatique'
+                    : 'Sauvegarde SQLite en cours'
+              }
+              className={`inline-flex items-center gap-1.5 min-h-9 px-3 rounded-xl border text-xs font-bold ${
+                sqliteStatus === 'error'
+                  ? 'bg-warning/15 border-warning/50 text-warning'
+                  : 'bg-success/15 border-success/50 text-success'
+              }`}
+            >
+              <Database size={13} aria-hidden="true" />
+              <span>
+                {sqliteStatus === 'error'
+                  ? 'SQLite hors ligne'
+                  : `SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })})` : ''}`}
+              </span>
+            </span>
+          )}
+        </>
+      )}
+    </MoreMenu>
+  );
 
   if (isKioskFormView) {
     return (
       <div className="min-h-screen flex flex-col bg-app-bg text-app-text transition-colors duration-300 relative z-10">
-        <header className="shrink-0 bg-app-header border-b-4 border-primary px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex items-center justify-between gap-4 shadow-lg">
+        <header className="sticky top-0 z-40 shrink-0 h-14 min-h-14 bg-app-header border-b-2 border-primary px-2.5 sm:px-4 flex items-center justify-between gap-2 shadow-lg backdrop-blur-xl">
           {hideNavigation ? (
-            <div className="flex items-center gap-3.5 min-w-0">
-              <BrandLogo size="lg" />
-              <div className="min-w-0">
-                <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-xl" title={event.name}>
-                  {event.name}
-                </h1>
-                <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
-              </div>
+            <div className="flex items-center gap-2 min-w-0">
+              <BrandLogo size="md" alt="Insertech" />
+              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-sm sm:text-base max-w-[160px] sm:max-w-[280px]" title={event.name}>
+                {event.name}
+              </h1>
             </div>
           ) : (
             <button
@@ -247,26 +433,29 @@ export default function DashboardShell({
               onClick={onLeaveEvent}
               title="Menu principal"
               aria-label="Menu principal"
-              className="flex items-center gap-3.5 min-w-0 text-left cursor-pointer hover:opacity-90 transition"
+              className="flex items-center gap-2 min-w-0 text-left cursor-pointer hover:opacity-90 transition rounded-xl"
             >
-              <BrandLogo size="lg" />
-              <div className="min-w-0">
-                <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-xl" title={event.name}>
-                  {event.name}
-                </h1>
-                <EventMetaBadges date={event.date} location={event.location} partner={event.partner} className="mt-0.5" />
-              </div>
+              <BrandLogo size="md" alt="Insertech" />
+              <h1 className="text-app-text font-black tracking-tight uppercase font-display truncate text-sm sm:text-base max-w-[160px] sm:max-w-[280px]" title={event.name}>
+                {event.name}
+              </h1>
             </button>
           )}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {!hideNavigation && isMobileDevice && onOpenRolePicker && (
-              <Button size="sm" onClick={onOpenRolePicker} title="Changer de rôle">
+              <Button
+                size="sm"
+                onClick={onOpenRolePicker}
+                title={`Changer de rôle (${WORK_ROLE_LABELS[workRole]})`}
+                aria-label={`Changer de rôle (${WORK_ROLE_LABELS[workRole]})`}
+              >
                 <UserCheck size={14} className="text-primary" aria-hidden="true" />
-                <span>{WORK_ROLE_LABELS[workRole]}</span>
+                <span className="hidden sm:inline">{WORK_ROLE_LABELS[workRole]}</span>
               </Button>
             )}
-            <VolunteerSurveyButton eventId={event.id} />
+            <VolunteerSurveyButton eventId={event.id} iconOnly />
             {modeControls}
+            {!hideNavigation && renderMoreMenu()}
           </div>
         </header>
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-8">{children}</main>
@@ -386,270 +575,110 @@ export default function DashboardShell({
         </header>
       ) : (
         /* ==================================================================== */
-        /* EN-TÊTE STANDARD RÉGIE (Admin, Réseau, Sauvegarder, Quitter)         */
+        /* EN-TÊTE PERMANENT COMPACT SUR UNE LIGNE (Icônes + zéro chevauchement) */
         /* ==================================================================== */
         <header
           ref={adminHeaderRef}
-          className="sticky top-0 z-40 bg-app-header border-b-4 border-primary px-4 sm:px-6 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 shadow-xl backdrop-blur-xl transition-colors duration-300"
+          className="sticky top-0 z-40 shrink-0 h-14 min-h-14 bg-app-header border-b-2 border-primary px-2.5 sm:px-4 flex items-center justify-between gap-2 shadow-lg backdrop-blur-xl transition-colors duration-300"
         >
-          {/* Identité visuelle (clic sur logo Insertech = Menu principal) */}
-          {hideNavigation ? (
-            <div className="flex items-center gap-3.5 shrink-0">
-              <BrandLogo alt="Insertech Événements" />
-              <div>
-                <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
-                  Insertech <span className="text-primary font-black">Événements</span>
-                </h1>
-                <p className="hidden lg:block text-micro text-app-text-muted font-semibold mt-1">
-                  Tableau de bord autonome et 100% hors-ligne
-                </p>
+          {/* Logo Insertech (Menu principal) + Titre court cliquable sur Laptop */}
+          <div className="flex items-center gap-2 min-w-0 shrink">
+            {hideNavigation ? (
+              <div className="shrink-0">
+                <BrandLogo size="md" alt="Insertech Événements" />
               </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onLeaveEvent}
-              title="Menu principal (l'activité reste enregistrée)"
-              aria-label="Menu principal"
-              className="flex items-center gap-3.5 shrink-0 text-left cursor-pointer hover:opacity-90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
-            >
-              <BrandLogo alt="Insertech Événements" />
-              <div>
-                <h1 className="text-app-text font-bold text-lg tracking-tight uppercase font-display flex items-center gap-1.5 leading-none whitespace-nowrap">
-                  Insertech <span className="text-primary font-black">Événements</span>
-                </h1>
-                <p className="hidden lg:block text-micro text-app-text-muted font-semibold mt-1">
-                  Tableau de bord autonome et 100% hors-ligne
-                </p>
-              </div>
-            </button>
-          )}
-
-          {/* Détails de l'événement actif (anti-doublon et largeur fluide) */}
-          <div className="flex flex-wrap items-center gap-2.5 bg-app-input border border-app-card-border p-2 rounded-2xl flex-1 basis-[24rem] min-w-0 transition-colors duration-300 shadow-sm">
-            {event.name.trim().toLowerCase() !== matrixInfo.title.trim().toLowerCase() ? (
-              <>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 border border-primary/25 rounded-xl text-primary font-display font-bold text-xs uppercase tracking-wide shrink-0">
-                  <Icon size={14} />
-                  <span>{matrixInfo.title}</span>
-                </div>
-                <div className="w-px h-5 bg-app-card-border hidden md:block"></div>
-                <div className="text-sm font-black text-app-text min-w-0 max-w-[340px] truncate uppercase font-display" title={event.name}>
-                  {event.name}
-                </div>
-              </>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-1 bg-primary/15 border border-primary/30 rounded-xl text-primary font-display font-black text-sm uppercase tracking-wide">
-                <Icon size={15} />
-                <span>{event.name}</span>
-              </div>
+              <button
+                type="button"
+                onClick={onLeaveEvent}
+                title="Menu principal (l'activité reste enregistrée)"
+                aria-label="Menu principal"
+                className="shrink-0 text-left cursor-pointer hover:opacity-90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+              >
+                <BrandLogo size="md" alt="Insertech Événements" />
+              </button>
             )}
-            <div className="w-px h-5 bg-app-card-border hidden md:block"></div>
-            <EventMetaBadges date={event.date} location={event.location} partner={event.partner} />
+
+            <Icon size={15} className="text-primary shrink-0 hidden sm:block" aria-hidden="true" />
+            {!isMobileDevice && !isPublicWindow && onSelectEvent ? (
+              <MultiEventHeaderSelector activeEvent={event} onSelectEvent={onSelectEvent} />
+            ) : (
+              <h1
+                className="text-sm sm:text-base font-black text-app-text truncate uppercase font-display max-w-[130px] sm:max-w-[240px] md:max-w-[300px]"
+                title={event.name}
+              >
+                {event.name}
+              </h1>
+            )}
           </div>
 
-          {/* Onglets de navigation et boutons d'actions épurés selon le rôle */}
-          <div className="flex flex-wrap items-center gap-2.5 ml-auto justify-end">
-            {tabs.length > 0 && (
-              <TabSwitcher
-                tabs={tabs.map((tab) => (tabBadges[tab.id] ? { ...tab, badge: tabBadges[tab.id] } : tab))}
-                currentTab={currentTab}
-                onTabChange={onTabChange}
-                ariaLabel="Navigation des vues de l'événement"
-              />
+          {/* Onglets compacts dans l'en-tête sur >= 640px (sur mobile, barre fixe en bas) */}
+          {!isNarrowScreen && tabsWithBadges.length > 0 && (
+            <TabSwitcher
+              tabs={tabsWithBadges}
+              currentTab={currentTab}
+              onTabChange={onTabChange}
+              ariaLabel="Navigation des vues de l'événement"
+              compact
+            />
+          )}
+
+          {/* Actions icônes seules & commandes par rôle */}
+          <div className="flex items-center justify-end gap-1.5 shrink-0">
+            {isMobileDevice && !hideNavigation && onOpenRolePicker && (
+              <Button
+                size="sm"
+                onClick={onOpenRolePicker}
+                title={`Changer de rôle (${WORK_ROLE_LABELS[workRole]})`}
+                aria-label={`Changer de rôle (${WORK_ROLE_LABELS[workRole]})`}
+              >
+                <UserCheck size={14} className="text-primary" aria-hidden="true" />
+                <span className="hidden sm:inline">{WORK_ROLE_LABELS[workRole]}</span>
+              </Button>
             )}
 
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              {/* Un seul bouton de rôle sur mobile/tablette (aucun bouton Changer de mode) */}
-              {isMobileDevice && !hideNavigation && onOpenRolePicker && (
-                <Button
-                  size="sm"
-                  onClick={onOpenRolePicker}
-                  title="Changer de rôle ou d'activité"
-                >
-                  <UserCheck size={14} className="text-primary" aria-hidden="true" />
-                  <span>{WORK_ROLE_LABELS[workRole]}</span>
-                </Button>
-              )}
+            {workRole === 'kiosque_formulaire' && modeControls}
 
-              {/* Verrouillage PIN réservé uniquement au mode Kiosque d'inscription */}
-              {workRole === 'kiosque_formulaire' && modeControls}
-
-              {/* Icône de synchronisation seule (Bleu = synchronisé, Jaune = reconnexion/attente, Rouge = hors-ligne) */}
-              {!hideNavigation && (
-                <Button
-                  size="icon-sm"
-                  onClick={onOpenNetModal}
-                  aria-label={`Synchronisation réseau : ${SYNC_INDICATOR_LABELS[syncColor]} (${netStatus})`}
-                  title={`${SYNC_INDICATOR_LABELS[syncColor]} • ${sessionCode ? sessionCode : netStatus}`}
-                  className={SYNC_INDICATOR_STYLES[syncColor]}
-                >
-                  <Wifi size={16} aria-hidden="true" />
-                </Button>
-              )}
-
-              {mismatchedClientVersions.map((clientVer) => (
-                <span
-                  key={clientVer}
-                  role="status"
-                  title="Une tablette connectée n'utilise pas la même version que le PC principal. La synchronisation continue normalement."
-                  className="inline-flex items-center gap-1.5 min-h-[32px] px-2.5 rounded-lg border bg-warning/15 border-warning/50 text-warning text-xs font-bold font-display"
-                >
-                  <AlertTriangle size={13} aria-hidden="true" />
-                  <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
-                </span>
-              ))}
-
-              {/* Un réparateur ne doit jamais avoir de bouton de bénévolat dans l'en-tête */}
-              {workRole !== 'reparateur' && <VolunteerSurveyButton eventId={event.id} />}
-
-              {/* Le Rapport d'Impact est réservé à l'Administrateur */}
-              {workRole === 'admin' && (
-                <Button
-                  size="sm"
-                  onClick={onExportData}
-                  data-testid="btn-open-impact-report"
-                  title="Ouvrir le Centre de Rapport d'Impact (Excel, Markdown, LaTeX, CSV, JSON)"
-                  className="!bg-primary/15 text-primary !border-primary/40"
-                >
-                  <Download size={13} aria-hidden="true" />
-                  <span>Rapport d'Impact</span>
-                </Button>
-              )}
-
-              {/* Commandes rares regroupées : projecteur (Laptop uniquement), verrouillage Laptop, thème, sauvegardes */}
-              <MoreMenu
-                alert={sqliteStatus === 'error' || fileBackupState === 'needs-permission'}
-                alertText={sqliteStatus === 'error' ? 'sauvegarde SQLite hors ligne' : 'fichier de secours à réactiver'}
+            {!hideNavigation && (
+              <Button
+                size="icon-sm"
+                onClick={onOpenNetModal}
+                aria-label={`Synchronisation réseau : ${SYNC_INDICATOR_LABELS[syncColor]} (${netStatus})`}
+                title={`${SYNC_INDICATOR_LABELS[syncColor]} • ${sessionCode ? sessionCode : netStatus}`}
+                className={SYNC_INDICATOR_STYLES[syncColor]}
               >
-                {(close) => (
-                  <>
-                    {/* Affichage secondaire / projecteur : offert uniquement sur le Laptop, jamais sur mobile */}
-                    {!isMobileDevice && !isNetworkClient && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          close();
-                          onOpenPublicWindow();
-                        }}
-                        title="Ouvrir l'écran public dans une nouvelle fenêtre, à glisser sur le projecteur ou la télé"
-                        className="w-full !justify-start"
-                      >
-                        <MonitorUp size={13} className="text-primary" aria-hidden="true" />
-                        <span>Ouvrir le projecteur</span>
-                      </Button>
-                    )}
+                <Wifi size={16} aria-hidden="true" />
+              </Button>
+            )}
 
-                    {/* Verrouillage rapide du poste Laptop via code PIN (0000 par défaut) */}
-                    {!isMobileDevice && onLockScreen && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          close();
-                          onLockScreen();
-                        }}
-                        title="Verrouiller l'écran administrateur du Laptop (code 0000 par défaut)"
-                        className="w-full !justify-start"
-                      >
-                        <Lock size={13} className="text-primary" aria-hidden="true" />
-                        <span>Verrouiller le poste (PIN)</span>
-                      </Button>
-                    )}
+            {mismatchedClientVersions.map((clientVer) => (
+              <span
+                key={clientVer}
+                role="status"
+                title={`Version différente : tablette en ${clientVer}, PC en ${currentVersion}`}
+                className="hidden sm:inline-flex items-center gap-1 min-h-8 px-2 rounded-lg border bg-warning/15 border-warning/50 text-warning text-micro font-bold font-display shrink-0"
+              >
+                <AlertTriangle size={13} aria-hidden="true" />
+                <span>{`Tablette en ${clientVer}, PC en ${currentVersion}`}</span>
+              </span>
+            ))}
 
-                    <Button size="sm" onClick={onToggleTheme} className="w-full !justify-start">
-                      {isLightTheme ? <Moon size={13} aria-hidden="true" /> : <Sun size={13} aria-hidden="true" />}
-                      <span>{isLightTheme ? 'Passer au thème sombre' : 'Passer au thème clair'}</span>
-                    </Button>
+            {workRole !== 'reparateur' && <VolunteerSurveyButton eventId={event.id} iconOnly />}
 
-                    {workRole === 'admin' && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          close();
-                          onExportData();
-                        }}
-                        title="Ouvrir le Centre de Rapport d'Impact et Exports"
-                        className="w-full !justify-start"
-                      >
-                        <Download size={13} aria-hidden="true" />
-                        <span>Rapport d'Impact & Exports</span>
-                      </Button>
-                    )}
+            {workRole === 'admin' && (
+              <Button
+                size="icon-sm"
+                onClick={onExportData}
+                data-testid="btn-open-impact-report"
+                aria-label="Rapport d'Impact"
+                title="Rapport d'Impact (Excel, Markdown, LaTeX, CSV, JSON)"
+                className="!bg-primary/15 text-primary !border-primary/40 shrink-0"
+              >
+                <BarChart3 size={16} aria-hidden="true" />
+              </Button>
+            )}
 
-                    {!isMobileDevice && workRole === 'admin' && onOpenGuidesLibrary && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          close();
-                          onOpenGuidesLibrary();
-                        }}
-                        title="Gérer et pré-télécharger les guides de réparation hors-ligne"
-                        className="w-full !justify-start"
-                      >
-                        <Library size={13} className="text-primary" aria-hidden="true" />
-                        <span>Bibliothèque de guides hors-ligne</span>
-                      </Button>
-                    )}
-
-                    {fileBackupState !== 'unsupported' && onFileBackupClick && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          close();
-                          onFileBackupClick();
-                        }}
-                        title={
-                          fileBackupState === 'on'
-                            ? `Fichier de secours actif${fileBackupName ? ` (${fileBackupName})` : ''}, mis à jour chaque minute. Cliquez pour en choisir un autre.`
-                            : fileBackupState === 'needs-permission'
-                              ? "Le fichier de secours n'est plus mis à jour depuis le redémarrage : cliquez pour l'autoriser à nouveau"
-                              : 'Choisir un fichier sur le disque, mis à jour chaque minute avec les données de cette activité'
-                        }
-                        className={`w-full !justify-start ${
-                          fileBackupState === 'on'
-                            ? '!bg-success/15 !border-success/50 text-success'
-                            : fileBackupState === 'needs-permission'
-                              ? '!bg-warning/15 !border-warning/50 text-warning'
-                              : ''
-                        }`}
-                      >
-                        <HardDriveDownload size={13} aria-hidden="true" />
-                        <span>
-                          {fileBackupState === 'on' ? 'Secours actif' : fileBackupState === 'needs-permission' ? 'Réactiver le secours' : 'Fichier de secours'}
-                        </span>
-                      </Button>
-                    )}
-
-                    {sqliteStatus !== 'unavailable' && (
-                      <span
-                        role="status"
-                        title={
-                          sqliteStatus === 'ok'
-                            ? `Sauvegarde SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA')})` : ''} : les données sont aussi gardées hors du navigateur`
-                            : sqliteStatus === 'error'
-                              ? 'Sauvegarde SQLite injoignable : les données restent dans le navigateur, nouvel essai automatique'
-                              : 'Sauvegarde SQLite en cours'
-                        }
-                        className={`inline-flex items-center gap-1.5 min-h-9 px-3 rounded-xl border text-xs font-bold ${
-                          sqliteStatus === 'error'
-                            ? 'bg-warning/15 border-warning/50 text-warning'
-                            : 'bg-success/15 border-success/50 text-success'
-                        }`}
-                      >
-                        <Database size={13} aria-hidden="true" />
-                        <span>
-                          {sqliteStatus === 'error'
-                            ? 'SQLite hors ligne'
-                            : `SQLite à jour${sqliteSavedAt ? ` (${new Date(sqliteSavedAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })})` : ''}`}
-                        </span>
-                      </span>
-                    )}
-                  </>
-                )}
-              </MoreMenu>
-
-              {/* Fin des actions d'en-tête (retour au menu principal via le logo Insertech) */}
-            </div>
+            {renderMoreMenu()}
           </div>
         </header>
       )}
@@ -660,7 +689,7 @@ export default function DashboardShell({
           ? 'flex-1 min-h-0 overflow-y-auto lg:overflow-hidden p-2 sm:p-4 flex flex-col kiosk-auto-scroll' 
           : event.type === 'kiosque_concours'
             ? 'max-w-[1850px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex-1 flex flex-col min-h-0'
-            : 'max-w-[1850px] mx-auto px-4 md:px-6 py-4 md:py-6'
+            : `max-w-[1850px] mx-auto px-4 md:px-6 py-4 md:py-6 ${isNarrowScreen && tabsWithBadges.length > 0 ? 'pb-20' : ''}`
       }`}>
         <AnimatePresence mode="wait">
           <motion.div
@@ -681,10 +710,21 @@ export default function DashboardShell({
 
       {/* Pied de page informatif sur IndexedDB - MASQUÉ COMPLÈTEMENT SUR L'ÉCRAN PUBLIC */}
       {!isPublicView && (
-        <footer className="py-4 border-t border-app-card-border bg-app-bg-footer text-center text-micro text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300">
+        <footer className={`py-4 border-t border-app-card-border bg-app-bg-footer text-center text-micro text-app-text-muted font-sans flex items-center justify-center gap-1.5 transition-colors duration-300 ${isNarrowScreen && tabsWithBadges.length > 0 ? 'pb-20' : ''}`}>
           <Database size={11} className="text-primary animate-pulse" />
           <span>IndexedDB locale active • Les données restent stockées localement sur cet ordinateur • v{currentVersion}</span>
         </footer>
+      )}
+
+      {/* Barre de navigation fixe en bas sur mobile (< 640px) — un seul tablist monté à la fois */}
+      {!isPublicView && isNarrowScreen && tabsWithBadges.length > 0 && (
+        <TabSwitcher
+          variant="bottom"
+          tabs={tabsWithBadges}
+          currentTab={currentTab}
+          onTabChange={onTabChange}
+          ariaLabel="Navigation des vues de l'événement"
+        />
       )}
     </div>
   );

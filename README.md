@@ -1,6 +1,6 @@
 # 📋 Insertech — Tableau de bords événementiel
 
-> **Documentation complète · Version 1.8.0 · Rédigée en français (Canada)**
+> **Documentation complète · Version 1.8.1 · Rédigée en français (Canada)**
 > Voir aussi [CHANGELOG.md](CHANGELOG.md) pour l'historique détaillé des versions depuis la `1.4.0`.
 
 ---
@@ -95,7 +95,7 @@ Insertech - Tableau de bords événementiel/
     ├── net/                      → Réseau local : appel des tablettes, poignée de main, chiffrement, mises à jour
     ├── services/ifixitService.ts → Client API iFixit v2.0 + cache IndexedDB (FR prioritaire, repli EN)
     ├── native/android.ts         → Appels aux plugins Android (plein écran, épinglage, liens, mise à jour)
-    ├── utils/                    → Contact & Loi 25 (contact.ts), diagnostic hors-ligne (repairLexicon.ts), bibliothèque & filtrage strict des guides (offlineGuideLibrary.ts), rapports d'impact (impactReport.ts), anti-veille (wakeLock.ts), exports (saveFile.ts), verrouillage/rôles (modeLock.ts), lien du QR…
+    ├── utils/                    → Contact & Loi 25 (contact.ts), accessibilité WCAG (accessibility.ts), diagnostic hors-ligne & arbres Oui/Non (repairLexicon.ts), bibliothèque & filtrage strict des guides (offlineGuideLibrary.ts), rapports d'impact (impactReport.ts), anti-veille (wakeLock.ts), exports (saveFile.ts), verrouillage/rôles (modeLock.ts), lien du QR…
     │
     └── components/
         ├── DashboardShell.tsx    → Coquille du tableau de bord (en-têtes épurés par appareil/rôle, logo = menu principal, icône synchro seule)
@@ -1136,50 +1136,24 @@ Cette fonction génère et télécharge un fichier CSV (ou JSON) prérempli avec
 
 ## 9. DashboardShell.tsx — Coquille du tableau de bord
 
-### 9.1 L'en-tête sticky
+### 9.1 En-tête permanent compact et navigation mobile
 
-L'en-tête reste visible en tout temps quand on fait défiler la page. Elle affiche :
-- Le logo Insertech
-- Le nom et la date de l'événement actif
-- Le statut réseau (avec indicateur couleur : vert = connecté, jaune = connecting, gris = local)
-- Les boutons d'action (Export, Réseau, Thème, Quitter)
+L'en-tête reste permanent et tient sur une seule ligne (`h-14 min-h-14 sticky top-0 z-40`), sans chevauchement ni retour à la ligne sur portable (`1366×768`), tablette (`800×1280`) et téléphone (`412×915`), y compris en mode Kiosque d'inscription (seul l'Écran Public projecteur conserve son auto-masquage au repos). Il affiche :
+- Le logo Insertech (clic = retour au menu principal)
+- Le titre court de l'événement (cliquable sur Laptop via `MultiEventHeaderSelector` pour changer d'activité, ouvrir la **Tour de contrôle** ou exporter le bilan consolidé multi-événements)
+- Sur écrans `>= 640px`, les onglets compacts (`TabSwitcher`) ; sur mobile `< 640px`, une barre de navigation fixe en bas d'écran (`variant="bottom"`)
+- Les actions en icônes prioritaires avec libellés accessibles : rôle actif (mobile), verrouillage Kiosque, état réseau (Bleu / Jaune / Rouge), `Devenir bénévole` (masqué pour le Réparateur), `Rapport d'Impact` (`admin`) et le menu `Plus` (`MoreMenu`, contenant `Texte agrandi`, `Contraste élevé`, projecteur, thème, verrouillage PC, bibliothèque de guides et sauvegardes)
 
 ### 9.2 Les onglets par type d'événement
 
-| Type d'événement | Onglets disponibles |
+| Type d'événement | Onglets disponibles (Admin / Accueil) |
 |---|---|
-| `reparothon` / `formation_reparothon` | Console d'accueil · Gestion Techniciens · Écran Public |
-| `kiosque_concours` | Admin · Public |
-| Tous les autres types | Enregistrements · Bilan · Public |
+| `reparothon` | Console d'accueil · Gestion Techniciens (ou File d'attente) · Écran Public *(Laptop)* |
+| `install_fest_linux` | Accueil et suivi · Bénévoles · Écran public *(Laptop)* |
+| `kiosque_concours` | Pistes · Participants · Tirage *(Admin)* · Écran public *(Laptop)* |
+| Tous les autres types | Présences & Inscriptions · Bilan & Évaluation · Écran Public *(Laptop)* |
 
-```typescript
-// Dans DashboardShell.tsx
-const TABS = {
-  reparothon: [
-    { id: 'accueil',      label: 'Console d\'accueil',    icon: LayoutGrid },
-    { id: 'techniciens',  label: 'Gestion Techniciens',   icon: Users },
-    { id: 'public',       label: 'Écran Public',          icon: Monitor },
-  ],
-  kiosque_concours: [
-    { id: 'admin',  label: 'Admin',  icon: Settings },
-    { id: 'public', label: 'Public', icon: Monitor },
-  ],
-  default: [
-    { id: 'enregistrements', label: 'Enregistrements', icon: UserPlus },
-    { id: 'bilan',           label: 'Bilan',           icon: BarChart2 },
-    { id: 'public',          label: 'Public',          icon: Monitor },
-  ]
-};
-```
-
-### 9.3 Boutons d'action
-
-| Bouton | Action |
-|---|---|
-| **Exporter** | Ouvre un menu déroulant avec les 5 formats d'export |
-| **Réseau** | Ouvre le panneau de gestion réseau (hôte/client) |
-| **Thème** | Bascule entre le mode clair et le mode foncé |
-| **Quitter** | Retourne à l'écran d'accueil (MatrixSelector) |
+*(En rôle `reparateur`, `assistant` ou `juge`, l'écran est plein cadre sans barre d'onglets.)*
 
 ---
 
@@ -1439,15 +1413,18 @@ const playCelebrationSound = () => {
 
 L'animation de célébration déclenche aussi des confettis avec les couleurs d'Insertech (vert lime `#9ecd33` et violet `#480A94`).
 
-### 10.11 Cockpit Réparateur (`ReparateurCockpit`), Diagnostic hors-ligne & Bibliothèque de guides
+### 10.11 Cockpit Réparateur unifié (`ReparateurCockpit`), Arbre Oui/Non & Guides hors-ligne
 
-Lorsque l'animateur **Réparateur** prend un appareil en charge dans `src/components/matrices/reparothon/ReparateurCockpit.tsx`, la fiche du ticket actif propose **3 onglets** :
+Lorsque l'animateur **Réparateur** prend un appareil en charge dans `src/components/matrices/reparothon/ReparateurCockpit.tsx`, tout s'affiche progressivement dans **une seule vue unifiée sans sous-onglets** :
 
-| Onglet | Composant / Service | Fonctionnement |
+| Bloc | Composant / Service | Fonctionnement |
 |---|---|---|
-| **`[Fiche]`** | `ReparateurCockpit.tsx` | Piste Temps Réel en 4 étapes (`1. Accueil` → `2. Diagnostic` → `3. Réparation` → `4. Rapport final`), appel à la table sur Écran Public, demande d'Assistant et tiroir Lexique. |
-| **`[Diagnostic]`** | `TicketDiagnosticPanel.tsx` + `src/utils/repairLexicon.ts` | Moteur de règles **100 % hors-ligne** (`DIAGNOSTIC_CHECKLIST_RULES`, `getDiagnosticSuggestions`) adapté au triage (`objectName`, catégorie, OS, `initialDiagnosis`) : affiche questions à poser (avec conseils techniques) et points de contrôle cochables en 1 tap (persistés dans `ticket.extraData.diagnosticChecks`). |
-| **`[Guides iFixit]`** | `IfixitGuidesPanel.tsx` + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Combine les guides hors-ligne ciblés, le relais LAN vers le Laptop serveur (`REQUEST_GUIDE_SEARCH`) et, si en ligne, l'API iFixit v2.0 (priorité `fr.ifixit.com`, repli automatique `www.ifixit.com` si `< 3` résultats FR, cache `db.ifixitCache` TTL 7 jours). Lecteur pas à pas intégré dans l'application (outils, pièces, difficulté, étapes, avertissements) avec **clic sur miniature pour ouvrir l'image pleine résolution si disponible** (sinon la miniature reste inchangée). |
+| **1. Fiche permanente** | `ReparateurCockpit.tsx` | Affiche dès l'ouverture le participant, ses pronoms, l'appareil, l'OS, le symptôme initial, le minuteur de service et les boutons d'action (`Appeler Table`, `Assistant`, `Lexique`). |
+| **2. Diagnostic Oui / Non** | `DiagnosticDecisionTree.tsx` + `src/utils/repairLexicon.ts` | Arbres décisionnels interactifs **Oui / Non** (`DIAGNOSTIC_DECISION_TREES`) triés par pertinence : 1 question claire avec aide FALC → cause probable, conseil de sécurité, action cochable en 1 tap et ciblage des guides, plus section repliable des points de contrôle complémentaires (`DIAGNOSTIC_CHECKLIST_RULES`). |
+| **3. Guides pertinents** | `IfixitGuidesPanel.tsx` (`embedded`) + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Affiche directement les guides hors-ligne ciblés (`matchOfflineGuidesForTicket`), le relais LAN Laptop et les guides iFixit v2.0 (FR prioritaire, repli EN, cache 7 jours), avec recherche manuelle repliable derrière le bouton `Rechercher`, lecteur intégré et zoom HD au clic sur miniature. |
+| **4. Clôture** | `ReparateurCockpit.tsx` | Bouton **`Valider rapidement (Réparé)`** en 1 clic ou assistant de clôture en 3 questions (`Résultat` → `Actions réalisées` → `Suite proposée`). |
+
+Le cockpit **Assistant** (`AssistantCockpit.tsx`) adopte également une vue guidée par défaut sur l'action prioritaire (`Action 1 sur N` : aide réparateur → appel de table → orientation sortie/boutique) avec bascule `Voir toute la file`.
 
 #### Bibliothèque locale hors-ligne & distribution LAN avec le participant
 
@@ -1611,20 +1588,11 @@ Ce module sert pour tous les types d'événements qui ne sont pas un réparothon
 | **Bilan** | Statistiques (taux de présence, score moyen de satisfaction, graphiques) |
 | **Public** | Compteurs en grand format pour affichage sur écran |
 
-### 12.2 Formulaire d'inscription
+### 12.2 Formulaire d'inscription « 1 question à la fois » & vue Formateur guidée
 
-```typescript
-// Champs du formulaire
-const newAttendee: GenericAttendee = {
-  id: 'att-' + Math.random().toString(36).substring(2, 11),
-  eventId: event.id,
-  name: newName.trim(),       // Obligatoire
-  email: newEmail.trim(),     // Optionnel
-  presenceConfirmed: newPresence, // Coché par défaut (true)
-  notes: newNote.trim(),      // Notes libres optionnelles
-  registeredAt: Date.now()
-};
-```
+- Les inscriptions utilisent `ContactForm` (`stepped`) en micro-étapes séquentielles (`Identité & pronoms` → `Téléphone ou courriel` → `Code postal & Loi 25` → questions bénévolat conditionnelles → `Récapitulatif` avec boutons `Modifier`), les notes rapides et la confirmation de présence étant regroupées sur le récapitulatif final.
+- Dans `InstallFestMatrix.tsx`, la création de ticket Linux suit 6 étapes séquentielles (catégorie auto-avancée, modèle, OS précédent auto-avancé, distribution Linux auto-avancée, options/notes, puis coordonnées participant).
+- En rôle `formateur`, `FormateurEvaluationPanel.tsx` s'ouvre en vue guidée (**1 apprenant et 1 phase à la fois** avec auto-avance de `1. Avant` vers `2. Pendant`, puis `3. Après` et `Récapitulatif`), avec un bouton de bascule `Vue liste`.
 
 ### 12.3 Confirmations de présence
 
@@ -2136,6 +2104,12 @@ Les composants utilisent ces variables CSS directement, jamais de valeurs codée
   color: #000000;
 }
 ```
+
+### 16.4 Options d'accessibilité WCAG (`Texte agrandi` & `Contraste élevé`)
+
+Deux boutons à bascule 1-clic dans le menu `Plus` (`src/utils/accessibility.ts`, `src/index.css`) appliquent et sauvegardent dans `localStorage` (`insertech_a11y_prefs`) :
+- **`html.a11y-large-text`** : agrandit la taille de police racine à `112.5%` sur toute l'interface.
+- **`html.a11y-high-contrast`** : renforce le contraste des textes, bordures et surfaces (dans les thèmes sombre et clair) ainsi que l'anneau clavier `:focus-visible` à `3px`.
 
 ---
 

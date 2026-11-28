@@ -886,3 +886,332 @@ export function buildIfixitQueries(ticket: RepairTicket): { frQuery: string; enQ
 
   return { frQuery, enQuery };
 }
+
+// ============================================================================
+// ARBRES DE DÉCISION INTERACTIFS OUI / NON (1 QUESTION À LA FOIS)
+// ============================================================================
+
+export type DiagnosticDecisionNode =
+  | {
+      type: 'question';
+      id: string;
+      prompt: string;
+      falcTip: string;
+      yesNextId: string;
+      noNextId: string;
+    }
+  | {
+      type: 'leaf';
+      id: string;
+      cause: string;
+      action: string;
+      safetyWarning: string;
+      quickCheckId?: string;
+      guideKeyword?: string;
+    };
+
+export interface DiagnosticDecisionTreeDef {
+  id: string;
+  title: string;
+  keywords: string[];
+  categories?: DeviceCategory[];
+  startNodeId: string;
+  nodes: Record<string, DiagnosticDecisionNode>;
+}
+
+export const DIAGNOSTIC_DECISION_TREES: DiagnosticDecisionTreeDef[] = [
+  {
+    id: 'power',
+    title: 'Ne démarre pas',
+    keywords: ['demarre', 'allume', 'power', 'aucun voyant', 'noir', 'mort', 'alimentation', 'courant'],
+    startNodeId: 'q_charger_led',
+    nodes: {
+      q_charger_led: {
+        type: 'question',
+        id: 'q_charger_led',
+        prompt: 'Un voyant de charge s’allume-t-il quand le chargeur est branché ?',
+        falcTip: 'Regardez près de la prise de courant de l’appareil ou sur le bouton Power.',
+        yesNextId: 'q_fan_spin',
+        noNextId: 'q_other_outlet',
+      },
+      q_other_outlet: {
+        type: 'question',
+        id: 'q_other_outlet',
+        prompt: 'Le chargeur fonctionne-t-il sur une autre prise ou un autre appareil ?',
+        falcTip: 'Testez une autre prise murale ou un autre câble USB-C / chargeur compatible.',
+        yesNextId: 'leaf_dc_jack',
+        noNextId: 'leaf_bad_charger',
+      },
+      q_fan_spin: {
+        type: 'question',
+        id: 'q_fan_spin',
+        prompt: 'Entendez-vous le ventilateur ou voyez-vous le clavier s’éclairer ?',
+        falcTip: 'Écoutez attentivement 5 secondes après avoir appuyé sur le bouton Power.',
+        yesNextId: 'leaf_display_or_ram',
+        noNextId: 'leaf_power_reset',
+      },
+      leaf_bad_charger: {
+        type: 'leaf',
+        id: 'leaf_bad_charger',
+        cause: 'Bloc d’alimentation / chargeur défectueux',
+        action: 'Tester avec un chargeur de rechange d’atelier ou vérifier le câble secteur.',
+        safetyWarning: 'Ne pas utiliser de chargeur abîmé ou avec fil dénudé.',
+        quickCheckId: 'chk_charger_voltage',
+        guideKeyword: 'power adapter',
+      },
+      leaf_dc_jack: {
+        type: 'leaf',
+        id: 'leaf_dc_jack',
+        cause: 'Port de charge ou circuit d’alimentation bloqué',
+        action: 'Inspecter le connecteur de charge, retirer batterie et maintenir Power 15 s (reset CMOS).',
+        safetyWarning: 'Débrancher toute source d’alimentation avant d’ouvrir le boîtier.',
+        quickCheckId: 'chk_power_drain',
+        guideKeyword: 'dc jack',
+      },
+      leaf_power_reset: {
+        type: 'leaf',
+        id: 'leaf_power_reset',
+        cause: 'Carte mère figée ou batterie en court-circuit',
+        action: 'Débrancher la batterie interne et tenter un démarrage sur secteur uniquement.',
+        safetyWarning: 'Toucher une partie métallique (ESD) avant de débrancher la nappe batterie.',
+        quickCheckId: 'chk_power_drain',
+        guideKeyword: 'battery',
+      },
+      leaf_display_or_ram: {
+        type: 'leaf',
+        id: 'leaf_display_or_ram',
+        cause: 'L’appareil démarre mais sans affichage (RAM ou écran)',
+        action: 'Brancher un écran externe HDMI/USB-C et réinsérer les barrettes RAM.',
+        safetyWarning: 'Couper la batterie avant de manipuler la RAM.',
+        quickCheckId: 'chk_ram_reseat',
+        guideKeyword: 'ram',
+      },
+    },
+  },
+  {
+    id: 'battery',
+    title: 'Batterie / Charge',
+    keywords: ['batterie', 'charge', 'autonom', 'se decharge', 'branch', 'usb-c', 'gonfl'],
+    startNodeId: 'q_swollen',
+    nodes: {
+      q_swollen: {
+        type: 'question',
+        id: 'q_swollen',
+        prompt: 'Le boîtier ou le pavé tactile semble-t-il bombé ou soulevé ?',
+        falcTip: 'Vérifiez si le dessous ou le clavier est déformé : signe de batterie gonflée.',
+        yesNextId: 'leaf_swollen_battery',
+        noNextId: 'q_runs_on_ac',
+      },
+      q_runs_on_ac: {
+        type: 'question',
+        id: 'q_runs_on_ac',
+        prompt: 'L’appareil reste-t-il allumé lorsque le chargeur est branché ?',
+        falcTip: 'S’il s’éteint dès qu’on débranche le fil, la batterie ne tient plus.',
+        yesNextId: 'leaf_worn_battery',
+        noNextId: 'leaf_charge_port',
+      },
+      leaf_swollen_battery: {
+        type: 'leaf',
+        id: 'leaf_swollen_battery',
+        cause: 'Batterie gonflée — risque sécurité',
+        action: 'Retirer la batterie délicatement sans la percer et la placer en bac de recyclage sécurisé.',
+        safetyWarning: 'NE JAMAIS percer, plier ou chauffer une batterie gonflée.',
+        quickCheckId: 'chk_battery_wear',
+        guideKeyword: 'battery',
+      },
+      leaf_worn_battery: {
+        type: 'leaf',
+        id: 'leaf_worn_battery',
+        cause: 'Batterie usée en fin de vie',
+        action: 'Vérifier l’usure batterie dans le système et proposer une pièce de rechange.',
+        safetyWarning: 'Débrancher le chargeur avant de retirer la batterie interne.',
+        quickCheckId: 'chk_battery_wear',
+        guideKeyword: 'battery replacement',
+      },
+      leaf_charge_port: {
+        type: 'leaf',
+        id: 'leaf_charge_port',
+        cause: 'Port de charge encrassé ou dessoudé',
+        action: 'Nettoyer doucement les poussières du port (cure-dent non métallique) et tester le jeu.',
+        safetyWarning: 'Ne pas utiliser d’objet métallique dans un port alimenté.',
+        quickCheckId: 'chk_charger_voltage',
+        guideKeyword: 'charging port',
+      },
+    },
+  },
+  {
+    id: 'display',
+    title: 'Écran / Clavier',
+    keywords: ['ecran', 'affichage', 'dalle', 'fissur', 'image', 'clavier', 'touche', 'pave', 'noir'],
+    startNodeId: 'q_ext_monitor',
+    nodes: {
+      q_ext_monitor: {
+        type: 'question',
+        id: 'q_ext_monitor',
+        prompt: 'Un écran externe (HDMI / VGA) affiche-t-il une image normale ?',
+        falcTip: 'Branchez un moniteur d’atelier pour savoir si la carte graphique fonctionne.',
+        yesNextId: 'leaf_internal_panel',
+        noNextId: 'leaf_gpu_or_board',
+      },
+      leaf_internal_panel: {
+        type: 'leaf',
+        id: 'leaf_internal_panel',
+        cause: 'Nappe vidéo débranchée ou dalle LCD défectueuse',
+        action: 'Vérifier la nappe eDP côté carte mère et inspecter si l’écran est fissuré.',
+        safetyWarning: 'Débrancher impérativement la batterie avant de toucher le câble eDP.',
+        quickCheckId: 'chk_display_cable',
+        guideKeyword: 'screen',
+      },
+      leaf_gpu_or_board: {
+        type: 'leaf',
+        id: 'leaf_gpu_or_board',
+        cause: 'Problème mémoire RAM ou carte mère',
+        action: 'Nettoyer les contacts de la RAM et tester une barrette à la fois.',
+        safetyWarning: 'Manipuler la RAM hors tension avec protection ESD.',
+        quickCheckId: 'chk_ram_reseat',
+        guideKeyword: 'ram',
+      },
+    },
+  },
+  {
+    id: 'performance',
+    title: 'Lent / Disque / OS',
+    keywords: ['lent', 'lenteur', 'rame', 'fige', 'windows', 'linux', 'disque', 'ssd', 'virus', 'bleu'],
+    startNodeId: 'q_hdd_full',
+    nodes: {
+      q_hdd_full: {
+        type: 'question',
+        id: 'q_hdd_full',
+        prompt: 'Le disque principal a-t-il moins de 15 % d’espace libre ou est-ce un vieux disque dur mécanique ?',
+        falcTip: 'Vérifiez l’espace disque et le Gestionnaire des tâches / Moniteur système.',
+        yesNextId: 'leaf_upgrade_ssd',
+        noNextId: 'q_boot_ok',
+      },
+      q_boot_ok: {
+        type: 'question',
+        id: 'q_boot_ok',
+        prompt: 'Le système démarre-t-il jusqu’au bureau sans erreur ?',
+        falcTip: 'Vérifiez si l’utilisateur peut ouvrir sa session normalement.',
+        yesNextId: 'leaf_software_clean',
+        noNextId: 'leaf_os_repair',
+      },
+      leaf_upgrade_ssd: {
+        type: 'leaf',
+        id: 'leaf_upgrade_ssd',
+        cause: 'Disque saturé ou disque mécanique (HDD) très lent',
+        action: 'Libérer de l’espace, tester l’état SMART et proposer un SSD ou Linux léger.',
+        safetyWarning: 'Vérifier que les fichiers personnels sont sauvegardés avant toute modification.',
+        quickCheckId: 'chk_smart_disk',
+        guideKeyword: 'ssd',
+      },
+      leaf_software_clean: {
+        type: 'leaf',
+        id: 'leaf_software_clean',
+        cause: 'Programmes lourds au démarrage ou manque de RAM',
+        action: 'Désactiver les logiciels inutiles au démarrage et vérifier la RAM libre.',
+        safetyWarning: 'Demander l’accord du visiteur avant de désinstaller un logiciel.',
+        quickCheckId: 'chk_startup_apps',
+        guideKeyword: 'ram',
+      },
+      leaf_os_repair: {
+        type: 'leaf',
+        id: 'leaf_os_repair',
+        cause: 'Démarrage système corrompu',
+        action: 'Sauvegarder les dossiers via clé Live USB puis réparer ou installer Linux.',
+        safetyWarning: 'Sauvegarde obligatoire des documents avant toute réinstallation.',
+        quickCheckId: 'chk_smart_disk',
+        guideKeyword: 'hard drive',
+      },
+    },
+  },
+  {
+    id: 'overheat',
+    title: 'Chauffe / Bruit',
+    keywords: ['chauff', 'chaud', 'ventil', 'bruit', 'eteint', 'poussiere', 'thermique'],
+    startNodeId: 'q_airflow',
+    nodes: {
+      q_airflow: {
+        type: 'question',
+        id: 'q_airflow',
+        prompt: 'La grille d’aération est-elle obstruée ou l’air sort-il brûlant ?',
+        falcTip: 'Approchez la main de la sortie d’air et écoutez si le ventilateur tourne vite.',
+        yesNextId: 'leaf_dust_paste',
+        noNextId: 'leaf_fan_dead',
+      },
+      leaf_dust_paste: {
+        type: 'leaf',
+        id: 'leaf_dust_paste',
+        cause: 'Poussière accumulée et pâte thermique sèche',
+        action: 'Dépoussiérer les ailettes et appliquer une pâte thermique neuve sur le processeur.',
+        safetyWarning: 'Maintenir les pales du ventilateur immobiles pendant le soufflage.',
+        quickCheckId: 'chk_fan_spin',
+        guideKeyword: 'fan thermal paste',
+      },
+      leaf_fan_dead: {
+        type: 'leaf',
+        id: 'leaf_fan_dead',
+        cause: 'Ventilateur grippé ou capteur défaillant',
+        action: 'Vérifier la connexion du ventilateur sur la carte mère et commander un remplacement si bloqué.',
+        safetyWarning: 'Débrancher la batterie avant de déconnecter le ventilateur.',
+        quickCheckId: 'chk_fan_spin',
+        guideKeyword: 'fan',
+      },
+    },
+  },
+  {
+    id: 'network',
+    title: 'Wi-Fi / Réseau',
+    keywords: ['wifi', 'wi-fi', 'internet', 'reseau', 'bluetooth', 'connect'],
+    startNodeId: 'q_airplane',
+    nodes: {
+      q_airplane: {
+        type: 'question',
+        id: 'q_airplane',
+        prompt: 'Le mode Avion ou l’interrupteur Wi-Fi matériel est-il désactivé ?',
+        falcTip: 'Regardez le raccourci clavier (Fn + F2/F12) ou le côté du portable.',
+        yesNextId: 'leaf_driver_card',
+        noNextId: 'leaf_airplane_fix',
+      },
+      leaf_airplane_fix: {
+        type: 'leaf',
+        id: 'leaf_airplane_fix',
+        cause: 'Wi-Fi coupé par raccourci clavier ou mode Avion',
+        action: 'Réactiver le commutateur Wi-Fi et retester la connexion au réseau de l’événement.',
+        safetyWarning: 'Ne pas enregistrer les mots de passe personnels du visiteur.',
+        quickCheckId: 'chk_wifi_hardware',
+        guideKeyword: 'wireless card',
+      },
+      leaf_driver_card: {
+        type: 'leaf',
+        id: 'leaf_driver_card',
+        cause: 'Pilote réseau absent ou carte Wi-Fi débranchée',
+        action: 'Réinstaller le pilote réseau ou vérifier le câble d’antenne / carte M.2 Wi-Fi.',
+        safetyWarning: 'Couper la batterie avant d’ouvrir le capot arrière.',
+        quickCheckId: 'chk_wifi_hardware',
+        guideKeyword: 'wifi card',
+      },
+    },
+  },
+];
+
+export function getRecommendedTreesForTicket(ticket: RepairTicket): {
+  trees: DiagnosticDecisionTreeDef[];
+  recommendedTreeId: string;
+} {
+  const symptomsText = Array.isArray(ticket.extraData?.symptoms) ? ticket.extraData.symptoms.join(' ') : '';
+  const text = normalizeDiagnosticText(`${ticket.initialDiagnosis || ''} ${symptomsText} ${ticket.objectName || ''}`);
+
+  const scored = DIAGNOSTIC_DECISION_TREES.map((tree, idx) => {
+    let score = 0;
+    for (const kw of tree.keywords) {
+      if (text.includes(normalizeDiagnosticText(kw))) score += 3;
+    }
+    if (tree.categories?.includes(ticket.objectCategory)) score += 2;
+    return { tree, score, idx };
+  }).sort((a, b) => (b.score !== a.score ? b.score - a.score : a.idx - b.idx));
+
+  return {
+    trees: scored.map((s) => s.tree),
+    recommendedTreeId: scored[0]?.tree.id || DIAGNOSTIC_DECISION_TREES[0].id,
+  };
+}

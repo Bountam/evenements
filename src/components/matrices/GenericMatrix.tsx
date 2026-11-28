@@ -366,39 +366,50 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
                 setContactErrors({});
               }}
               errors={contactErrors}
+              extraSummaryRows={[
+                ...(newNote.trim() ? [{ label: 'Note rapide', value: newNote.trim() }] : []),
+                ...(!kioskForm ? [{ label: 'Présence', value: newPresence ? 'Confirmée immédiatement' : 'En attente' }] : [])
+              ]}
+              renderExtraFinalFields={() => (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1">
+                    <label htmlFor="att-notes" className="text-micro font-bold uppercase text-app-text-muted block">
+                      Notes rapides (optionnel)
+                    </label>
+                    <input
+                      id="att-notes"
+                      type="text"
+                      value={newNote}
+                      onChange={(e) => setNewNote(e.target.value)}
+                      placeholder="Ex. Intérêt pour Linux Mint"
+                      className="w-full min-h-11 bg-app-input border border-app-card-border rounded-xl px-3 py-2 text-app-text text-xs focus:outline-none focus:border-primary transition"
+                    />
+                  </div>
+
+                  <div className="kiosk-hide flex items-center gap-2 py-1">
+                    <input
+                      type="checkbox"
+                      id="presenceCheck"
+                      checked={newPresence}
+                      onChange={(e) => setNewPresence(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary focus:ring-primary bg-app-input accent-primary"
+                    />
+                    <label htmlFor="presenceCheck" className="text-xs font-semibold text-app-text-muted cursor-pointer">
+                      Confirmer la présence immédiatement
+                    </label>
+                  </div>
+                </div>
+              )}
+              renderSubmitActions={() => (
+                <button
+                  type="submit"
+                  className="min-h-12 px-5 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
+                >
+                  <UserPlus size={14} aria-hidden="true" />
+                  <span>Inscrire</span>
+                </button>
+              )}
             />
-
-            <div className="space-y-1">
-              <label className="text-micro font-bold uppercase text-app-text-muted block">Notes rapides</label>
-              <input
-                type="text"
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                placeholder="Ex. Intérêt pour Linux Mint"
-                className="w-full bg-app-input border border-app-card-border rounded-xl px-3 py-2 text-app-text text-xs focus:outline-none focus:border-primary transition"
-              />
-            </div>
-
-            <div className="kiosk-hide flex items-center gap-2 py-2">
-              <input
-                type="checkbox"
-                id="presenceCheck"
-                checked={newPresence}
-                onChange={(e) => setNewPresence(e.target.checked)}
-                className="w-4 h-4 rounded text-primary focus:ring-primary bg-app-input"
-              />
-              <label htmlFor="presenceCheck" className="text-xs font-semibold text-app-text-muted">
-                Confirmer la présence immédiatement
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
-            >
-              <UserPlus size={14} />
-              <span>Inscrire</span>
-            </button>
           </form>
         </div>
 

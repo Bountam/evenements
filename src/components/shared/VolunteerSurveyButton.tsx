@@ -39,10 +39,11 @@ async function ensureVolunteerRegistry(): Promise<string> {
 interface VolunteerSurveyButtonProps {
   eventId?: string | null; // activité ouverte ; sans activité, la fiche va au registre des bénévoles
   className?: string;
+  iconOnly?: boolean;
 }
 
 // Bouton permanent « Devenir bénévole » : sondage complet à partir de zéro, enchaînable d'une personne à l'autre
-export default function VolunteerSurveyButton({ eventId, className = '' }: VolunteerSurveyButtonProps) {
+export default function VolunteerSurveyButton({ eventId, className = '', iconOnly = false }: VolunteerSurveyButtonProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => emptyContactDraft('volunteer'));
   const [errors, setErrors] = useState<ContactErrors>({});
@@ -92,9 +93,15 @@ export default function VolunteerSurveyButton({ eventId, className = '' }: Volun
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)} aria-label="Devenir bénévole" title="Remplir une fiche bénévole" className={className}>
-        <HandHeart size={14} className="text-primary" aria-hidden="true" />
-        <span>Devenir bénévole</span>
+      <Button
+        size={iconOnly ? 'icon-sm' : 'sm'}
+        onClick={() => setOpen(true)}
+        aria-label="Devenir bénévole"
+        title="Remplir une fiche bénévole"
+        className={`shrink-0 ${className}`}
+      >
+        <HandHeart size={15} className="text-primary" aria-hidden="true" />
+        {!iconOnly && <span>Devenir bénévole</span>}
       </Button>
       <Modal
         isOpen={open}

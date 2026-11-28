@@ -16,7 +16,6 @@ import { networkManager, type SyncIndicatorColor } from './network';
 import { startScreenWakeLock } from './utils/wakeLock';
 import MatrixSelector from './components/MatrixSelector';
 import DashboardShell from './components/DashboardShell';
-import MultiEventControlBar from './components/shared/MultiEventControlBar';
 import ReparothonMatrix from './components/matrices/ReparothonMatrix';
 import TeardownMatrix from './components/matrices/TeardownMatrix';
 import type { TabBadge } from './components/shared/TabSwitcher';
@@ -1670,6 +1669,7 @@ export default function App() {
       <>
         <DashboardShell
           event={activeEvent}
+          onSelectEvent={handleSelectPastEvent}
           currentTab={currentTab}
           onTabChange={setCurrentTab}
           tabBadges={tabBadges}
@@ -1708,9 +1708,6 @@ export default function App() {
             ) : null
           }
         >
-          {!IS_PUBLIC_WINDOW && currentTab !== 'public' && currentTab !== 'formulaire' && !IS_TABLET && (
-            <MultiEventControlBar activeEvent={activeEvent} onSelectEvent={handleSelectPastEvent} />
-          )}
           {activeEvent.type === 'reparothon' && (
             <ReparothonMatrix
               event={activeEvent}

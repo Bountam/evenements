@@ -7,6 +7,9 @@ import { ConfirmDialogHost } from './components/shared/ConfirmDialog';
 import NetworkWarnings from './components/shared/NetworkWarnings';
 import './index.css';
 import { isAndroidApp } from './native/android';
+import { applyA11yPrefsToDom, readA11yPrefs } from './utils/accessibility';
+
+applyA11yPrefsToDom(readA11yPrefs());
 
 // Prevent benign sandbox WebSocket error from appearing as an unhandled rejection overlay
 if (typeof window !== 'undefined') {

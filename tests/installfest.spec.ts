@@ -22,14 +22,22 @@ test('Install Fest : inscription, assignation et installation terminée', async 
   await expect(page.getByText('0/2 ordinateurs')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Accueil et suivi' }).click();
+  // Étape 1 : Catégorie (auto-avance) -> Étape 2 : Modèle
+  await page.getByRole('button', { name: 'Portable' }).click();
+  await page.getByLabel('Marque et modèle').fill('Lenovo T450');
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  // Étape 3 : OS précédent (auto-avance) -> Étape 4 : Distribution (auto-avance) -> Étape 5 : Options & notes
+  await page.getByRole('button', { name: 'Windows 7' }).click();
+  await page.getByRole('button', { name: 'Zorin OS' }).click();
+  await page.getByLabel(/Double démarrage/).first().check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  // Étape 6 : Coordonnées une question à la fois -> Récapitulatif -> Inscrire
   await page.locator('#if-displayName').fill('Martine Bouchard');
   await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#if-phone').fill('514 555-1234');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#if-consentActivity').check();
-  await page.getByLabel('Marque et modèle').fill('Lenovo T450');
-  await page.getByLabel('OS précédent').selectOption('windows_7');
-  await page.getByLabel('Distribution choisie').selectOption('Zorin OS');
-  await page.getByLabel(/Double démarrage/).first().check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.getByRole('button', { name: 'Inscrire' }).click();
   await expect(page.getByText(/Lenovo T450 · Windows 7/)).toBeVisible();
 

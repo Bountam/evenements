@@ -3,7 +3,7 @@ import { EventSettings, RepairTicket, Technician, DeviceCategory, PartnerLogo } 
 import { db, registerSyncListener } from '../../db';
 import { networkManager } from '../../network';
 import { DoughnutChart } from '../shared/LazyCharts';
-import { Plus, Users, Trash2, Search, Award, X, RotateCcw, Check, Settings } from 'lucide-react';
+import { Plus, Users, Trash2, Search, Award, X, RotateCcw, Check, Settings, ArrowLeft, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { showToast } from '../shared/Toast';
 import { confirmDialog } from '../shared/ConfirmDialog';
@@ -87,6 +87,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
   const [dualBoot, setDualBoot] = useState(false);
   const [notes, setNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [ifStep, setIfStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
 
   // Bénévoles et réglages
   const [newTechName, setNewTechName] = useState('');
@@ -225,6 +226,7 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
       setOtherDistro('');
       setDualBoot(false);
       setNotes('');
+      setIfStep(1);
       showToast(`${ticket.visitorName} est inscrit·e (${chosenDistro}).`, 'success');
       await loadData();
     } catch (err) {
@@ -575,71 +577,328 @@ export default function InstallFestMatrix({ event, activeTab }: InstallFestMatri
             <span>{kioskForm ? 'Inscription' : 'Nouvelle inscription'}</span>
           </h3>
 
-          <form onSubmit={handleAddTicket} className="space-y-3" noValidate>
-            <ContactForm
-              idPrefix="if"
-              mode="activity"
-              stepped
-              resetKey={formResetKey}
-              value={contactDraft}
-              onChange={(next) => {
-                setContactDraft(next);
-                setContactErrors({});
-              }}
-              errors={contactErrors}
-            />
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-0.5">
-                <label htmlFor="if-device" className={fieldLabelClass}>Appareil</label>
-                <select id="if-device" value={category} onChange={e => setCategory(e.target.value as DeviceCategory)} className={`${fieldInputClass} min-h-9`}>
-                  {DEVICE_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                </select>
+          <form onSubmit={handleAddTicket} className="space-y-4" noValidate>
+            <div className="space-y-1.5 pb-2 border-b border-app-card-border">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-micro font-bold uppercase tracking-wider text-primary" aria-live="polite">
+                  Étape {ifStep} sur 6 · {
+                    ifStep === 1 ? "Type d'appareil" :
+                    ifStep === 2 ? 'Marque et modèle' :
+                    ifStep === 3 ? 'Système actuel' :
+                    ifStep === 4 ? 'Distribution Linux' :
+                    ifStep === 5 ? 'Options & notes' :
+                    'Coordonnées du participant'
+                  }
+                </span>
               </div>
-              <div className="space-y-0.5">
-                <label htmlFor="if-model" className={fieldLabelClass}>Marque et modèle</label>
-                <input id="if-model" type="text" value={brandModel} onChange={e => setBrandModel(e.target.value)} placeholder="Ex. Lenovo T450" className={`${fieldInputClass} min-h-9`} />
+              <div className="grid grid-cols-6 gap-1" aria-hidden="true">
+                {([1, 2, 3, 4, 5, 6] as const).map((s) => (
+                  <span key={s} className={`h-1.5 rounded-full ${s <= ifStep ? 'bg-primary' : 'bg-app-card-border'}`} />
+                ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-0.5">
-                <label htmlFor="if-prev-os" className={fieldLabelClass}>OS précédent</label>
-                <select id="if-prev-os" value={previousOS} onChange={e => setPreviousOS(e.target.value)} className={`${fieldInputClass} min-h-9`}>
-                  {PREVIOUS_OS_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                </select>
-              </div>
-              <div className="space-y-0.5">
-                <label htmlFor="if-distro" className={fieldLabelClass}>Distribution choisie</label>
-                <select id="if-distro" value={distro} onChange={e => setDistro(e.target.value)} className={`${fieldInputClass} min-h-9`}>
-                  {distros.map(d => <option key={d} value={d}>{d}</option>)}
-                  <option value={OTHER_DISTRO}>Autre…</option>
-                </select>
-              </div>
-            </div>
-            {distro === OTHER_DISTRO && (
-              <div className="space-y-0.5">
-                <label htmlFor="if-distro-other" className={fieldLabelClass}>Quelle distribution ?</label>
-                <input id="if-distro-other" type="text" value={otherDistro} onChange={e => setOtherDistro(e.target.value)} placeholder="Ex. Pop!_OS" className={`${fieldInputClass} min-h-9`} />
+            {ifStep === 1 && (
+              <div className="space-y-3">
+                <p className="text-xs text-app-text-muted">Choisissez le type d'ordinateur à installer.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {DEVICE_OPTIONS.map((o) => {
+                    const selected = category === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setCategory(o.id);
+                          setFormError(null);
+                          setIfStep(2);
+                        }}
+                        className={`min-h-12 px-4 py-2.5 rounded-xl border-2 text-left text-xs sm:text-sm font-display font-bold uppercase transition cursor-pointer flex items-center justify-between gap-2 ${
+                          selected
+                            ? 'bg-primary text-secondary border-primary font-black'
+                            : 'bg-app-input text-app-text border-app-card-border hover:border-primary/60'
+                        }`}
+                      >
+                        <span>{o.label}</span>
+                        {selected && <Check size={14} aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer">
-              <input type="checkbox" checked={dualBoot} onChange={e => setDualBoot(e.target.checked)} className="accent-primary" />
-              <span>Double démarrage (conserver le système actuel)</span>
-            </label>
+            {ifStep === 2 && (
+              <div className="space-y-3">
+                <p className="text-xs text-app-text-muted">Indiquez la marque et le modèle si vous les connaissez (facultatif).</p>
+                <div className="space-y-1.5">
+                  <label htmlFor="if-model" className={fieldLabelClass}>Marque et modèle</label>
+                  <input
+                    id="if-model"
+                    type="text"
+                    value={brandModel}
+                    onChange={(e) => setBrandModel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        setIfStep(3);
+                      }
+                    }}
+                    placeholder="Ex. Lenovo ThinkPad T480"
+                    className={`${fieldInputClass} min-h-12`}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Marques fréquentes">
+                  {['Lenovo', 'Dell', 'HP', 'Acer', 'Asus', 'Apple'].map((brand) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => {
+                        setBrandModel((prev) => (prev.trim() ? prev : `${brand} `));
+                        document.getElementById('if-model')?.focus();
+                      }}
+                      className="min-h-8 px-2.5 py-1 rounded-full bg-app-input border border-app-card-border text-xs font-bold text-app-text-muted hover:text-primary hover:border-primary/60 cursor-pointer"
+                    >
+                      {brand}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-app-card-border">
+                  <button
+                    type="button"
+                    onClick={() => setIfStep(1)}
+                    className="min-h-12 px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <ArrowLeft size={14} aria-hidden="true" />
+                    <span>Précédent</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIfStep(3)}
+                    className="min-h-12 px-5 py-2 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span>Suivant</span>
+                    <ArrowRight size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            )}
 
-            <div className="space-y-0.5">
-              <label htmlFor="if-notes" className={fieldLabelClass}>Notes</label>
-              <textarea id="if-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Ex. Garder les photos du bureau." className={`${fieldInputClass} resize-none`} />
-            </div>
+            {ifStep === 3 && (
+              <div className="space-y-3">
+                <p className="text-xs text-app-text-muted">Quel système est actuellement installé sur cet appareil ?</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {PREVIOUS_OS_OPTIONS.map((o) => {
+                    const selected = previousOS === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setPreviousOS(o.id);
+                          setFormError(null);
+                          setIfStep(4);
+                        }}
+                        className={`min-h-12 px-4 py-2.5 rounded-xl border-2 text-left text-xs sm:text-sm font-display font-bold uppercase transition cursor-pointer flex items-center justify-between gap-2 ${
+                          selected
+                            ? 'bg-primary text-secondary border-primary font-black'
+                            : 'bg-app-input text-app-text border-app-card-border hover:border-primary/60'
+                        }`}
+                      >
+                        <span>{o.label}</span>
+                        {selected && <Check size={14} aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="pt-2 border-t border-app-card-border">
+                  <button
+                    type="button"
+                    onClick={() => setIfStep(2)}
+                    className="min-h-12 px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <ArrowLeft size={14} aria-hidden="true" />
+                    <span>Précédent</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
-            {formError && <p role="alert" className="text-xs font-bold text-danger">{formError}</p>}
+            {ifStep === 4 && (
+              <div className="space-y-3">
+                <p className="text-xs text-app-text-muted">Quelle distribution Linux installer aujourd'hui ?</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {distros.map((d) => {
+                    const selected = distro === d;
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setDistro(d);
+                          setFormError(null);
+                          setIfStep(5);
+                        }}
+                        className={`min-h-12 px-4 py-2.5 rounded-xl border-2 text-left text-xs sm:text-sm font-display font-bold uppercase transition cursor-pointer flex items-center justify-between gap-2 ${
+                          selected
+                            ? 'bg-primary text-secondary border-primary font-black'
+                            : 'bg-app-input text-app-text border-app-card-border hover:border-primary/60'
+                        }`}
+                      >
+                        <span>{d}</span>
+                        {selected && <Check size={14} aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    aria-pressed={distro === OTHER_DISTRO}
+                    onClick={() => {
+                      setDistro(OTHER_DISTRO);
+                      setFormError(null);
+                    }}
+                    className={`min-h-12 px-4 py-2.5 rounded-xl border-2 text-left text-xs sm:text-sm font-display font-bold uppercase transition cursor-pointer ${
+                      distro === OTHER_DISTRO
+                        ? 'bg-primary text-secondary border-primary font-black'
+                        : 'bg-app-input text-app-text border-app-card-border hover:border-primary/60'
+                    }`}
+                  >
+                    Autre…
+                  </button>
+                </div>
+                {distro === OTHER_DISTRO && (
+                  <div className="space-y-1">
+                    <label htmlFor="if-distro-other" className={fieldLabelClass}>Quelle distribution ?</label>
+                    <input
+                      id="if-distro-other"
+                      type="text"
+                      value={otherDistro}
+                      onChange={(e) => {
+                        setOtherDistro(e.target.value);
+                        setFormError(null);
+                      }}
+                      placeholder="Ex. Pop!_OS"
+                      className={`${fieldInputClass} min-h-12`}
+                    />
+                  </div>
+                )}
+                {formError && <p role="alert" className="text-xs font-bold text-danger">{formError}</p>}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-app-card-border">
+                  <button
+                    type="button"
+                    onClick={() => setIfStep(3)}
+                    className="min-h-12 px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <ArrowLeft size={14} aria-hidden="true" />
+                    <span>Précédent</span>
+                  </button>
+                  {distro === OTHER_DISTRO && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!otherDistro.trim()) {
+                          setFormError('Précisez la distribution choisie.');
+                          return;
+                        }
+                        setFormError(null);
+                        setIfStep(5);
+                      }}
+                      className="min-h-12 px-5 py-2 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <span>Suivant</span>
+                      <ArrowRight size={14} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
-            <button type="submit" className="w-full min-h-11 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer">
-              <Plus size={14} />
-              <span>Inscrire</span>
-            </button>
+            {ifStep === 5 && (
+              <div className="space-y-3">
+                <p className="text-xs text-app-text-muted">Derniers détails techniques avant vos coordonnées.</p>
+                <label className="min-h-12 px-3.5 py-2.5 rounded-xl border border-app-card-border bg-app-input flex items-center gap-2.5 text-xs sm:text-sm text-app-text cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dualBoot}
+                    onChange={(e) => setDualBoot(e.target.checked)}
+                    className="w-4 h-4 accent-primary shrink-0"
+                  />
+                  <span>Double démarrage (conserver le système actuel)</span>
+                </label>
+
+                <div className="space-y-1">
+                  <label htmlFor="if-notes" className={fieldLabelClass}>Notes (optionnel)</label>
+                  <textarea
+                    id="if-notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Ex. Garder les photos du bureau."
+                    className={`${fieldInputClass} resize-none`}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-app-card-border">
+                  <button
+                    type="button"
+                    onClick={() => setIfStep(4)}
+                    className="min-h-12 px-4 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <ArrowLeft size={14} aria-hidden="true" />
+                    <span>Précédent</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIfStep(6)}
+                    className="min-h-12 px-5 py-2 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span>Suivant</span>
+                    <ArrowRight size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {ifStep === 6 && (
+              <ContactForm
+                idPrefix="if"
+                mode="activity"
+                stepped
+                resetKey={formResetKey}
+                value={contactDraft}
+                onChange={(next) => {
+                  setContactDraft(next);
+                  setContactErrors({});
+                }}
+                errors={contactErrors}
+                onStepBackFromFirst={() => setIfStep(5)}
+                firstStepBackLabel="Appareil"
+                extraSummaryRows={[
+                  {
+                    label: 'Appareil',
+                    value: `${deviceLabel(category)}${brandModel.trim() ? ` · ${brandModel.trim()}` : ''} (${previousOSLabel(previousOS)})`,
+                    onEdit: () => setIfStep(1)
+                  },
+                  {
+                    label: 'Distribution',
+                    value: `${distro === OTHER_DISTRO ? otherDistro.trim() : distro}${dualBoot ? ' · Double démarrage' : ''}`,
+                    onEdit: () => setIfStep(4)
+                  }
+                ]}
+                renderSubmitActions={() => (
+                  <button
+                    type="submit"
+                    className="min-h-12 px-5 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-secondary font-bold font-display uppercase tracking-wider text-xs hover:scale-[1.02] active:scale-95 transition cursor-pointer"
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    <span>Inscrire</span>
+                  </button>
+                )}
+              />
+            )}
           </form>
         </div>
 

@@ -35,6 +35,8 @@ import IfixitGuideViewer from './IfixitGuideViewer';
 
 interface IfixitGuidesPanelProps {
   ticket: RepairTicket;
+  embedded?: boolean;
+  focusKeyword?: string | null;
   onOpenDiagnostic?: () => void;
   onOpenLibrary?: () => void;
 }
@@ -43,6 +45,8 @@ type LangFilter = 'all' | 'fr' | 'en';
 
 export default function IfixitGuidesPanel({
   ticket,
+  embedded = false,
+  focusKeyword = null,
   onOpenDiagnostic,
   onOpenLibrary
 }: IfixitGuidesPanelProps) {
@@ -71,6 +75,7 @@ export default function IfixitGuidesPanel({
   const [apiKeyInput, setApiKeyInput] = useState(() => getStoredIfixitApiKey());
   const [apiKeyConfigured, setApiKeyConfigured] = useState(() => hasIfixitApiKey());
   const [isManualQuery, setIsManualQuery] = useState(false);
+  const [showManualSearch, setShowManualSearch] = useState(!embedded);
 
   const loadRelevantOffline = useCallback(
     async (manualText?: string) => {
@@ -141,6 +146,14 @@ export default function IfixitGuidesPanel({
     setQuery(initialQueries.frQuery);
     void runSearch(initialQueries.frQuery, initialQueries.enQuery, false, false);
   }, [ticket.id, initialQueries.frQuery, initialQueries.enQuery, runSearch]);
+
+  useEffect(() => {
+    if (!focusKeyword || !focusKeyword.trim()) return;
+    const focused = `${ticket.objectName} ${focusKeyword}`.trim();
+    setSelectedGuide(null);
+    setQuery(focused);
+    void runSearch(focused, focused, false, true);
+  }, [focusKeyword, ticket.objectName, runSearch]);
 
   // Se rafraîchit automatiquement dès que le Laptop serveur pousse un guide pertinent via GUIDES_SYNC
   useEffect(() => {
@@ -221,8 +234,25 @@ export default function IfixitGuidesPanel({
             {fromCache && results.length > 0 && (
               <span className="text-micro px-2.5 py-1 rounded-full bg-success/15 border border-success/40 text-success font-bold uppercase inline-flex items-center gap-1">
                 <Database size={11} aria-hidden="true" />
-                <span>Recherche en cache</span>
+                <span>En cache</span>
               </span>
+            )}
+            {embedded && (
+              <button
+                type="button"
+                aria-expanded={showManualSearch}
+                aria-label="Recherche manuelle"
+                title="Recherche manuelle et filtres iFixit"
+                onClick={() => setShowManualSearch((prev) => !prev)}
+                className={`min-h-9 px-3 py-1 rounded-full border text-micro font-display font-bold uppercase cursor-pointer inline-flex items-center gap-1.5 ${
+                  showManualSearch
+                    ? 'bg-primary text-secondary border-primary'
+                    : 'bg-app-input border-app-card-border text-app-text hover:border-primary/50'
+                }`}
+              >
+                <Search size={12} aria-hidden="true" />
+                <span>Rechercher</span>
+              </button>
             )}
             {onOpenLibrary && (
               <button
@@ -234,23 +264,25 @@ export default function IfixitGuidesPanel({
                 <span>Bibliothèque</span>
               </button>
             )}
-            <button
-              type="button"
-              aria-expanded={showKeyConfig}
-              onClick={() => setShowKeyConfig((prev) => !prev)}
-              className={`min-h-9 px-2.5 py-1 rounded-full border text-micro font-display font-bold uppercase cursor-pointer inline-flex items-center gap-1 ${
-                apiKeyConfigured
-                  ? 'bg-success/15 border-success/40 text-success'
-                  : 'bg-app-input border-app-card-border text-app-text-muted hover:border-primary/50'
-              }`}
-            >
-              <KeyRound size={12} aria-hidden="true" />
-              <span>Clé API</span>
-            </button>
+            {showManualSearch && (
+              <button
+                type="button"
+                aria-expanded={showKeyConfig}
+                onClick={() => setShowKeyConfig((prev) => !prev)}
+                className={`min-h-9 px-2.5 py-1 rounded-full border text-micro font-display font-bold uppercase cursor-pointer inline-flex items-center gap-1 ${
+                  apiKeyConfigured
+                    ? 'bg-success/15 border-success/40 text-success'
+                    : 'bg-app-input border-app-card-border text-app-text-muted hover:border-primary/50'
+                }`}
+              >
+                <KeyRound size={12} aria-hidden="true" />
+                <span>Clé API</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {showKeyConfig && (
+        {showManualSearch && showKeyConfig && (
           <div className="p-3 rounded-2xl bg-app-input border border-app-card-border flex flex-col sm:flex-row sm:items-center gap-2">
             <input
               type="password"
@@ -291,77 +323,81 @@ export default function IfixitGuidesPanel({
           </div>
         )}
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void runSearch(query, query, false, true);
-          }}
-          className="flex flex-col sm:flex-row gap-2"
-        >
-          <div className="relative flex-1">
-            <input
-              type="text"
-              aria-label="Rechercher un guide iFixit"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Modèle et symptôme (ex. ThinkPad T480 battery)"
-              className="w-full bg-app-input border border-app-input-border rounded-xl pl-3.5 pr-3 py-2.5 min-h-11 text-sm text-app-text"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loadingSearch}
-            className="min-h-11 px-5 py-2.5 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
-          >
-            <Search size={15} aria-hidden="true" />
-            <span>Rechercher</span>
-          </button>
-        </form>
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrer par langue">
-            {(
-              [
-                { id: 'all', label: 'Tous' },
-                { id: 'fr', label: 'FR' },
-                { id: 'en', label: 'EN' }
-              ] as const
-            ).map((opt) => (
+        {showManualSearch && (
+          <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void runSearch(query, query, false, true);
+              }}
+              className="flex flex-col sm:flex-row gap-2"
+            >
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  aria-label="Rechercher un guide iFixit"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Modèle et symptôme (ex. ThinkPad T480 battery)"
+                  className="w-full bg-app-input border border-app-input-border rounded-xl pl-3.5 pr-3 py-2.5 min-h-11 text-sm text-app-text"
+                />
+              </div>
               <button
-                key={opt.id}
-                type="button"
-                aria-pressed={langFilter === opt.id}
-                onClick={() => setLangFilter(opt.id)}
-                className={`min-h-9 px-3 py-1 rounded-full border text-xs font-display font-bold uppercase cursor-pointer ${
-                  langFilter === opt.id
-                    ? 'bg-primary text-secondary border-primary'
-                    : 'bg-app-input text-app-text-muted border-app-card-border hover:border-primary/50'
-                }`}
+                type="submit"
+                disabled={loadingSearch}
+                className="min-h-11 px-5 py-2.5 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
               >
-                {opt.label}
+                <Search size={15} aria-hidden="true" />
+                <span>Rechercher</span>
               </button>
-            ))}
-          </div>
+            </form>
 
-          {quickTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {quickTags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => {
-                    const nextQuery = `${ticket.objectName} ${tag}`.trim();
-                    setQuery(nextQuery);
-                    void runSearch(nextQuery, nextQuery, false, true);
-                  }}
-                  className="min-h-8 px-2.5 py-0.5 rounded-full bg-app-input border border-app-card-border text-micro font-mono text-app-text-muted hover:text-primary hover:border-primary/50 cursor-pointer"
-                >
-                  + {tag}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrer par langue">
+                {(
+                  [
+                    { id: 'all', label: 'Tous' },
+                    { id: 'fr', label: 'FR' },
+                    { id: 'en', label: 'EN' }
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    aria-pressed={langFilter === opt.id}
+                    onClick={() => setLangFilter(opt.id)}
+                    className={`min-h-9 px-3 py-1 rounded-full border text-xs font-display font-bold uppercase cursor-pointer ${
+                      langFilter === opt.id
+                        ? 'bg-primary text-secondary border-primary'
+                        : 'bg-app-input text-app-text-muted border-app-card-border hover:border-primary/50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {quickTags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {quickTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        const nextQuery = `${ticket.objectName} ${tag}`.trim();
+                        setQuery(nextQuery);
+                        void runSearch(nextQuery, nextQuery, false, true);
+                      }}
+                      className="min-h-8 px-2.5 py-0.5 rounded-full bg-app-input border border-app-card-border text-micro font-mono text-app-text-muted hover:text-primary hover:border-primary/50 cursor-pointer"
+                    >
+                      + {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         {usedFallbackEn && results.some((r) => r.lang === 'en') && (
           <p className="text-xs text-app-text-muted">

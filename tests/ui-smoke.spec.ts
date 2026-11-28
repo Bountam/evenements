@@ -61,15 +61,62 @@ for (const target of TARGETS) {
       await expect(header).toBeVisible();
       const box = await header.boundingBox();
       expect(box?.y ?? -1, "l'en-tête commence en haut de l'écran").toBeGreaterThanOrEqual(0);
+      expect(box?.height ?? 999, "l'en-tête permanent tient sur une seule ligne (<= 72px)").toBeLessThanOrEqual(72);
+
+      // Aucune superposition horizontale dans l'en-tête
+      const headerOverlap = await header.evaluate((el) => {
+        const items = Array.from(el.querySelectorAll('button, a, h1'))
+          .filter((node) => {
+            const style = window.getComputedStyle(node);
+            const r = node.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+          })
+          .map((node) => ({
+            text: (node.getAttribute('aria-label') || node.textContent || '').trim(),
+            rect: node.getBoundingClientRect(),
+          }));
+        for (let i = 0; i < items.length; i++) {
+          for (let j = i + 1; j < items.length; j++) {
+            const a = items[i].rect;
+            const b = items[j].rect;
+            // Ignore parent/child containment
+            const contained =
+              (a.left <= b.left && a.right >= b.right && a.top <= b.top && a.bottom >= b.bottom) ||
+              (b.left <= a.left && b.right >= a.right && b.top <= a.top && b.bottom >= a.bottom);
+            if (contained) continue;
+            const interX = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+            const interY = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+            if (interX > 2 && interY > 2) {
+              return `${items[i].text} chevauche ${items[j].text}`;
+            }
+          }
+        }
+        return null;
+      });
+      expect(headerOverlap, 'chevauchement dans header').toBeNull();
+
+      await expect(page.getByRole('tablist')).toHaveCount(1);
       await expect(page.getByRole('tablist')).toBeVisible();
+      if (viewport.width < 640) {
+        const tablistBox = await page.getByRole('tablist').boundingBox();
+        expect(tablistBox?.y ?? 0, 'barre mobile fixée en bas').toBeGreaterThan(viewport.height - 100);
+      }
+
       await expect(page.getByRole('button', { name: 'Menu principal' })).toBeVisible();
       await expect(page.getByRole('button', { name: /Synchronisation réseau/i })).toBeVisible();
       await expectIntactUi(page);
 
-      // En-tête allégé : les commandes rares sont dans le volet « Plus »
+      // En-tête allégé : commandes rares + options d'accessibilité 1 clic dans « Plus »
       const moreButton = page.getByRole('button', { name: /^Plus/ });
       await moreButton.click();
       await expect(page.getByRole('button', { name: "Rapport d'Impact & Exports" })).toBeVisible();
+      await page.getByRole('button', { name: 'Texte agrandi' }).click();
+      await expect(page.locator('html')).toHaveClass(/a11y-large-text/);
+      await page.getByRole('button', { name: 'Contraste élevé' }).click();
+      await expect(page.locator('html')).toHaveClass(/a11y-high-contrast/);
+      // Remettre les options à l'état initial
+      await page.getByRole('button', { name: 'Texte agrandi' }).click();
+      await page.getByRole('button', { name: 'Contraste élevé' }).click();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button', { name: "Rapport d'Impact & Exports" })).toHaveCount(0);
       await expect(moreButton).toBeFocused();
@@ -82,6 +129,7 @@ for (const target of TARGETS) {
       await page.locator('#participant-displayName').fill('Brouillon conservé');
       await page.getByRole('button', { name: 'Suivant' }).click();
       await page.locator('#participant-email').fill('brouillon@exemple.com');
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.locator('#participant-consentActivity').check();
       await page.getByRole('tab', { name: 'Tirage' }).click();
       await expect(page.locator('#launch-raffle')).toBeVisible();
@@ -89,6 +137,8 @@ for (const target of TARGETS) {
       await expect(page.locator('#participant-displayName')).toHaveValue('Brouillon conservé');
 
       // Pastille de file d'attente, puis envoi sur piste avec retour aux pistes depuis le toast
+      await page.getByRole('button', { name: 'Suivant' }).click();
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.getByRole('button', { name: 'Suivant' }).click();
       await page.getByRole('button', { name: 'Inscrire le participant' }).click();
       await expect(page.getByRole('tab', { name: /Participants \(\d+ personnes? en attente\)/ })).toBeVisible();
@@ -101,7 +151,9 @@ for (const target of TARGETS) {
       await page.locator('#participant-displayName').fill('Coureur test');
       await page.getByRole('button', { name: 'Suivant' }).click();
       await page.locator('#participant-phone').fill('514-555-1234');
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.locator('#participant-consentActivity').check();
+      await page.getByRole('button', { name: 'Suivant' }).click();
       await page.getByRole('button', { name: 'Inscrire et assigner à la première piste libre' }).click();
       await page.getByRole('button', { name: 'Voir les pistes' }).click();
       await expect(page.getByRole('tab', { name: /^Pistes/ })).toHaveAttribute('aria-selected', 'true');

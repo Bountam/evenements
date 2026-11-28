@@ -4,6 +4,25 @@ Toutes les évolutions notables d'**Insertech — Tableau de bords événementie
 
 ---
 
+## [1.8.1] — 2026-11-27
+
+### Amélioré
+- **Accessibilité WCAG AA/AAA & aides FALC (`src/utils/accessibility.ts`, `src/index.css`, `src/main.tsx`) :**
+  - Modes persistés **`Texte agrandi`** (`.a11y-large-text`, échelle `112.5%`) et **`Contraste élevé`** (`.a11y-high-contrast` clair/sombre + anneau `:focus-visible` `3px`), activables en 1 clic dans le menu `Plus`.
+  - Cibles tactiles agrandies (`min-h-12` / `min-h-14`), aides textuelles simples (FALC) sous chaque question et annonces `aria-live="polite"`.
+- **En-tête permanent compact sur une ligne & barre mobile (`DashboardShell.tsx`, `TabSwitcher.tsx`, `MoreMenu.tsx`, `VolunteerSurveyButton.tsx`, `MultiEventControlBar.tsx`, `App.tsx`) :**
+  - En-tête unique permanent (`h-14 min-h-14 sticky top-0 z-40`) sans chevauchement (y compris en mode Kiosque d'inscription ; seul l'Écran Public projecteur conserve son auto-masquage).
+  - Boutons en icônes prioritaires avec `aria-label` conservés, fusion du sélecteur multi-événements (`MultiEventHeaderSelector`) directement dans le titre cliquable sur Laptop, et barre d'onglets fixe en bas sur écrans `< 640px` (`variant="bottom"`).
+- **Formulaires « 1 question à la fois » & récapitulatif (`ContactForm.tsx`, `src/utils/contact.ts`, `InstallFestMatrix.tsx`, `GenericMatrix.tsx`, `ReparothonMatrix.tsx`) :**
+  - Découpage séquentiel de `ContactForm` (`identity` → `contact` → `loi25` → étapes bénévolat conditionnelles `vol_roles` / `vol_skills` / `vol_logistics` / `vol_extra` / `vol_consent` → `Récapitulatif avant validation` avec boutons `Modifier` et avancement via `Entrée`).
+  - Parcours `InstallFestMatrix` découpé en **6 étapes** avec auto-avance sur choix unique (catégorie, système actuel, distribution) ; intégration des notes et présence de `GenericMatrix` au récapitulatif final.
+- **Cockpit Réparateur unifié & arbre Oui/Non (`ReparateurCockpit.tsx`, `DiagnosticDecisionTree.tsx`, `src/utils/repairLexicon.ts`, `IfixitGuidesPanel.tsx`) :**
+  - Suppression des 3 sous-onglets au profit d'une vue unifiée progressive : fiche technique permanente + minuteur en direct, arbre de diagnostic interactif **Oui / Non** (`DIAGNOSTIC_DECISION_TREES`) avec vérifications complémentaires repliables et ciblage des guides, liste de guides pertinents (`embedded`) avec recherche manuelle repliable, et raccourci **`Valider rapidement`** sur le rapport final.
+- **Vues simplifiées Formateur & Assistant (`FormateurEvaluationPanel.tsx`, `AssistantCockpit.tsx`) :**
+  - Mode guidé par défaut : 1 apprenant et 1 étape à la fois avec auto-avance de `1. Avant` vers `2. Pendant` (bascule `Vue liste` disponible), et 1 action prioritaire à la fois (`Action 1 sur N`) pour l'Assistant (bascule `Voir toute la file` disponible).
+
+---
+
 ## [1.8.0] — 2026-11-27
 
 ### Ajouté

@@ -690,6 +690,52 @@ button:disabled {
 
 
 
+/* --- ACCESSIBILITÉ WCAG 2.1/2.2 AAA : TEXTE AGRANDI & CONTRASTE ÉLEVÉ --- */
+html.a11y-large-text {
+  font-size: 112.5%;
+}
+
+html.a11y-high-contrast {
+  --app-bg: #0b0318;
+  --app-bg-footer: #080212;
+  --app-text: #ffffff;
+  --app-text-muted: #e2e8f0;
+  --app-card: #140829;
+  --app-card-border: #e9d5ff;
+  --app-input: #080212;
+  --app-input-border: #f3e8ff;
+  --app-header: #0b0318;
+  --app-success: #6ee7b7;
+  --app-warning: #fde047;
+  --app-danger: #fca5a5;
+  --app-info: #93c5fd;
+  --app-accent: #f0abfc;
+}
+
+html.a11y-high-contrast.light,
+html.a11y-high-contrast body.light {
+  --app-bg: #ffffff;
+  --app-bg-footer: #f8fafc;
+  --app-text: #020617;
+  --app-text-muted: #1e293b;
+  --app-card: #ffffff;
+  --app-card-border: #0f172a;
+  --app-input: #ffffff;
+  --app-input-border: #0f172a;
+  --app-header: #ffffff;
+  --app-success: #14532d;
+  --app-warning: #78350f;
+  --app-danger: #7f1d1d;
+  --app-info: #1e3a8a;
+  --app-accent: #581c87;
+  background: #ffffff !important;
+}
+
+html.a11y-high-contrast :focus-visible {
+  outline: 3px solid var(--app-text) !important;
+  outline-offset: 2px !important;
+}
+
 /* Mode « Kiosque formulaire » d'une tablette : l'onglet d'inscription n'affiche que sa carte .kiosk-keep,
    centrée ; les listes de la régie et les commandes réservées au personnel (.kiosk-hide) sont masquées. */
 .kiosk-form-only {

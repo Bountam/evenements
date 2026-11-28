@@ -30,7 +30,9 @@ test('Workflows par rôle sur mobile : Réparateur (Piste + Lexique + sans bén�
   await page.getByRole('button', { name: /Inscrire le participant/i }).click();
 
   await page.locator('#rp-displayName').fill('Sophie Côté');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-phone').fill('514 555-1234');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#rp-consentActivity').check();
   await page.getByRole('button', { name: /Valider et enregistrer 1 appareil/i }).click();
   await expect(page.getByText('Appareil enregistré pour Sophie Côté !')).toBeVisible();
@@ -55,27 +57,29 @@ test('Workflows par rôle sur mobile : Réparateur (Piste + Lexique + sans bén�
     .getByRole('button', { name: /Prendre cet appareil/i })
     .click();
 
-  // Piste Temps Réel : Appel Table + Lexique + Demander Assistant
-  await page.getByRole('button', { name: /Appeler à la Table/i }).click();
-  await page.getByRole('button', { name: /Demander Assistant/i }).click();
-  await page.getByRole('button', { name: /Lexique & Aide/i }).click();
+  // Piste Temps Réel unifiée : Appel Table + Lexique + Demander Assistant
+  await page.getByRole('button', { name: /Appeler Table/i }).click();
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+  await page.getByRole('button', { name: 'Lexique', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Lexique & Fiches/i })).toBeVisible();
   await page.keyboard.press('Escape');
 
   // Changer de rôle via le bouton unique d'en-tête -> Animateur Assistant -> identification rapide en 1 champ -> Cockpit Assistant
-  await page.getByRole('button', { name: 'Animateur Réparateur' }).click();
+  await page.getByRole('button', { name: /Animateur Réparateur/i }).click();
   await page.getByRole('button', { name: /Animateur Assistant/i }).click();
   await page.locator('#mob-vol-displayName').fill('Julie');
   await page.getByRole('button', { name: /Confirmer et ouvrir mon espace/i }).click();
 
+  await expect(page.getByText(/Action 1 sur/i)).toBeVisible();
+  await page.getByRole('button', { name: /Voir toute la file/i }).click();
   await expect(page.getByText(/Demandes d'aide des réparateurs \(1\)/i)).toBeVisible();
   await page.getByRole('button', { name: /J'interviens \/ Résolu/i }).click();
 
   // Revenir en Réparateur et compléter le Rapport final en 3 écrans
-  await page.getByRole('button', { name: 'Animateur Assistant' }).click();
+  await page.getByRole('button', { name: /Animateur Assistant/i }).click();
   await page.getByRole('button', { name: /Animateur Réparateur/i }).click();
   await page.getByRole('button', { name: /Alexandre Tremblay/i }).click();
-  await page.getByRole('button', { name: '4. Rapport' }).click();
+  await page.getByRole('button', { name: /Clôturer et faire le rapport/i }).click();
   await page.getByRole('button', { name: 'Réparé !' }).click();
   await page.getByRole('button', { name: 'Nettoyage poussière interne' }).click();
   await page.getByRole('button', { name: /^Continuer/i }).click();
@@ -108,17 +112,19 @@ test('Formateur sur tablette : évaluation Avant / Pendant / Après (+X niveaux 
   await page.locator('#att-displayName').fill('Camille Bouchard');
   await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#att-phone').fill('514 555-4444');
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('#att-consentActivity').check();
+  await page.getByRole('button', { name: 'Suivant' }).click();
   await page.locator('form button[type="submit"]').first().click();
   await expect(page.getByText('Camille Bouchard').first()).toBeVisible();
 
   await page.getByRole('tab', { name: 'Bilan & Évaluation' }).click();
   await expect(page.getByText(/Évaluation Formateur/i)).toBeVisible();
 
+  // En vue guidée : cliquer 1 · Débutant passe automatiquement à 2. Pendant
   await page.getByRole('button', { name: '1 · Débutant' }).first().click();
-  await page.getByRole('button', { name: '2. Pendant' }).click();
   await page.getByRole('button', { name: 'Pratique réussie' }).first().click();
-  await page.getByRole('button', { name: '3. Après' }).click();
+  await page.getByRole('button', { name: '3. Après' }).first().click();
   await page.getByRole('button', { name: "3 · À l'aise" }).first().click();
   await expect(page.getByText('+2 niveaux').first()).toBeVisible();
   await page.getByRole('button', { name: /Prêt\(e\) à rejoindre un Réparothon/i }).first().click();
