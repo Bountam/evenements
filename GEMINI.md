@@ -12,7 +12,7 @@ Application événementielle autonome et 100 % hors-ligne pour **Insertech** (PC
   - Sauvegarde persistante SQLite hors navigateur (`src/utils/sqliteBackup.ts`) via le lanceur PC (`StorageCompanion.cs` inclut aussi le relais local `/image` allowlisté pour compresser les miniatures iFixit) ou `InsertechStockage` sur Android.
   - Synchronisation LAN chiffrée PC ↔ Tablettes Android via `P2PNetworkManager` (`src/network.ts`, `src/net/`) et `ServeurLocalPlugin.java` (WebSocket sur port `47630` avec `WifiLock` basse latence) + distribution ciblée des guides hors-ligne (`GUIDES_SYNC`, `REQUEST_GUIDE_SEARCH`).
   - Synchronisation inter-onglets locale via `BroadcastChannel` (ex. fenêtre Écran Public `?vue=public`).
-  - Clé API iFixit optionnelle lue depuis `.env.local` (`VITE_IFIXIT_API_KEY`, ignoré par Git), le secret CI ou `localStorage`, jamais versionnée dans le dépôt.
+  - Clé API iFixit optionnelle saisie par l'administrateur sur le PC hôte seulement (`localStorage`). Jamais de variable `VITE_*` pour un secret : Vite la copierait en clair dans le bundle public. `scripts/check-bundle-secrets.js` (lancé par `npm run build`) fait échouer le build si une clé s'y retrouve.
 
 ---
 

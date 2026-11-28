@@ -1430,7 +1430,7 @@ Le cockpit **Assistant** (`AssistantCockpit.tsx`) adopte également une vue guid
 
 - **Gestionnaire sur Laptop (`OfflineGuidesLibraryModal.tsx`) :** accessible aux administrateurs via **Plus → Bibliothèque de guides hors-ligne** :
   - **9 fiches maison Insertech** pré-incluses (`BUILTIN_REPAIR_GUIDES` dans `src/utils/offlineGuideLibrary.ts`).
-  - **Pré-téléchargement iFixit** depuis le PC serveur (avec votre clé API stockée uniquement hors Git dans `.env.local`, secret CI `VITE_IFIXIT_API_KEY` ou `localStorage`), compressant 1 miniature par étape (via le relais local `/image` de `launcher/StorageCompanion.cs`) tout en conservant `fullResUrl`.
+  - **Pré-téléchargement iFixit** depuis le PC serveur (avec la clé d'API saisie par l'administrateur sur le PC hôte uniquement : elle n'est jamais dans le bundle, ni dans la CI, ni sur les tablettes ; `npm run build` échoue si une clé s'y retrouve, via `scripts/check-bundle-secrets.js`), compressant 1 miniature par étape (via le relais local `/image` de `launcher/StorageCompanion.cs`) tout en conservant `fullResUrl`.
   - Création de **fiches maison** personnalisées et **import / export JSON** d'un pack de guides.
 - **Filtrage strict selon l'inscription (`matchOfflineGuidesForTicket`) :** exclut automatiquement toute fiche dont la **marque**, la **catégorie**, l'**OS** ou les **symptômes** ne correspondent pas au ticket (ex. un guide batterie Dell n'apparaît jamais pour un PC Lenovo sous Linux lent).
 - **Distribution LAN ciblée (`src/network.ts`) :** dès l'inscription ou la mise à jour d'un ticket (et à `INITIAL_SYNC`), le PC hôte pousse automatiquement uniquement les guides pertinents vers les tablettes via `GUIDES_SYNC`, sans alourdir chaque delta de ticket.

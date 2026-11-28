@@ -5,11 +5,6 @@ export const IFIXIT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const IFIXIT_TIMEOUT_MS = 6000;
 export const IFIXIT_API_KEY_STORAGE_KEY = 'insertech_ifixit_api_key';
 
-function getEnvApiKey(): string {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
-  return (env?.VITE_IFIXIT_API_KEY || '').trim();
-}
-
 export function getStoredIfixitApiKey(): string {
   try {
     return (localStorage.getItem(IFIXIT_API_KEY_STORAGE_KEY) || '').trim();
@@ -18,8 +13,9 @@ export function getStoredIfixitApiKey(): string {
   }
 }
 
+// La clé n'existe que sur le PC hôte (saisie par l'administrateur) : jamais dans le bundle ni sur les tablettes
 export function getIfixitApiKey(): string {
-  return getStoredIfixitApiKey() || getEnvApiKey();
+  return getStoredIfixitApiKey();
 }
 
 export function setIfixitApiKey(apiKey: string): void {

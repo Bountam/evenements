@@ -30,9 +30,8 @@ jobs:
       - name: Lint (types, design system, versions synchronisées)
         run: npm run lint
 
+      # Aucune clé d'API n'est passée au build : scripts/check-bundle-secrets.js le vérifie
       - name: Bundle autonome (dist/)
-        env:
-          VITE_IFIXIT_API_KEY: ${{ secrets.VITE_IFIXIT_API_KEY }}
         run: npm run build:mobile
 
       - name: Installer Chromium pour le test de rendu
