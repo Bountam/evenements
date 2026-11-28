@@ -175,7 +175,7 @@ test('ReparateurCockpit tablette : fiche, diagnostic Oui/Non, guides locaux et a
   await installIfixitMocks(page, ifixit);
 
   await page
-    .locator('.p-4.rounded-2xl')
+    .getByTestId('appareil-en-attente')
     .filter({ hasText: 'Marc Tremblay' })
     .getByRole('button', { name: /Prendre cet appareil/i })
     .click();

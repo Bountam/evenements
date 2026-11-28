@@ -46,6 +46,7 @@ import {
 } from '../../services/ifixitService';
 import IfixitGuideViewer from '../matrices/reparothon/IfixitGuideViewer';
 import { saveFile } from '../../utils/saveFile';
+import ScrollZone from './ScrollZone';
 
 interface OfflineGuidesLibraryModalProps {
   isOpen: boolean;
@@ -314,7 +315,7 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
               </div>
             </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            <ScrollZone className="space-y-2 max-h-96 pr-1">
               {guides.map((g) => (
                 <div
                   key={g.id}
@@ -385,7 +386,7 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                   </div>
                 </div>
               ))}
-            </div>
+            </ScrollZone>
           </div>
         )}
 
@@ -512,7 +513,7 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
             </form>
             {searchMessage && <p className="text-xs text-warning font-semibold">{searchMessage}</p>}
 
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            <ScrollZone className="space-y-2 max-h-80 pr-1">
               {ifixitResults.map((res) => {
                 const isLinked = linkedIds.has(`${res.lang}-${res.guideid}`);
                 const isBusy = busyId === res.guideid;
@@ -560,7 +561,7 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                   </div>
                 );
               })}
-            </div>
+            </ScrollZone>
           </div>
         )}
 

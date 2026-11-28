@@ -65,7 +65,7 @@ export default function ModeControls({ locked, canLock = true, onLock, onRequest
       title="Verrouiller la tablette dans le Kiosque d'inscription (code requis pour en sortir)"
     >
       <LockOpen size={13} aria-hidden="true" />
-      <span>Verrouiller le kiosque</span>
+      <span className="max-md:sr-only">Verrouiller le kiosque</span>
     </Button>
   );
 }

@@ -121,7 +121,7 @@ test('Bibliothèque hors-ligne : filtrage strict selon l’inscription, zoom ima
   await page.getByRole('button', { name: /Alexandre Tremblay/i }).click();
 
   await page
-    .locator('.p-4.rounded-2xl')
+    .getByTestId('appareil-en-attente')
     .filter({ hasText: 'Claire Gagnon' })
     .getByRole('button', { name: /Prendre cet appareil/i })
     .click();

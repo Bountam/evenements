@@ -58,6 +58,7 @@ import {
   Medal,
   Ellipsis
 } from 'lucide-react';
+import ScrollZone from '../shared/ScrollZone';
 
 interface TeardownMatrixProps {
   event: EventSettings;
@@ -1538,7 +1539,7 @@ export default function TeardownMatrix({
                 })()}
 
                 {raffleDraws.length > 1 && (
-                  <ul className="text-micro font-sans space-y-0.5 max-h-24 overflow-y-auto pr-1">
+                  <ScrollZone as="ul" className="text-micro font-sans space-y-0.5 max-h-24 pr-1">
                     {raffleDraws
                       .slice(0, -1)
                       .reverse()
@@ -1548,7 +1549,7 @@ export default function TeardownMatrix({
                           <span className="shrink-0">{d.status === 'absent' ? 'absent' : 'gagnant'}</span>
                         </li>
                       ))}
-                  </ul>
+                  </ScrollZone>
                 )}
 
                 <button
@@ -1679,7 +1680,7 @@ export default function TeardownMatrix({
             </div>
 
             {/* Liste déroulante interne uniquement */}
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
+            <ScrollZone className="flex-1 min-h-0 space-y-1.5 pr-1">
               {filteredParticipants.length === 0 ? (
                 participants.length === 0 ? (
                   <div className="text-center py-8 px-3 space-y-1.5">
@@ -1858,7 +1859,7 @@ export default function TeardownMatrix({
                   );
                 })
               )}
-            </div>
+            </ScrollZone>
           </div>
         </div>
         )}
@@ -2316,7 +2317,7 @@ function PublicTrackBlock({ track, isSingle = false, podiumTimes }: PublicTrackB
           <h3
             className={`font-display font-black uppercase text-app-text line-clamp-2 text-balance mt-0.5 leading-[1.05] ${
               // Lisible à 5 mètres sur un téléviseur : environ 6 % de la hauteur de l'écran, borné par la largeur de la carte
-              isSingle ? 'text-[clamp(1.5rem,min(8cqi,8vh),5.5rem)]' : 'text-[clamp(1.125rem,min(9cqi,5.5vh),4rem)]'
+              isSingle ? 'text-[clamp(1.5rem,min(8cqi,8dvh),5.5rem)]' : 'text-[clamp(1.125rem,min(9cqi,5.5dvh),4rem)]'
             }`}
           >
             {track.participantName}
@@ -2397,7 +2398,7 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
 
   if (sorted.length === 0) {
     return (
-      <div className="shrink-0 h-[clamp(3rem,4.5vh,4.5rem)] rounded-2xl bg-app-card/80 border border-app-card-border shadow-sm flex items-center justify-center px-4 text-kiosk-caption font-semibold text-app-text-muted">
+      <div className="shrink-0 h-[clamp(3rem,4.5dvh,4.5rem)] rounded-2xl bg-app-card/80 border border-app-card-border shadow-sm flex items-center justify-center px-4 text-kiosk-caption font-semibold text-app-text-muted">
         <Sparkles size={14} className="text-primary mr-2 animate-pulse" />
         <span>Soyez le premier participant à relever le défi et inscrire votre nom au classement !</span>
       </div>
@@ -2408,7 +2409,7 @@ function PublicParticipantsTicker({ participants, eventName, prizes }: PublicPar
   const displayItems = sorted.length < 8 ? [...sorted, ...sorted, ...sorted, ...sorted] : [...sorted, ...sorted];
 
   return (
-    <div className="shrink-0 h-[clamp(3rem,4.5vh,4.5rem)] rounded-2xl bg-app-card/95 border border-app-card-border shadow-md backdrop-blur-md flex items-center overflow-hidden">
+    <div className="shrink-0 h-[clamp(3rem,4.5dvh,4.5rem)] rounded-2xl bg-app-card/95 border border-app-card-border shadow-md backdrop-blur-md flex items-center overflow-hidden">
       {/* Badge fixe gauche avec conteneur opaque et ombre portée masquante */}
       <div className="shrink-0 h-full flex items-center bg-app-card pl-2.5 sm:pl-3.5 pr-3 z-20 shadow-[15px_0_15px_-4px_rgba(0,0,0,0.35)] border-r border-app-card-border/60">
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-primary/20 border border-primary/40 text-primary font-display font-black text-kiosk-caption uppercase tracking-wider shadow-sm">

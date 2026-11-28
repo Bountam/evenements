@@ -543,7 +543,7 @@ export default function IfixitGuideViewer({
             src={fullResOverlayUrl}
             alt={`${guide.title} - Pleine résolution`}
             onClick={(e) => e.stopPropagation()}
-            className="max-h-[82vh] max-w-full object-contain rounded-2xl border border-app-card-border bg-app-card shadow-2xl"
+            className="max-h-[82dvh] max-w-full object-contain rounded-2xl border border-app-card-border bg-app-card shadow-2xl"
           />
         </div>
       )}

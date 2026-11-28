@@ -52,7 +52,7 @@ test('Workflows par rôle sur mobile : Réparateur (Piste + Lexique + sans bén�
   // File d'attente intelligente : « Recommandé pour toi » + prise de l'appareil de Sophie Côté
   await expect(page.getByText('Recommandé pour toi').first()).toBeVisible({ timeout: 10_000 });
   await page
-    .locator('.p-4.rounded-2xl')
+    .getByTestId('appareil-en-attente')
     .filter({ hasText: 'Sophie Côté' })
     .getByRole('button', { name: /Prendre cet appareil/i })
     .click();

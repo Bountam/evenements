@@ -393,14 +393,14 @@ export default function JudgeConcoursCockpit({
     selectedPoolIds.length;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 court:space-y-2">
       {/* En-tête du Juge (2 joueurs max) */}
-      <div className="bg-app-card border border-app-card-border p-4 sm:p-5 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-app-card border border-app-card-border p-4 sm:p-5 court:p-3 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div>
-          <span className="text-micro font-black uppercase tracking-widest text-primary block">
+          <span className="text-micro font-black uppercase tracking-widest text-primary block court:hidden">
             Animateur Juge • {judgeName}
           </span>
-          <h2 className="text-xl font-display font-bold uppercase text-app-text">
+          <h2 className="text-xl court:text-base font-display font-bold uppercase text-app-text">
             Mes joueurs devant moi ({myTracks.length}/2)
           </h2>
           <p className="text-xs text-app-text-muted" data-testid="pistes-du-juge">
@@ -409,7 +409,7 @@ export default function JudgeConcoursCockpit({
               : 'Réservation de vos pistes…'}
           </p>
         </div>
-        {canAddMorePlayers && myRunningTracks.length === 0 && (
+        {canAddMorePlayers && myRunningTracks.length === 0 && (myTracks.length > 0 || results.length > 0) && (
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
@@ -438,20 +438,21 @@ export default function JudgeConcoursCockpit({
 
       {/* État vide : inciter à inscrire le premier joueur */}
       {myTracks.length === 0 && results.length === 0 && (
-        <div className="bg-app-card border-2 border-dashed border-app-card-border p-8 rounded-3xl text-center space-y-4">
-          <Timer size={42} className="text-primary mx-auto" />
+        <div className="bg-app-card border-2 border-dashed border-app-card-border p-8 max-sm:p-5 court:p-3 rounded-3xl text-center space-y-4 court:space-y-2">
+          <Timer size={42} className="text-primary mx-auto court:hidden" />
           <div className="space-y-1">
             <h3 className="text-lg font-display font-bold uppercase text-app-text">
               Aucun joueur devant vous pour l'instant
             </h3>
-            <p className="text-xs text-app-text-muted max-w-md mx-auto">
+            <p className="text-xs text-app-text-muted max-w-md mx-auto court:hidden">
               Inscrivez 1 ou 2 joueurs assis devant vous pour démarrer le défi et les arrêter séparément.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
-            className="min-h-14 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer inline-flex items-center gap-2 shadow-lg"
+            data-primary-action
+            className="min-h-14 court:min-h-12 px-6 py-3 rounded-2xl bg-primary text-secondary font-display font-black uppercase text-sm cursor-pointer inline-flex items-center gap-2 shadow-lg"
           >
             <UserPlus size={18} />
             <span>Inscrire mon 1er joueur</span>

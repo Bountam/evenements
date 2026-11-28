@@ -5,6 +5,7 @@ import { db } from '../../db';
 import Modal from '../shared/Modal';
 import { exportConsolidatedMultiEventXlsx } from '../../utils/impactReport';
 import { showToast } from '../shared/Toast';
+import ScrollZone from './ScrollZone';
 
 interface MultiEventControlBarProps {
   activeEvent: EventSettings;
@@ -124,7 +125,7 @@ export function MultiEventHeaderSelector({ activeEvent, onSelectEvent }: MultiEv
           <p className="px-2 py-1 text-micro font-bold uppercase text-app-text-muted">
             Activités récentes ({pinnedEvents.length} épinglées)
           </p>
-          <div className="max-h-56 overflow-y-auto space-y-1">
+          <ScrollZone className="max-h-56 space-y-1">
             {pinnedEvents.map((evt) => {
               const isCurrent = evt.id === activeEvent.id;
               return (
@@ -147,7 +148,7 @@ export function MultiEventHeaderSelector({ activeEvent, onSelectEvent }: MultiEv
                 </button>
               );
             })}
-          </div>
+          </ScrollZone>
           <div className="pt-1.5 border-t border-app-card-border flex flex-wrap gap-1.5">
             {pinnedEvents.length > 1 && (
               <button

@@ -3,6 +3,7 @@ import { Megaphone, PackagePlus, Search, Clock } from 'lucide-react';
 import type { EventSettings, RepairTicket, Technician } from '../../../types';
 import { networkManager } from '../../../network';
 import { showToast } from '../../shared/Toast';
+import ScrollZone from '../../shared/ScrollZone';
 
 interface AccueilQueueViewProps {
   event: EventSettings;
@@ -131,7 +132,7 @@ export default function AccueilQueueView({
       {filtered.length === 0 ? (
         <p className="text-xs text-app-text-muted text-center py-8">Aucun visiteur dans cette vue.</p>
       ) : (
-        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+        <ScrollZone className="space-y-3 max-h-[600px] pr-1">
           {filtered.map((t) => {
             const waitMin = Math.max(0, Math.round((Date.now() - t.createdAt) / 60000));
             const tech = technicians.find((tc) => tc.id === t.assignedTechId);
@@ -180,7 +181,7 @@ export default function AccueilQueueView({
               </div>
             );
           })}
-        </div>
+        </ScrollZone>
       )}
     </div>
   );

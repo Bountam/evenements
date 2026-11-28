@@ -12,6 +12,7 @@ import ContactForm from '../shared/ContactForm';
 import FormateurEvaluationPanel from './generic/FormateurEvaluationPanel';
 import type { ProgressionLevel, WorkRole } from '../../types';
 import { ContactErrors, buildContactInfo, emptyContactDraft, firstContactError, fullName, validateContact } from '../../utils/contact';
+import ScrollZone from '../shared/ScrollZone';
 
 interface GenericMatrixProps {
   event: EventSettings;
@@ -427,7 +428,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
           {attendees.length === 0 ? (
             <p className="text-xs text-app-text-muted text-center py-12 font-sans">Aucun participant enregistré.</p>
           ) : (
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+            <ScrollZone className="space-y-3 max-h-[500px] pr-1">
               {attendees.map((a) => (
                 <div key={a.id} className="p-3.5 rounded-xl bg-app-input border border-app-card-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
@@ -531,7 +532,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
                   </div>
                 </div>
               ))}
-            </div>
+            </ScrollZone>
           )}
         </div>
 
@@ -637,7 +638,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
           {feedbackList.filter(a => a.feedbackText).length === 0 ? (
             <p className="text-xs text-app-text-muted text-center py-12 font-sans">Aucun commentaire textuel formulé.</p>
           ) : (
-            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+            <ScrollZone className="space-y-3 max-h-[350px] pr-1">
               {feedbackList
                 .filter(a => a.feedbackText)
                 .map((a) => (
@@ -653,7 +654,7 @@ export default function GenericMatrix({ event, activeTab, workRole = 'admin' }: 
                     <p className="text-xs text-app-text-muted font-sans italic">"{a.feedbackText}"</p>
                   </div>
                 ))}
-            </div>
+            </ScrollZone>
           )}
         </div>
 
