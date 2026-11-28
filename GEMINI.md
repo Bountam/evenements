@@ -63,6 +63,8 @@ Définis dans `src/types.ts` et gérés par `src/utils/modeLock.ts` + `src/compo
 
 ## 4. Fonctionnement des Mises à Jour & Releases
 
+- **Marche à suivre complète (push, Pull Request, release) : [`docs/push-pull-release.md`](docs/push-pull-release.md).** Passer par une branche et une Pull Request vers `main` (la « Vérification de PR » lance lint, build et tous les tests, dont le test zéro défilement) plutôt que pousser directement sur `main`.
+
 - **Source unique de version (`package.json` + `scripts/sync-version.js`) :**
   - `package.json` (`version` `X.Y.Z`) est la seule source de vérité.
   - `node scripts/sync-version.js` propage automatiquement la version vers `launcher/InsertechLauncher.csproj` (`Version`, `FileVersion`, `AssemblyVersion`), `app.manifest` (`X.Y.Z.0`) et `android/app/build.gradle` (`versionName` + `versionCode = major * 10000 + minor * 100 + patch`, strictement croissant pour permettre à Android la mise à jour par-dessus).
