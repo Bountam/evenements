@@ -37,8 +37,21 @@ jobs:
       - name: Installer Chromium pour le test de rendu
         run: npx playwright install --with-deps chromium
 
-      - name: Test de rendu (file:// et http, 3 tailles d'écran)
+      - name: Tests (rendu, synchro, zéro défilement sur 6 tailles d'écran)
         run: npm run test:ui
+
+      - name: Galerie des captures « zéro défilement »
+        if: always()
+        run: node scripts/galerie-captures.js || true
+
+      - name: Téléverser la galerie de captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: galerie-zero-defilement
+          path: captures/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Rapport du test de rendu (en cas d'échec)
         if: failure()

@@ -9,6 +9,10 @@ import { ECRANS, mesurer, type Mesure } from './helpers/ecrans';
 const DOSSIER = path.resolve('captures');
 const RAPPORT = process.env.RAPPORT === '1';
 
+// Titres des écrans pour la galerie
+fs.mkdirSync(DOSSIER, { recursive: true });
+fs.writeFileSync(path.join(DOSSIER, 'ecrans.json'), JSON.stringify(ECRANS.map((e) => [e.id, e.titre])));
+
 function problemes(m: Mesure): string[] {
   const p: string[] = [];
   if (m.pageX > 1) p.push(`page plus large que l'écran (+${m.pageX}px)`);

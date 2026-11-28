@@ -1136,13 +1136,20 @@ Cette fonction génère et télécharge un fichier CSV (ou JSON) prérempli avec
 
 ## 9. DashboardShell.tsx — Coquille du tableau de bord
 
-### 9.1 En-tête permanent compact et navigation mobile
+### 9.1 Zéro défilement : un écran = tout ce qu'il faut (v1.9.0)
 
-L'en-tête reste permanent et tient sur une seule ligne (`h-14 min-h-14 sticky top-0 z-40`), sans chevauchement ni retour à la ligne sur portable (`1366×768`), tablette (`800×1280`) et téléphone (`412×915`), y compris en mode Kiosque d'inscription (seul l'Écran Public projecteur conserve son auto-masquage au repos). Il affiche :
-- Le logo Insertech (clic = retour au menu principal)
-- Le titre court de l'événement (cliquable sur Laptop via `MultiEventHeaderSelector` pour changer d'activité, ouvrir la **Tour de contrôle** ou exporter le bilan consolidé multi-événements)
-- Sur écrans `>= 640px`, les onglets compacts (`TabSwitcher`) ; sur mobile `< 640px`, une barre de navigation fixe en bas d'écran (`variant="bottom"`)
-- Les actions en icônes prioritaires avec libellés accessibles : rôle actif (mobile), verrouillage Kiosque, état réseau (Bleu / Jaune / Rouge), `Devenir bénévole` (masqué pour le Réparateur), `Rapport d'Impact` (`admin`) et le menu `Plus` (`MoreMenu`, contenant `Texte agrandi`, `Contraste élevé`, projecteur, thème, verrouillage PC, bibliothèque de guides et sauvegardes)
+La page ne défile jamais (`html`, `body` et `#root` à `100 %` sans défilement ; coquille en `h-dvh`, qui suit la barre d'adresse et le clavier des cellulaires). Priorité au cellulaire et à la tablette, en portrait comme en paysage :
+- **En-tête** d'une ligne (`h-14`, `h-11` en paysage cellulaire) : logo (clic = menu principal), titre court de l'événement (sélecteur multi-événements sur Laptop), actions en icônes avec libellés accessibles (rôle, verrouillage, réseau, `Devenir bénévole`, `Rapport d'Impact`, menu `Plus` qui contient aussi la version).
+- **Onglets** : compacts dans l'en-tête sur écran large ; sur cellulaire, barre de 4-5 icônes en bas, qui devient une colonne à gauche en paysage (variante Tailwind `court:` = hauteur ≤ 480 px).
+- **Contenu** : prend toute la hauteur restante. Seules les listes défilent, toujours dans `ScrollZone` (`src/components/shared/ScrollZone.tsx`), avec un léger fondu en haut ou en bas quand il reste du contenu. `kind="liste"` pour une liste longue ; `kind="page"` sert de filet de sécurité et ne doit jamais défiler.
+- **Modales** plein écran sur cellulaire (`max-sm` et `court`), corps dans une `ScrollZone`.
+- **Texte tactile** 16 px minimum sur tablette (`html.appareil-tactile`, `pointer: coarse`).
+- **Cockpit réparateur** : file d'attente en liste ; appareil en cours = fiche compacte, onglets `Diagnostic` / `Guides` (côte à côte dès 1024 px), boutons `Réparé` et `Rapport` toujours visibles en bas.
+
+Garde-fous :
+- `npm run lint` (`scripts/check-design-tokens.js`) refuse `overflow-auto`, `overflow-y-auto`, `h-screen`, `min-h-screen` et les unités `vh` en dehors de `ScrollZone.tsx`.
+- `tests/zero-defilement.spec.ts` ouvre les 10 écrans prioritaires (`tests/helpers/ecrans.ts`) sur 6 tailles (360×640, 640×360, 390×844, 844×390, 800×1280, 1280×800 ; laptop 1366×768 ; TV 1920×1080 et 1280×720), plus clavier ouvert (hauteur −40 %) pour les formulaires. Il échoue si la page déborde, si quelque chose défile hors `ScrollZone`, si la zone « page » déborde ou si le bouton principal (`data-primary-action`) sort de l'écran. `RAPPORT=1` liste les écarts sans échouer.
+- Chaque capture va dans `captures/` ; `npm run galerie` en fait `captures/index.html`. La CI publie la galerie (artefact `galerie-zero-defilement`) à chaque build.
 
 ### 9.2 Les onglets par type d'événement
 
@@ -2512,8 +2519,8 @@ faut désinstaller (exporter les données avant).
 | Commande | Où | Ce qu'elle vérifie |
 | --- | --- | --- |
 | `./gradlew :app:testDebugUnitTest` | Dossier `android/`, CI de chaque PR | Vérification des mises à jour en Java pur (`VerificationMaj` : SHA-256, certificats, reprise d'envoi) |
-| `./gradlew :app:connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
-| `npm run test:ui` | PC, CI de chaque PR | Interface, synchro avec une tablette simulée, envoi de mise à jour simulé |
+| `./gradlew :app:connectedDebugAndroidTest` | Émulateur ou tablette branchée ; CI `android-emulateur.yml` si `android/` change, à chaque poussée sur `main` et à la demande (*Run workflow*) | L'application démarre, la page se charge depuis l'APK, les plugins répondent, la sauvegarde SQLite relit ce qu'elle a écrit, le lien du QR ouvre l'application |
+| `npm run test:ui` | PC, CI de chaque PR | Interface, synchro avec une tablette simulée, envoi de mise à jour simulé, zéro défilement sur 6 tailles (galerie de captures) |
 
 L'émulateur de la CI utilise une image Android 10 **sans services Google** (`target: default`), pour prouver
 que l'application n'en dépend pas.

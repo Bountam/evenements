@@ -4,6 +4,34 @@ Toutes les évolutions notables d'**Insertech — Tableau de bords événementie
 
 ---
 
+## [1.9.0] — 2026-11-28
+
+### Sécurité
+- **Code PIN jamais affiché sur les tablettes, vérifié par le PC hôte :** plus aucune mention du code par défaut sur les tablettes (seul le PC l'affiche tant qu'aucun code personnalisé n'est choisi). La tablette reliée demande au PC de vérifier le code (`PIN_CHECK` / `PIN_RESULT`, 3 essais puis attente croissante), avec repli sur la copie locale.
+- **Plus aucune clé iFixit dans le bundle publié :** `VITE_IFIXIT_API_KEY` n'est plus lue ni fournie à la CI ; `scripts/check-bundle-secrets.js` (lancé par `npm run build`) échoue si une clé se retrouve dans `dist/`. La clé n'existe que sur le PC hôte.
+
+### Synchro
+- **Chaque tablette ne reçoit que son événement :** `INITIAL_SYNC`, `DB_DELTA` et l'état des pistes sont filtrés par l'événement de la tablette ; le PC refuse toute écriture dans un autre événement. Un événement quitté est effacé de la tablette à la fin de sa journée.
+- **Pistes réservées par juge :** `JUDGE_CLAIM` / `TRACK_RELEASE` ; le PC refuse tout `TRACK_ASSIGN` sur la piste d'un autre juge ou déjà occupée (`CHRONO_REJECTED`, message « Piste déjà prise. Recommencez. »). Bouton « Libérer » sur le laptop.
+
+### Guides de réparation
+- **33 fiches Insertech complètes en local** (`src/data/guidesLocaux.ts`), badge « Brouillon » tant qu'une fiche n'est pas relue.
+- **Articles iFixit liés aux fiches** depuis la Bibliothèque du PC hôte (Aperçu, Lier, Tester la clé). La base iFixit n'est plus copiée.
+- **Tablettes : tout passe par le PC hôte** (`IFIXIT_REQUEST` / `IFIXIT_RESULT` / `IFIXIT_IMAGE`) : texte sans adresse d'image, photos compressées ensuite ; aucune requête vers ifixit.com depuis une tablette. Attribution iFixit (auteur, licence CC BY-NC-SA, lien) dans le lecteur.
+
+### Interface : zéro défilement
+- La page ne défile plus : coquille `h-dvh`, seules les listes défilent dans `ScrollZone` (fondu haut/bas). Barre d'onglets en bas sur cellulaire, colonne à gauche en paysage ; modales plein écran ; texte tactile 16 px minimum.
+- Écrans compacts en paysage : rejoindre, onboarding (bouton visible clavier ouvert), formulaire du kiosque, cockpit juge.
+- **Cockpit réparateur** : file d'attente en liste défilante ; appareil en cours avec onglets `Diagnostic` / `Guides` (côte à côte sur écran large) et boutons de clôture toujours visibles.
+- Garde-fou `npm run lint` : `overflow-auto`, `h-screen` et `vh` interdits hors `ScrollZone`.
+
+### Tests et CI
+- `tests/zero-defilement.spec.ts` : 10 écrans prioritaires sur 6 tailles (+ clavier ouvert), galerie de captures `npm run galerie`, publiée par la CI (artefact `galerie-zero-defilement`).
+- Nouveaux tests de synchro avec tablettes simulées : PIN, événement de la tablette, pistes des juges, relais iFixit.
+- Le test Android sur émulateur tourne aussi à chaque poussée sur `main` et à la demande.
+
+---
+
 ## [1.8.1] — 2026-11-27
 
 ### Amélioré
