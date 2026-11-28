@@ -9,10 +9,6 @@ const SIMULATE_ANDROID = () => {
 // PNG 1x1 valide en base64 pour mocker miniature et image pleine résolution
 const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-const TINY_PNG_BUFFER = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-  'base64'
-);
 
 test('Bibliothèque hors-ligne : filtrage strict selon l’inscription, zoom image HD et gestionnaire Laptop', async ({
   page
@@ -142,15 +138,10 @@ test('Bibliothèque hors-ligne : filtrage strict selon l’inscription, zoom ima
     page.getByRole('button', { name: /Windows lent/i })
   ).toHaveCount(0);
 
-  // 4. Tester le clic sur la miniature dans le lecteur :
-  // a) Hors-ligne / erreur HD -> l'image reste affichée telle quelle sans modale cassée
-  let allowFullRes = false;
-  await page.route('https://guide-images.cdn.ifixit.com/igi/test-hd-fullres.jpg', async (route) => {
-    if (!allowFullRes) {
-      await route.abort();
-      return;
-    }
-    await route.fulfill({ contentType: 'image/png', body: TINY_PNG_BUFFER });
+  // 4. Sur tablette, le zoom montre l'image déjà embarquée : aucune requête vers iFixit (même pas la haute résolution)
+  const ifixitRequests: string[] = [];
+  page.on('request', (req) => {
+    if (/ifixit\.com/.test(req.url())) ifixitRequests.push(req.url());
   });
 
   await relevantGuideCard.click();
@@ -159,17 +150,12 @@ test('Bibliothèque hors-ligne : filtrage strict selon l’inscription, zoom ima
   await expect(imgBtn).toBeVisible();
 
   await imgBtn.click();
-  await page.waitForTimeout(300);
-  await expect(page.getByRole('dialog', { name: 'Image étape en pleine résolution' })).toHaveCount(0);
-  await expect(imgBtn).toBeVisible();
-
-  // b) Lorsque la pleine résolution répond, le clic ouvre la vue pleine résolution puis Fermer la referme
-  allowFullRes = true;
-  await imgBtn.click();
   const hdDialog = page.getByRole('dialog', { name: 'Image étape en pleine résolution' });
   await expect(hdDialog).toBeVisible();
+  await expect(hdDialog.locator('img')).toHaveAttribute('src', /^data:image\//);
   await hdDialog.getByRole('button', { name: 'Fermer' }).click();
   await expect(hdDialog).toHaveCount(0);
+  expect(ifixitRequests).toEqual([]);
 
   expect(errors).toEqual([]);
 });

@@ -1,7 +1,12 @@
 import { db, notifySync } from './db';
 import { OfflineRepairGuide, RepairTicket, SyncMessage, TrackState } from './types';
 import { getAppVersion, normalizeVersion } from './utils/updateCheck';
-import { getAllOfflineGuides, matchOfflineGuidesForTicket, searchOfflineGuidesLibrary } from './utils/offlineGuideLibrary';
+import {
+  compressImageToThumbnailDataUrl,
+  getAllOfflineGuides,
+  matchOfflineGuidesForTicket,
+  searchOfflineGuidesLibrary
+} from './utils/offlineGuideLibrary';
 import type { Lien } from './net/lien';
 import { HoteLocal, type EtatHoteLocal } from './net/hoteLocal';
 import { arreterServeurTablette, demarrerServeurTablette, majFicheTablette } from './net/tabletteLocale';
@@ -9,8 +14,18 @@ import { nouvelleCle } from './net/chiffrement';
 import { dateLocale, evenementsAEffacer } from './net/purge';
 import { DiffusionMaj, estMessageMaj, recevoirMajTablette, reinitialiserReceptionMaj, versionCodeDe, type ApkPret, type MessageMaj } from './net/miseAJour';
 import { getNatifMaj } from './native/android';
-import { matchesPin, PinAttemptTracker, readEventPinLock, readLocked } from './utils/modeLock';
+import { getDeviceRole, matchesPin, PinAttemptTracker, readEventPinLock, readLocked } from './utils/modeLock';
 import { sauvegarderMaintenant } from './utils/sqliteBackup';
+import {
+  getIfixitGuideDetail,
+  searchIfixitGuides,
+  setIfixitRelay,
+  type IfixitGuideDetail,
+  type IfixitGuideSummary,
+  type IfixitLang,
+  type IfixitRelay,
+  type IfixitSearchResponse
+} from './services/ifixitService';
 
 // Types de messages réseau local
 export type NetworkMessage =
@@ -46,7 +61,25 @@ export type NetworkMessage =
   // PC hôte → tablette : action de chrono refusée (piste réservée par un autre juge ou déjà occupée)
   | { type: 'CHRONO_REJECTED'; actionType: string; trackId?: number; reason: 'occupee' | 'autre_juge' | 'reservation' }
   | { type: 'PIN_RESULT'; requestId: string; status: 'ok' | 'bad' | 'blocked'; remainingMs?: number; attemptsLeft?: number }
+  // Articles iFixit : la tablette demande, le PC hôte interroge iFixit avec SA clé (jamais transmise) et renvoie
+  // le texte sans aucune adresse d'image ; les photos suivent une à une, compressées, dans IFIXIT_IMAGE
+  | { type: 'IFIXIT_REQUEST'; requestId: string; kind: 'search' | 'guide'; query?: string; enQuery?: string; guideId?: number; lang?: IfixitLang }
+  | { type: 'IFIXIT_RESULT'; requestId: string; ok: boolean; search?: IfixitSearchResponse; guide?: IfixitGuideDetail; erreur?: string }
+  // stepIndex -1 : miniature du résultat de recherche n° imageIndex
+  | { type: 'IFIXIT_IMAGE'; requestId: string; stepIndex: number; imageIndex: number; dataUrl: string }
   | MessageMaj;
+
+export type IfixitResultMessage = Extract<NetworkMessage, { type: 'IFIXIT_RESULT' }>;
+export type IfixitImageMessage = Extract<NetworkMessage, { type: 'IFIXIT_IMAGE' }>;
+
+// Tablette : délai d'attente d'une réponse iFixit relayée (le PC peut essayer FR puis EN, 6 s chacun)
+export const IFIXIT_RELAY_TIMEOUT_MS = 20_000;
+export const IFIXIT_HOST_UNREACHABLE =
+  'PC hôte injoignable : les articles iFixit passent par le PC. Les guides locaux restent disponibles.';
+const IFIXIT_IMAGE_WIDTH = 640;
+const IFIXIT_THUMB_WIDTH = 160;
+const IFIXIT_MAX_IMAGES = 90;
+const IFIXIT_LISTENER_MS = 3 * 60_000;
 
 // Tables dont chaque ligne appartient à un événement (champ eventId)
 const EVENT_TABLES = new Set(['tickets', 'technicians', 'participants', 'attendees']);
@@ -99,6 +132,11 @@ class P2PNetworkManager {
   private pendingGuideSearches = new Map<string, (guides: OfflineRepairGuide[]) => void>();
   private pendingPinChecks = new Map<string, (result: HostPinResult | null) => void>();
   private pinAttempts = new PinAttemptTracker();
+  // Tablette : demandes iFixit relayées par le PC et réception des photos qui suivent
+  private pendingIfixit = new Map<string, (result: IfixitResultMessage | null) => void>();
+  private ifixitImageListeners = new Map<string, (img: IfixitImageMessage) => void>();
+  // PC hôte : dernière demande iFixit de chaque tablette (les photos d'un article abandonné ne sont plus envoyées)
+  private latestIfixitByConn = new Map<string, string>();
   // PC hôte : événement choisi par chaque tablette (absent = elle suit l'événement ouvert sur le PC)
   private eventByConn = new Map<string, string>();
   private purgeTimer: ReturnType<typeof setInterval> | null = null;
@@ -682,6 +720,10 @@ class P2PNetworkManager {
     this.pendingGuideSearches.clear();
     this.pendingPinChecks.forEach((resolve) => resolve(null));
     this.pendingPinChecks.clear();
+    this.pendingIfixit.forEach((resolve) => resolve(null));
+    this.pendingIfixit.clear();
+    this.ifixitImageListeners.clear();
+    this.latestIfixitByConn.clear();
     this.notifyClientVersions();
     if (wasClient) arreterServeurTablette().catch(() => {});
     this.isConnecting = false;
@@ -877,6 +919,146 @@ class P2PNetworkManager {
     else reply({ status: 'bad', attemptsLeft: failure.attemptsLeft });
   }
 
+  // Tablette : demander un article ou une recherche iFixit au PC hôte. null = PC injoignable ou trop lent
+  async requestIfixit(
+    request: Omit<Extract<NetworkMessage, { type: 'IFIXIT_REQUEST' }>, 'type' | 'requestId'>,
+    onImage?: (img: IfixitImageMessage) => void,
+    timeoutMs = IFIXIT_RELAY_TIMEOUT_MS
+  ): Promise<IfixitResultMessage | null> {
+    if (this.role !== 'client') return null;
+    const conn = this.connections[0];
+    if (!conn || !conn.open) return null;
+
+    const requestId = `ifx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    if (onImage) {
+      this.ifixitImageListeners.set(requestId, onImage);
+      setTimeout(() => this.ifixitImageListeners.delete(requestId), IFIXIT_LISTENER_MS);
+    }
+    return new Promise<IfixitResultMessage | null>((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.pendingIfixit.delete(requestId)) resolve(null);
+      }, timeoutMs);
+      this.pendingIfixit.set(requestId, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+      try {
+        conn.send({ type: 'IFIXIT_REQUEST', requestId, ...request });
+      } catch {
+        clearTimeout(timer);
+        this.pendingIfixit.delete(requestId);
+        resolve(null);
+      }
+    });
+  }
+
+  // Tablette : relais branché sur ifixitService (la tablette ne contacte jamais ifixit.com elle-même)
+  ifixitRelay(): IfixitRelay {
+    const offline = (error: string): IfixitSearchResponse => ({
+      results: [],
+      fromCache: false,
+      staleCache: false,
+      offline: true,
+      usedFallbackEn: false,
+      error
+    });
+    return {
+      search: async (query, enQuery, onThumb) => {
+        if (this.role !== 'client' || !this.connections[0]?.open) return offline(IFIXIT_HOST_UNREACHABLE);
+        let results: IfixitGuideSummary[] | null = null;
+        const early: IfixitImageMessage[] = [];
+        const deliver = (img: IfixitImageMessage) => {
+          const item = results?.[img.imageIndex];
+          if (item && img.stepIndex === -1) onThumb?.(item.guideid, item.lang, img.dataUrl);
+        };
+        const r = await this.requestIfixit({ kind: 'search', query, enQuery }, (img) => {
+          if (results) deliver(img);
+          else early.push(img);
+        });
+        if (!r) return offline(IFIXIT_HOST_UNREACHABLE);
+        if (!r.ok || !r.search) return offline(r.erreur || 'iFixit injoignable depuis le PC hôte.');
+        results = Array.isArray(r.search.results) ? r.search.results : [];
+        early.forEach(deliver);
+        return { ...r.search, results };
+      },
+      guide: async (guideId, lang, onImage) => {
+        if (this.role !== 'client' || !this.connections[0]?.open) throw new Error(IFIXIT_HOST_UNREACHABLE);
+        let detail: IfixitGuideDetail | null = null;
+        const early: IfixitImageMessage[] = [];
+        const r = await this.requestIfixit({ kind: 'guide', guideId, lang }, (img) => {
+          if (detail) onImage?.(img.stepIndex, img.imageIndex, img.dataUrl);
+          else early.push(img);
+        });
+        if (!r) throw new Error(IFIXIT_HOST_UNREACHABLE);
+        if (!r.ok || !r.guide) throw new Error(r.erreur || "Impossible d'ouvrir cet article iFixit.");
+        const received: IfixitGuideDetail = r.guide;
+        for (const img of early) {
+          const target = received.steps[img.stepIndex]?.images[img.imageIndex];
+          if (target) target.embeddedDataUrl = img.dataUrl;
+        }
+        detail = received;
+        return received;
+      }
+    };
+  }
+
+  // PC hôte : interroger iFixit pour une tablette. Le texte part tout de suite, sans adresse d'image ;
+  // les photos sont ensuite compressées et envoyées une à une, hors de la file des messages de la tablette.
+  private async answerIfixitRequest(conn: Lien, msg: Extract<NetworkMessage, { type: 'IFIXIT_REQUEST' }>) {
+    const requestId = String(msg.requestId || '').slice(0, 80);
+    const reply = (r: Omit<IfixitResultMessage, 'type' | 'requestId'>) => {
+      if (conn.open) conn.send({ type: 'IFIXIT_RESULT', requestId, ...r });
+    };
+    this.latestIfixitByConn.set(conn.connectionId, requestId);
+    try {
+      if (msg.kind === 'search') {
+        const query = String(msg.query || '').slice(0, 200);
+        const enQuery = msg.enQuery ? String(msg.enQuery).slice(0, 200) : undefined;
+        const res = await searchIfixitGuides(query, { enQuery });
+        const thumbs = res.results.map((r, i) => ({ stepIndex: -1, imageIndex: i, url: r.thumbnail }));
+        reply({ ok: true, search: { ...res, results: res.results.map((r) => ({ ...r, thumbnail: '' })) } });
+        await this.sendIfixitImages(conn, requestId, thumbs, IFIXIT_THUMB_WIDTH);
+        return;
+      }
+      const guideId = Number(msg.guideId);
+      if (!Number.isInteger(guideId) || guideId <= 0) {
+        reply({ ok: false, erreur: 'Article iFixit inconnu.' });
+        return;
+      }
+      const lang: IfixitLang = msg.lang === 'en' ? 'en' : 'fr';
+      const guide = await getIfixitGuideDetail(guideId, lang);
+      const jobs: { stepIndex: number; imageIndex: number; url: string }[] = [];
+      const steps = guide.steps.map((step, stepIndex) => ({
+        ...step,
+        images: step.images.map((img, imageIndex) => {
+          jobs.push({ stepIndex, imageIndex, url: img.medium || img.standard || img.thumbnail || '' });
+          return { id: img.id, thumbnail: '', medium: '', standard: '' };
+        })
+      }));
+      reply({ ok: true, guide: { ...guide, steps } });
+      await this.sendIfixitImages(conn, requestId, jobs, IFIXIT_IMAGE_WIDTH);
+    } catch (e) {
+      reply({ ok: false, erreur: e instanceof Error ? e.message : 'iFixit injoignable depuis le PC hôte.' });
+    }
+  }
+
+  private async sendIfixitImages(
+    conn: Lien,
+    requestId: string,
+    jobs: { stepIndex: number; imageIndex: number; url: string }[],
+    width: number
+  ) {
+    for (const job of jobs.slice(0, IFIXIT_MAX_IMAGES)) {
+      // La tablette a ouvert autre chose ou s'est déconnectée : arrêter d'envoyer les photos
+      if (!conn.open || this.latestIfixitByConn.get(conn.connectionId) !== requestId) return;
+      if (!/^https:\/\//.test(job.url)) continue;
+      const dataUrl = await compressImageToThumbnailDataUrl(job.url, width).catch(() => undefined);
+      if (dataUrl && conn.open) {
+        conn.send({ type: 'IFIXIT_IMAGE', requestId, stepIndex: job.stepIndex, imageIndex: job.imageIndex, dataUrl });
+      }
+    }
+  }
+
   // Tablette : interroger à la demande la bibliothèque locale du Laptop serveur via LAN
   async searchHostGuides(query: string, ticketId?: string): Promise<OfflineRepairGuide[]> {
     if (this.role !== 'client') return [];
@@ -957,6 +1139,11 @@ class P2PNetworkManager {
 
         case 'PIN_CHECK':
           await this.answerPinCheck(conn, msg, eventId);
+          break;
+
+        case 'IFIXIT_REQUEST':
+          // Sans attendre : iFixit peut prendre plusieurs secondes, les écritures de la tablette passent avant
+          void this.answerIfixitRequest(conn, msg);
           break;
 
         case 'REQUEST_INITIAL_SYNC':
@@ -1194,6 +1381,21 @@ class P2PNetworkManager {
           if (Array.isArray(msg.guides) && msg.guides.length > 0) {
             await db.repairGuides.bulkPut(msg.guides);
             notifySync();
+          }
+          break;
+
+        case 'IFIXIT_RESULT': {
+          const resolve = this.pendingIfixit.get(msg.requestId);
+          if (resolve) {
+            this.pendingIfixit.delete(msg.requestId);
+            resolve(msg);
+          }
+          break;
+        }
+
+        case 'IFIXIT_IMAGE':
+          if (typeof msg.dataUrl === 'string' && msg.dataUrl.startsWith('data:image/')) {
+            this.ifixitImageListeners.get(msg.requestId)?.(msg);
           }
           break;
 
@@ -1599,3 +1801,6 @@ class P2PNetworkManager {
 }
 
 export const networkManager = new P2PNetworkManager();
+
+// Sur tablette, toute demande iFixit passe par le PC hôte (seul appareil qui détient la clé et sort sur internet)
+if (getDeviceRole() === 'tablette') setIfixitRelay(networkManager.ifixitRelay());

@@ -316,6 +316,14 @@ export interface OfflineGuideStep {
   lines: { text: string; bullet: string; level: number }[];
 }
 
+// Article iFixit complet lié à une fiche locale : s'ouvre dans l'application via la clé du PC hôte
+export interface IfixitArticleLink {
+  guideId: number;
+  lang: 'fr' | 'en';
+  title: string;
+  url?: string;
+}
+
 export interface OfflineRepairGuide {
   id: string;
   source: 'builtin' | 'ifixit' | 'custom';
@@ -335,4 +343,11 @@ export interface OfflineRepairGuide {
   parts: string[];
   steps: OfflineGuideStep[];
   updatedAt: number;
+  // Articles iFixit complets liés depuis le PC hôte (lien seulement : le contenu reste chez iFixit)
+  ifixitLinks?: IfixitArticleLink[];
+  // Termes de recherche iFixit proposés pour trouver l'article complet
+  ifixitRecherche?: string;
+  // Nom de la personne qui a relu la fiche ; chaîne vide = brouillon à relire
+  reluPar?: string;
+  version?: number;
 }

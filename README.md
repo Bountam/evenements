@@ -1421,7 +1421,7 @@ Lorsque l'animateur **Réparateur** prend un appareil en charge dans `src/compon
 |---|---|---|
 | **1. Fiche permanente** | `ReparateurCockpit.tsx` | Affiche dès l'ouverture le participant, ses pronoms, l'appareil, l'OS, le symptôme initial, le minuteur de service et les boutons d'action (`Appeler Table`, `Assistant`, `Lexique`). |
 | **2. Diagnostic Oui / Non** | `DiagnosticDecisionTree.tsx` + `src/utils/repairLexicon.ts` | Arbres décisionnels interactifs **Oui / Non** (`DIAGNOSTIC_DECISION_TREES`) triés par pertinence : 1 question claire avec aide FALC → cause probable, conseil de sécurité, action cochable en 1 tap et ciblage des guides, plus section repliable des points de contrôle complémentaires (`DIAGNOSTIC_CHECKLIST_RULES`). |
-| **3. Guides pertinents** | `IfixitGuidesPanel.tsx` (`embedded`) + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Affiche directement les guides hors-ligne ciblés (`matchOfflineGuidesForTicket`), le relais LAN Laptop et les guides iFixit v2.0 (FR prioritaire, repli EN, cache 7 jours), avec recherche manuelle repliable derrière le bouton `Rechercher`, lecteur intégré et zoom HD au clic sur miniature. |
+| **3. Guides pertinents** | `IfixitGuidesPanel.tsx` (`embedded`) + `IfixitGuideViewer.tsx` + `src/services/ifixitService.ts` | Affiche directement les fiches locales ciblées (`matchOfflineGuidesForTicket`) et les articles iFixit v2.0 (FR prioritaire, repli EN, cache 7 jours). Sur tablette, tout article passe par le PC hôte (`IFIXIT_REQUEST` → `IFIXIT_RESULT` + `IFIXIT_IMAGE`) : la tablette ne contacte jamais ifixit.com. Recherche manuelle repliable derrière `Rechercher`, lecteur intégré, attribution iFixit (auteur, licence CC BY-NC-SA) et zoom au clic. |
 | **4. Clôture** | `ReparateurCockpit.tsx` | Bouton **`Valider rapidement (Réparé)`** en 1 clic ou assistant de clôture en 3 questions (`Résultat` → `Actions réalisées` → `Suite proposée`). |
 
 Le cockpit **Assistant** (`AssistantCockpit.tsx`) adopte également une vue guidée par défaut sur l'action prioritaire (`Action 1 sur N` : aide réparateur → appel de table → orientation sortie/boutique) avec bascule `Voir toute la file`.
@@ -1429,8 +1429,9 @@ Le cockpit **Assistant** (`AssistantCockpit.tsx`) adopte également une vue guid
 #### Bibliothèque locale hors-ligne & distribution LAN avec le participant
 
 - **Gestionnaire sur Laptop (`OfflineGuidesLibraryModal.tsx`) :** accessible aux administrateurs via **Plus → Bibliothèque de guides hors-ligne** :
-  - **9 fiches maison Insertech** pré-incluses (`BUILTIN_REPAIR_GUIDES` dans `src/utils/offlineGuideLibrary.ts`).
-  - **Pré-téléchargement iFixit** depuis le PC serveur (avec la clé d'API saisie par l'administrateur sur le PC hôte uniquement : elle n'est jamais dans le bundle, ni dans la CI, ni sur les tablettes ; `npm run build` échoue si une clé s'y retrouve, via `scripts/check-bundle-secrets.js`), compressant 1 miniature par étape (via le relais local `/image` de `launcher/StorageCompanion.cs`) tout en conservant `fullResUrl`.
+  - **33 fiches Insertech** pré-incluses (`BUILTIN_REPAIR_GUIDES` : 9 fiches courtes d'origine + 24 fiches complètes de `src/data/guidesLocaux.ts`, portables, PC tour, cellulaires et tablettes, tous les symptômes). Les nouvelles fiches portent le badge **Brouillon** tant que `reluPar` est vide : à faire relire par un technicien avant l'événement.
+  - **Onglet Articles iFixit** (PC hôte seulement) : clé d'API saisie sur ce PC (`Enregistrer`, `Tester la clé` ; jamais dans le bundle, la CI ni les tablettes, et `npm run build` échoue si une clé s'y retrouve via `scripts/check-bundle-secrets.js`), recherche, `Aperçu` et `Lier` un article à une fiche locale. Seul le lien est enregistré (`ifixitLinks`) : l'article complet s'ouvre dans l'application via le PC (licence CC BY-NC-SA, Insertech OBNL et organisme de charité, attribution affichée). La base iFixit n'est jamais téléchargée.
+  - Le PC hôte relaie les articles aux tablettes : texte d'abord, sans aucune adresse d'image, puis chaque photo compressée à 640 px (relais local `/image` de `launcher/StorageCompanion.cs` si besoin). Sans PC joignable, la tablette affiche « PC hôte injoignable » et garde toutes les fiches locales.
   - Création de **fiches maison** personnalisées et **import / export JSON** d'un pack de guides.
 - **Filtrage strict selon l'inscription (`matchOfflineGuidesForTicket`) :** exclut automatiquement toute fiche dont la **marque**, la **catégorie**, l'**OS** ou les **symptômes** ne correspondent pas au ticket (ex. un guide batterie Dell n'apparaît jamais pour un PC Lenovo sous Linux lent).
 - **Distribution LAN ciblée (`src/network.ts`) :** dès l'inscription ou la mise à jour d'un ticket (et à `INITIAL_SYNC`), le PC hôte pousse automatiquement uniquement les guides pertinents vers les tablettes via `GUIDES_SYNC`, sans alourdir chaque delta de ticket.
@@ -2369,8 +2370,8 @@ Utilisé sur le Kiosque-Concours, le Cockpit Juge, l'Install Fest, les activité
 
 > [!NOTE]
 > Les seuls usages optionnels d'internet sont :
-> - **Sur le PC (préparation / mises à jour) :** rechercher une nouvelle version sur GitHub, « Télécharger depuis GitHub » l'APK des tablettes, ou pré-télécharger des guides iFixit (avec miniatures) dans la **Bibliothèque de guides hors-ligne** avant l'événement.
-> - **En option pendant l'événement (si une connexion est disponible sur le PC ou une tablette) :** interroger l'API iFixit v2.0 en complément de la bibliothèque locale et afficher les photos d'étapes en pleine résolution au clic. Sans internet, le diagnostic local, les fiches maison et tous les guides distribués ou en cache restent **100 % utilisables**.
+> - **Sur le PC (préparation / mises à jour) :** rechercher une nouvelle version sur GitHub, « Télécharger depuis GitHub » l'APK des tablettes, ou lier des articles iFixit aux fiches locales dans la **Bibliothèque de guides hors-ligne** avant l'événement.
+> - **En option pendant l'événement (si le PC hôte a internet) :** ouvrir les articles iFixit complets, sur le PC comme sur les tablettes, toujours via le PC hôte et sa clé. Les tablettes n'ont jamais besoin d'internet. Sans internet, le diagnostic local, les fiches maison et tous les guides distribués ou en cache restent **100 % utilisables**.
 
 ---
 

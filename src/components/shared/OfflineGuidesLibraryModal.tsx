@@ -9,7 +9,10 @@ import {
   CheckCircle,
   KeyRound,
   BookOpen,
-  Loader2
+  Loader2,
+  Link2,
+  Eye,
+  X
 } from 'lucide-react';
 import Modal from '../shared/Modal';
 import { showToast } from '../shared/Toast';
@@ -22,20 +25,26 @@ import type {
 import {
   BUILTIN_REPAIR_GUIDES,
   deleteOfflineGuide,
-  downloadIfixitGuideToOfflineLibrary,
   exportOfflineGuidesPack,
   extractBrandTags,
   getAllOfflineGuides,
   importOfflineGuidesPack,
-  saveOfflineGuide
+  linkIfixitArticle,
+  saveOfflineGuide,
+  unlinkIfixitArticle
 } from '../../utils/offlineGuideLibrary';
 import {
+  getIfixitGuideDetail,
   getStoredIfixitApiKey,
   hasIfixitApiKey,
+  isIfixitRelayed,
   searchIfixitGuides,
   setIfixitApiKey,
+  testIfixitApiKey,
+  type IfixitGuideDetail,
   type IfixitGuideSummary
 } from '../../services/ifixitService';
+import IfixitGuideViewer from '../matrices/reparothon/IfixitGuideViewer';
 import { saveFile } from '../../utils/saveFile';
 
 interface OfflineGuidesLibraryModalProps {
@@ -68,11 +77,17 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
   const [apiKeyInput, setApiKeyInput] = useState(() => getStoredIfixitApiKey());
   const [hasKey, setHasKey] = useState(() => hasIfixitApiKey());
 
-  // Téléchargement depuis iFixit
+  // Articles iFixit liés aux fiches locales (PC hôte seulement : la clé n'existe que sur ce PC)
+  const relayed = isIfixitRelayed();
   const [ifixitQuery, setIfixitQuery] = useState('');
   const [ifixitResults, setIfixitResults] = useState<IfixitGuideSummary[]>([]);
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [targetGuideId, setTargetGuideId] = useState('');
+  const [preview, setPreview] = useState<IfixitGuideDetail | null>(null);
+  const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testingKey, setTestingKey] = useState(false);
 
   // Nouvelle fiche maison
   const [customTitle, setCustomTitle] = useState('');
@@ -97,31 +112,60 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
     }
   }, [isOpen]);
 
-  const savedIds = new Set(guides.filter((g) => g.source !== 'builtin').map((g) => g.ifixitGuideId));
   const customOrDownloaded = guides.filter((g) => g.source !== 'builtin');
+  const targetGuide = guides.find((g) => g.id === targetGuideId) || null;
+  const linkedIds = new Set((targetGuide?.ifixitLinks ?? []).map((l) => `${l.lang}-${l.guideId}`));
+
+  const chooseTarget = (id: string) => {
+    setTargetGuideId(id);
+    const g = guides.find((x) => x.id === id);
+    setIfixitQuery(g?.ifixitRecherche || g?.title || '');
+    setIfixitResults([]);
+    setSearchMessage(null);
+  };
 
   const handleIfixitSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ifixitQuery.trim()) return;
     setSearching(true);
+    setSearchMessage(null);
     try {
       const res = await searchIfixitGuides(ifixitQuery.trim(), { forceRefresh: true });
       setIfixitResults(res.results);
+      if (res.error) setSearchMessage(res.error);
+      else if (res.results.length === 0) setSearchMessage('Aucun article trouvé. Essayez des mots en anglais (ex. battery, screen).');
     } finally {
       setSearching(false);
     }
   };
 
-  const handleDownloadGuide = async (summary: IfixitGuideSummary) => {
-    setDownloadingId(summary.guideid);
+  const handlePreview = async (summary: IfixitGuideSummary) => {
+    setBusyId(summary.guideid);
     try {
-      await downloadIfixitGuideToOfflineLibrary(summary.guideid, summary.lang);
-      await loadGuides();
-      showToast(`Guide « ${summary.title} » enregistré hors-ligne.`, 'success');
+      setPreview(await getIfixitGuideDetail(summary.guideid, summary.lang));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erreur de téléchargement.', 'error');
+      showToast(err instanceof Error ? err.message : "Impossible d'ouvrir l'article.", 'error');
     } finally {
-      setDownloadingId(null);
+      setBusyId(null);
+    }
+  };
+
+  // Lier l'article à la fiche : seul le lien est enregistré, l'article reste chez iFixit (licence CC BY-NC-SA)
+  const handleLink = async (summary: IfixitGuideSummary) => {
+    if (!targetGuide) return;
+    setBusyId(summary.guideid);
+    try {
+      let url: string | undefined;
+      try {
+        url = (await getIfixitGuideDetail(summary.guideid, summary.lang)).url;
+      } catch {
+        url = undefined;
+      }
+      await linkIfixitArticle(targetGuide.id, { guideId: summary.guideid, lang: summary.lang, title: summary.title, url });
+      await loadGuides();
+      showToast(`Article lié à « ${targetGuide.title} ».`, 'success');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -211,14 +255,14 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
       maxWidth="max-w-3xl"
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Gestion bibliothèque hors-ligne">
+        <div className={`grid ${relayed ? 'grid-cols-2' : 'grid-cols-3'} gap-2`} role="tablist" aria-label="Gestion bibliothèque hors-ligne">
           {(
             [
               { id: 'library', label: `Bibliothèque (${guides.length})` },
-              { id: 'ifixit', label: "Télécharger d'iFixit" },
+              { id: 'ifixit', label: 'Articles iFixit' },
               { id: 'custom', label: 'Nouvelle fiche' }
             ] as const
-          ).map((t) => (
+          ).filter((t) => !(relayed && t.id === 'ifixit')).map((t) => (
             <button
               key={t.id}
               type="button"
@@ -241,7 +285,7 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
             <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-2xl bg-app-input border border-app-card-border">
               <div className="text-xs text-app-text-muted">
                 <strong className="text-app-text">{BUILTIN_REPAIR_GUIDES.length} fiches Insertech</strong> pré-incluses +{' '}
-                <strong className="text-primary">{customOrDownloaded.length} guide(s) téléchargé(s)/ajouté(s)</strong> (distribués automatiquement aux tablettes avec les tickets).
+                <strong className="text-primary">{customOrDownloaded.length} fiche(s) ajoutée(s)</strong> (distribuées automatiquement aux tablettes avec les tickets).
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -281,6 +325,16 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                       <span className="text-micro px-2 py-0.5 rounded-full bg-primary/15 border border-primary/40 text-primary font-display font-black uppercase">
                         {g.source === 'builtin' ? 'Insertech' : g.source === 'ifixit' ? `iFixit ${g.lang.toUpperCase()}` : 'Maison'}
                       </span>
+                      {g.reluPar === '' && (
+                        <span className="text-micro px-2 py-0.5 rounded-full bg-warning/15 border border-warning/40 text-warning font-bold uppercase">
+                          Brouillon
+                        </span>
+                      )}
+                      {(g.ifixitLinks?.length ?? 0) > 0 && (
+                        <span className="text-micro px-2 py-0.5 rounded-full bg-success/15 border border-success/40 text-success font-bold uppercase">
+                          {g.ifixitLinks?.length} article(s) iFixit
+                        </span>
+                      )}
                       {g.brands.map((b) => (
                         <span key={b} className="text-micro px-2 py-0.5 rounded-full bg-app-card border border-app-card-border text-app-text uppercase font-bold">
                           {b}
@@ -298,6 +352,21 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                     </div>
                   </div>
 
+                  <div className="flex items-center gap-1.5 shrink-0">
+                  {!relayed && (
+                    <button
+                      type="button"
+                      aria-label={`Lier un article iFixit à ${g.title}`}
+                      title="Lier un article iFixit"
+                      onClick={() => {
+                        chooseTarget(g.id);
+                        setTab('ifixit');
+                      }}
+                      className="min-h-10 min-w-10 p-2 rounded-xl bg-app-card border border-app-card-border text-primary cursor-pointer flex items-center justify-center"
+                    >
+                      <Link2 size={15} aria-hidden="true" />
+                    </button>
+                  )}
                   {g.source !== 'builtin' ? (
                     <button
                       type="button"
@@ -313,51 +382,120 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                   ) : (
                     <BookOpen size={16} className="text-app-text-muted shrink-0 mr-1" aria-hidden="true" />
                   )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {tab === 'ifixit' && (
+        {tab === 'ifixit' && !relayed && preview && (
+          <IfixitGuideViewer guide={preview} backLabel="Retour aux résultats" onBack={() => setPreview(null)} />
+        )}
+
+        {tab === 'ifixit' && !relayed && !preview && (
           <div className="space-y-4">
             <div className="p-3.5 rounded-2xl bg-app-input border border-app-card-border space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-bold text-app-text inline-flex items-center gap-1.5">
                   <KeyRound size={14} className="text-primary" aria-hidden="true" />
-                  <span>Clé API iFixit (stockée uniquement sur ce Laptop)</span>
+                  <span>Clé API iFixit (stockée uniquement sur ce PC)</span>
                 </span>
-                {hasKey && (
-                  <span className="text-micro text-success font-bold uppercase">Active</span>
-                )}
+                {hasKey && <span className="text-micro text-success font-bold uppercase">Active</span>}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="password"
                   aria-label="Clé API iFixit serveur"
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   placeholder="ifx_..."
-                  className="flex-1 bg-app-card border border-app-input-border rounded-xl px-3 py-2 min-h-10 text-xs text-app-text font-mono"
+                  className="flex-1 min-w-40 bg-app-card border border-app-input-border rounded-xl px-3 py-2 min-h-10 text-xs text-app-text font-mono"
                 />
                 <button
                   type="button"
                   onClick={() => {
                     setIfixitApiKey(apiKeyInput);
                     setHasKey(hasIfixitApiKey());
+                    setKeyTest(null);
                     showToast('Clé API enregistrée localement sur le PC.', 'success');
                   }}
                   className="min-h-10 px-3.5 py-1.5 rounded-xl bg-app-card border border-app-card-border text-xs font-display font-bold uppercase text-app-text cursor-pointer"
                 >
                   Enregistrer
                 </button>
+                <button
+                  type="button"
+                  disabled={testingKey || !hasKey}
+                  onClick={async () => {
+                    setTestingKey(true);
+                    setKeyTest(await testIfixitApiKey());
+                    setTestingKey(false);
+                  }}
+                  className="min-h-10 px-3.5 py-1.5 rounded-xl bg-app-card border border-app-card-border text-xs font-display font-bold uppercase text-app-text cursor-pointer disabled:opacity-50"
+                >
+                  {testingKey ? 'Test…' : 'Tester la clé'}
+                </button>
               </div>
+              {keyTest && (
+                <p role="status" className={`text-xs font-bold ${keyTest.ok ? 'text-success' : 'text-warning'}`}>
+                  {keyTest.message}
+                </p>
+              )}
+              <p className="text-xs text-app-text-muted">
+                Les articles ne sont pas copiés : chaque fiche garde un lien, et l&apos;article complet s&apos;ouvre
+                dans l&apos;application, sur ce PC comme sur les tablettes, via cette clé.
+              </p>
             </div>
+
+            <label className="block space-y-1">
+              <span className="text-xs font-bold text-app-text">Fiche locale à compléter</span>
+              <select
+                aria-label="Fiche locale à compléter"
+                value={targetGuideId}
+                onChange={(e) => chooseTarget(e.target.value)}
+                className="w-full bg-app-input border border-app-input-border rounded-xl px-3 py-2.5 min-h-11 text-sm text-app-text"
+              >
+                <option value="">Choisir une fiche…</option>
+                {guides.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {targetGuide && (targetGuide.ifixitLinks?.length ?? 0) > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-micro font-display font-black uppercase text-primary">Articles liés</span>
+                {targetGuide.ifixitLinks?.map((l) => (
+                  <div
+                    key={`${l.lang}-${l.guideId}`}
+                    className="p-2.5 rounded-xl bg-app-input border border-app-card-border flex items-center justify-between gap-2"
+                  >
+                    <span className="text-sm text-app-text truncate">
+                      {l.title} <span className="text-micro font-black text-primary">{l.lang.toUpperCase()}</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Retirer le lien ${l.title}`}
+                      onClick={async () => {
+                        await unlinkIfixitArticle(targetGuide.id, l);
+                        await loadGuides();
+                      }}
+                      className="min-h-9 min-w-9 p-2 rounded-lg bg-danger/15 border border-danger/40 text-danger cursor-pointer flex items-center justify-center"
+                    >
+                      <X size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <form onSubmit={handleIfixitSearch} className="flex gap-2">
               <input
                 type="text"
-                aria-label="Rechercher sur iFixit pour pré-télécharger"
+                aria-label="Rechercher un article iFixit à lier"
                 value={ifixitQuery}
                 onChange={(e) => setIfixitQuery(e.target.value)}
                 placeholder="Ex. ThinkPad T480 battery, Dell Latitude..."
@@ -368,15 +506,16 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                 disabled={searching}
                 className="min-h-11 px-4 py-2 rounded-xl bg-primary text-secondary font-display font-black uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
               >
-                <Search size={15} aria-hidden="true" />
+                {searching ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Search size={15} aria-hidden="true" />}
                 <span>Chercher</span>
               </button>
             </form>
+            {searchMessage && <p className="text-xs text-warning font-semibold">{searchMessage}</p>}
 
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {ifixitResults.map((res) => {
-                const isSaved = savedIds.has(res.guideid);
-                const isBusy = downloadingId === res.guideid;
+                const isLinked = linkedIds.has(`${res.lang}-${res.guideid}`);
+                const isBusy = busyId === res.guideid;
                 return (
                   <div
                     key={`${res.lang}-${res.guideid}`}
@@ -388,25 +527,36 @@ export default function OfflineGuidesLibraryModal({ isOpen, onClose }: OfflineGu
                       </span>
                       <span className="text-sm font-bold text-app-text block truncate">{res.title}</span>
                     </div>
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void handleDownloadGuide(res)}
-                      className={`min-h-10 px-3 py-1.5 rounded-xl font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
-                        isSaved
-                          ? 'bg-success/15 border border-success/40 text-success'
-                          : 'bg-primary text-secondary'
-                      }`}
-                    >
-                      {isBusy ? (
-                        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                      ) : isSaved ? (
-                        <CheckCircle size={14} aria-hidden="true" />
-                      ) : (
-                        <Download size={14} aria-hidden="true" />
-                      )}
-                      <span>{isSaved ? 'Ajouté' : 'Ajouter hors-ligne'}</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        aria-label={`Aperçu de ${res.title}`}
+                        onClick={() => void handlePreview(res)}
+                        className="min-h-10 px-3 py-1.5 rounded-xl bg-app-card border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <Eye size={14} aria-hidden="true" />
+                        <span>Aperçu</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy || !targetGuide || isLinked}
+                        aria-label={`Lier ${res.title} à la fiche`}
+                        onClick={() => void handleLink(res)}
+                        className={`min-h-10 px-3 py-1.5 rounded-xl font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5 disabled:cursor-not-allowed ${
+                          isLinked ? 'bg-success/15 border border-success/40 text-success' : 'bg-primary text-secondary disabled:opacity-50'
+                        }`}
+                      >
+                        {isBusy ? (
+                          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                        ) : isLinked ? (
+                          <CheckCircle size={14} aria-hidden="true" />
+                        ) : (
+                          <Link2 size={14} aria-hidden="true" />
+                        )}
+                        <span>{isLinked ? 'Lié' : 'Lier'}</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}

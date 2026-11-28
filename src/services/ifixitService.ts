@@ -1,5 +1,5 @@
 import { db } from '../db';
-import type { IfixitCacheEntry } from '../types';
+import type { IfixitArticleLink, IfixitCacheEntry } from '../types';
 
 export const IFIXIT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const IFIXIT_TIMEOUT_MS = 6000;
@@ -31,11 +31,45 @@ export function setIfixitApiKey(apiKey: string): void {
   }
 }
 
+// PC hôte : vérifier la clé avant l'événement (une recherche simple, sans cache)
+export async function testIfixitApiKey(): Promise<{ ok: boolean; message: string }> {
+  if (!getIfixitApiKey()) return { ok: false, message: 'Aucune clé enregistrée sur ce PC.' };
+  try {
+    await fetchJsonWithTimeout<any>('https://www.ifixit.com/api/2.0/search/battery?filter=guide&limit=1');
+    return { ok: true, message: 'Clé acceptée : les articles iFixit sont disponibles.' };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : '';
+    if (/HTTP 40[13]/.test(detail)) return { ok: false, message: 'Clé refusée par iFixit (expirée ou invalide).' };
+    return { ok: false, message: "iFixit injoignable : vérifiez l'accès internet du PC." };
+  }
+}
+
 export function hasIfixitApiKey(): boolean {
   return Boolean(getIfixitApiKey());
 }
 
 export type IfixitLang = 'fr' | 'en';
+
+// Plan v1.9, étape 5 : sur une tablette, les articles iFixit passent TOUJOURS par le PC hôte, qui détient
+// la clé d'API et l'accès internet. La tablette ne contacte jamais ifixit.com.
+export type IfixitImageCallback = (stepIndex: number, imageIndex: number, dataUrl: string) => void;
+
+export type IfixitThumbCallback = (guideid: number, lang: IfixitLang, dataUrl: string) => void;
+
+export interface IfixitRelay {
+  search(query: string, enQuery?: string, onThumb?: IfixitThumbCallback): Promise<IfixitSearchResponse>;
+  guide(guideId: number, lang: IfixitLang, onImage?: IfixitImageCallback): Promise<IfixitGuideDetail>;
+}
+
+let relay: IfixitRelay | null = null;
+
+export function setIfixitRelay(next: IfixitRelay | null) {
+  relay = next;
+}
+
+export function isIfixitRelayed(): boolean {
+  return relay !== null;
+}
 
 export interface IfixitGuideSummary {
   guideid: number;
@@ -85,7 +119,17 @@ export interface IfixitGuideDetail {
   lang: IfixitLang;
   fromCache: boolean;
   staleCache: boolean;
+  // Attribution (licence CC BY-NC-SA d'iFixit) : auteur et adresse de l'article d'origine
+  author?: string;
+  url?: string;
+  // Fiche locale Insertech affichée dans le même lecteur : articles iFixit liés et termes de recherche
+  localGuideId?: string;
+  ifixitLinks?: IfixitArticleLink[];
+  ifixitRecherche?: string;
+  brouillon?: boolean;
 }
+
+export const IFIXIT_LICENSE_LABEL = 'Licence CC BY-NC-SA 3.0';
 
 export interface IfixitSearchResponse {
   results: IfixitGuideSummary[];
@@ -229,12 +273,14 @@ function isOfflineNow(): boolean {
  */
 export async function searchIfixitGuides(
   query: string,
-  options?: { enQuery?: string; forceRefresh?: boolean }
+  options?: { enQuery?: string; forceRefresh?: boolean; onThumb?: IfixitThumbCallback }
 ): Promise<IfixitSearchResponse> {
   const trimmed = query.trim();
   if (!trimmed) {
     return { results: [], fromCache: false, staleCache: false, offline: isOfflineNow(), usedFallbackEn: false };
   }
+
+  if (relay) return relay.search(trimmed, options?.enQuery, options?.onThumb);
 
   const key = searchCacheKey(trimmed);
   const now = Date.now();
@@ -396,7 +442,9 @@ function mapRawGuideDetail(raw: any, guideId: number, lang: IfixitLang, fromCach
     steps,
     lang,
     fromCache,
-    staleCache
+    staleCache,
+    author: cleanPlainText(raw?.author?.username, raw?.author?.name) || undefined,
+    url: typeof raw?.url === 'string' && /^https:\/\/(fr|www)\.ifixit\.com\//.test(raw.url) ? raw.url : undefined
   };
 }
 
@@ -406,8 +454,9 @@ function mapRawGuideDetail(raw: any, guideId: number, lang: IfixitLang, fromCach
 export async function getIfixitGuideDetail(
   guideId: number,
   lang: IfixitLang,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; onImage?: IfixitImageCallback }
 ): Promise<IfixitGuideDetail> {
+  if (relay) return relay.guide(guideId, lang, options?.onImage);
   const key = guideCacheKey(guideId, lang);
   const now = Date.now();
   const cached: IfixitCacheEntry | undefined = await db.ifixitCache.get(key).catch(() => undefined);

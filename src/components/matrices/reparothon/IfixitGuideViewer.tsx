@@ -13,13 +13,31 @@ import {
   Database,
   ZoomIn,
   X,
-  Loader2
+  Loader2,
+  ExternalLink,
+  Search,
+  FileText
 } from 'lucide-react';
-import type { IfixitGuideDetail } from '../../../services/ifixitService';
+import type { IfixitArticleLink } from '../../../types';
+import { IFIXIT_LICENSE_LABEL, isIfixitRelayed, type IfixitGuideDetail } from '../../../services/ifixitService';
 
 interface IfixitGuideViewerProps {
   guide: IfixitGuideDetail;
   onBack: () => void;
+  backLabel?: string;
+  // Fiche locale : ouvrir un article iFixit lié, ou chercher l'article avec les termes proposés
+  onOpenArticle?: (link: IfixitArticleLink) => void;
+  onSearchIfixit?: (terms: string) => void;
+  openingArticleId?: number | null;
+}
+
+// Sur tablette, aucune image distante : seules les images reçues du PC hôte (data:) sont affichées
+function pickImage(allowRemote: boolean, ...urls: (string | undefined)[]): string {
+  for (const url of urls) {
+    if (!url) continue;
+    if (allowRemote || url.startsWith('data:image/')) return url;
+  }
+  return '';
 }
 
 interface BulletStyle {
@@ -74,7 +92,17 @@ const BULLET_STYLES: Record<string, BulletStyle> = {
   }
 };
 
-export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerProps) {
+export default function IfixitGuideViewer({
+  guide,
+  onBack,
+  backLabel = 'Retour aux guides',
+  onOpenArticle,
+  onSearchIfixit,
+  openingArticleId = null
+}: IfixitGuideViewerProps) {
+  const allowRemote = !isIfixitRelayed();
+  const isLocal = Boolean(guide.localGuideId);
+  const links = guide.ifixitLinks ?? [];
   const [stepIndex, setStepIndex] = useState(0);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -107,10 +135,13 @@ export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerPr
   const activeStep = guide.steps[stepIndex] || null;
   const activeImage = activeStep?.images[selectedImageIdx] || activeStep?.images[0] || null;
   const activeImageUrl = activeImage
-    ? activeImage.embeddedDataUrl || activeImage.medium || activeImage.standard || activeImage.thumbnail
+    ? pickImage(allowRemote, activeImage.embeddedDataUrl, activeImage.medium, activeImage.standard, activeImage.thumbnail)
     : '';
+  // Tablette : l'agrandissement montre l'image déjà reçue ; le PC hôte peut charger la haute résolution
   const fullResUrl = activeImage
-    ? activeImage.original || activeImage.standard || activeImage.medium || ''
+    ? allowRemote
+      ? activeImage.original || activeImage.standard || activeImage.medium || ''
+      : activeImageUrl
     : '';
   const stepPct = totalSteps > 0 ? Math.round(((stepIndex + 1) / totalSteps) * 100) : 0;
 
@@ -118,6 +149,11 @@ export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerPr
   // en cas d'échec ou hors-ligne, laisser l'image affichée telle quelle sans message d'erreur.
   const handleImageClick = () => {
     if (!fullResUrl || loadingFullRes) return;
+    if (!allowRemote) {
+      // Tablette : agrandir l'image déjà présente, sans aucune requête
+      setFullResOverlayUrl(fullResUrl);
+      return;
+    }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     if (failedImages[fullResUrl]) return;
 
@@ -144,14 +180,24 @@ export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerPr
             className="min-h-11 px-3.5 py-2 rounded-xl bg-app-input border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer inline-flex items-center gap-1.5 hover:border-primary/60"
           >
             <ArrowLeft size={15} aria-hidden="true" />
-            <span>Retour aux guides</span>
+            <span>{backLabel}</span>
           </button>
 
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-micro px-2.5 py-1 rounded-full bg-primary/15 border border-primary/40 text-primary font-display font-black uppercase">
               {guide.lang.toUpperCase()}
             </span>
-            {guide.fromCache && (
+            {isLocal && (
+              <span className="text-micro px-2.5 py-1 rounded-full bg-app-input border border-app-card-border text-app-text font-bold uppercase">
+                Fiche Insertech
+              </span>
+            )}
+            {isLocal && guide.brouillon && (
+              <span className="text-micro px-2.5 py-1 rounded-full bg-warning/15 border border-warning/40 text-warning font-bold uppercase">
+                Brouillon à relire
+              </span>
+            )}
+            {!isLocal && guide.fromCache && (
               <span className="text-micro px-2.5 py-1 rounded-full bg-success/15 border border-success/40 text-success font-bold uppercase inline-flex items-center gap-1">
                 <Database size={11} aria-hidden="true" />
                 <span>En cache</span>
@@ -187,6 +233,77 @@ export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerPr
           )}
         </div>
       </div>
+
+      {/* Article iFixit : attribution exigée par la licence CC BY-NC-SA */}
+      {!isLocal && (
+        <div
+          data-testid="attribution-ifixit"
+          className="bg-app-card border border-app-card-border px-4 py-3 rounded-2xl text-xs text-app-text-muted flex flex-wrap items-center gap-x-2 gap-y-1"
+        >
+          <span className="font-bold text-app-text">Article iFixit</span>
+          {guide.author && <span>par {guide.author}</span>}
+          <span>• {IFIXIT_LICENSE_LABEL}</span>
+          {guide.url &&
+            (allowRemote ? (
+              <a
+                href={guide.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-bold underline inline-flex items-center gap-1"
+              >
+                <span>Voir sur iFixit</span>
+                <ExternalLink size={12} aria-hidden="true" />
+              </a>
+            ) : (
+              <span className="font-mono break-all">{guide.url}</span>
+            ))}
+        </div>
+      )}
+
+      {/* Fiche locale : articles iFixit complets liés (ouverts via le PC hôte) */}
+      {isLocal && (links.length > 0 || (guide.ifixitRecherche && onSearchIfixit)) && (
+        <div
+          role="region"
+          aria-label="Articles iFixit liés"
+          className="bg-app-card border border-app-card-border p-4 rounded-2xl space-y-2"
+        >
+          <div className="text-xs font-display font-bold uppercase text-primary flex items-center gap-1.5">
+            <FileText size={14} aria-hidden="true" />
+            <span>Article complet iFixit</span>
+          </div>
+          {links.length > 0 && onOpenArticle && (
+            <div className="flex flex-col gap-2">
+              {links.map((link) => (
+                <button
+                  key={`${link.lang}-${link.guideId}`}
+                  type="button"
+                  disabled={openingArticleId === link.guideId}
+                  onClick={() => onOpenArticle(link)}
+                  className="min-h-11 px-3.5 py-2 rounded-xl bg-app-input border border-app-card-border hover:border-primary/60 text-left text-sm text-app-text font-semibold cursor-pointer inline-flex items-center gap-2 disabled:opacity-60"
+                >
+                  {openingArticleId === link.guideId ? (
+                    <Loader2 size={15} className="animate-spin text-primary shrink-0" aria-hidden="true" />
+                  ) : (
+                    <FileText size={15} className="text-primary shrink-0" aria-hidden="true" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{link.title}</span>
+                  <span className="text-micro font-black uppercase text-primary">{link.lang.toUpperCase()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {links.length === 0 && guide.ifixitRecherche && onSearchIfixit && (
+            <button
+              type="button"
+              onClick={() => onSearchIfixit(guide.ifixitRecherche || '')}
+              className="min-h-11 px-3.5 py-2 rounded-xl bg-app-input border border-app-card-border hover:border-primary/60 text-sm text-app-text font-semibold cursor-pointer inline-flex items-center gap-2"
+            >
+              <Search size={15} className="text-primary" aria-hidden="true" />
+              <span>Chercher l&apos;article iFixit</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Outils & pièces */}
       {(guide.tools.length > 0 || guide.parts.length > 0) && (
@@ -294,7 +411,7 @@ export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerPr
                     ) : (
                       <div className="p-6 text-center text-app-text-muted space-y-1.5">
                         <ImageOff size={24} className="mx-auto opacity-60" aria-hidden="true" />
-                        <p className="text-xs">Image indisponible hors-ligne</p>
+                        <p className="text-xs">{allowRemote ? 'Image indisponible hors-ligne' : 'Image en chargement ou indisponible'}</p>
                       </div>
                     )}
                   </div>
@@ -302,7 +419,7 @@ export default function IfixitGuideViewer({ guide, onBack }: IfixitGuideViewerPr
                   {activeStep.images.length > 1 && (
                     <div className="flex flex-wrap gap-2">
                       {activeStep.images.map((img, idx) => {
-                        const thumbUrl = img.embeddedDataUrl || img.thumbnail || img.medium || img.standard;
+                        const thumbUrl = pickImage(allowRemote, img.embeddedDataUrl, img.thumbnail, img.medium, img.standard);
                         return (
                           <button
                             key={`${thumbUrl}-${idx}`}

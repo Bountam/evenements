@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   BookOpen,
@@ -11,7 +11,7 @@ import {
   KeyRound,
   Library
 } from 'lucide-react';
-import type { OfflineRepairGuide, RepairTicket } from '../../../types';
+import type { IfixitArticleLink, OfflineRepairGuide, RepairTicket } from '../../../types';
 import { registerSyncListener } from '../../../db';
 import { networkManager } from '../../../network';
 import { buildIfixitQueries, getDiagnosticSuggestions } from '../../../utils/repairLexicon';
@@ -26,10 +26,13 @@ import {
   getIfixitGuideDetail,
   getStoredIfixitApiKey,
   hasIfixitApiKey,
+  isIfixitRelayed,
   searchIfixitGuides,
   setIfixitApiKey,
+  testIfixitApiKey,
   type IfixitGuideDetail,
-  type IfixitGuideSummary
+  type IfixitGuideSummary,
+  type IfixitLang
 } from '../../../services/ifixitService';
 import IfixitGuideViewer from './IfixitGuideViewer';
 
@@ -42,6 +45,22 @@ interface IfixitGuidesPanelProps {
 }
 
 type LangFilter = 'all' | 'fr' | 'en';
+
+// Photos d'un article relayé par le PC hôte, arrivées après le texte
+function withRelayImages(guide: IfixitGuideDetail, images: Record<string, string>): IfixitGuideDetail {
+  if (guide.localGuideId || Object.keys(images).length === 0) return guide;
+  const prefix = `${guide.lang}-${guide.guideid}-`;
+  return {
+    ...guide,
+    steps: guide.steps.map((step, si) => ({
+      ...step,
+      images: step.images.map((img, ii) => {
+        const dataUrl = images[`${prefix}${si}-${ii}`];
+        return dataUrl && !img.embeddedDataUrl ? { ...img, embeddedDataUrl: dataUrl } : img;
+      })
+    }))
+  };
+}
 
 export default function IfixitGuidesPanel({
   ticket,
@@ -76,6 +95,15 @@ export default function IfixitGuidesPanel({
   const [apiKeyConfigured, setApiKeyConfigured] = useState(() => hasIfixitApiKey());
   const [isManualQuery, setIsManualQuery] = useState(false);
   const [showManualSearch, setShowManualSearch] = useState(!embedded);
+  // Tablette : les articles passent par le PC hôte, qui seul détient la clé
+  const relayed = isIfixitRelayed();
+  const [keyTest, setKeyTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testingKey, setTestingKey] = useState(false);
+  const [relayThumbs, setRelayThumbs] = useState<Record<string, string>>({});
+  const [relayImages, setRelayImages] = useState<Record<string, string>>({});
+  // Fiche locale d'où l'article a été ouvert (le retour y ramène)
+  const [parentGuide, setParentGuide] = useState<IfixitGuideDetail | null>(null);
+  const openSeq = useRef(0);
 
   const loadRelevantOffline = useCallback(
     async (manualText?: string) => {
@@ -113,7 +141,8 @@ export default function IfixitGuidesPanel({
         await loadRelevantOffline(manual ? cleaned : undefined);
         const res = await searchIfixitGuides(cleaned, {
           enQuery: enQueryHint || cleaned,
-          forceRefresh
+          forceRefresh,
+          onThumb: (guideid, lang, dataUrl) => setRelayThumbs((prev) => ({ ...prev, [`${lang}-${guideid}`]: dataUrl }))
         });
 
         // Exclure aussi côté résultats iFixit les marques manifestement incompatibles si la marque du ticket est connue
@@ -143,6 +172,7 @@ export default function IfixitGuidesPanel({
 
   useEffect(() => {
     setSelectedGuide(null);
+    setParentGuide(null);
     setQuery(initialQueries.frQuery);
     void runSearch(initialQueries.frQuery, initialQueries.enQuery, false, false);
   }, [ticket.id, initialQueries.frQuery, initialQueries.enQuery, runSearch]);
@@ -165,35 +195,58 @@ export default function IfixitGuidesPanel({
     return unsub;
   }, [isManualQuery, loadRelevantOffline]);
 
-  const handleOpenGuide = async (summary: IfixitGuideSummary) => {
-    setLoadingGuideId(summary.guideid);
+  const openArticle = async (guideid: number, lang: IfixitLang, from: IfixitGuideDetail | null = null) => {
+    const seq = ++openSeq.current;
+    setLoadingGuideId(guideid);
     setDetailError(null);
     try {
-      const detail = await getIfixitGuideDetail(summary.guideid, summary.lang);
+      const detail = await getIfixitGuideDetail(guideid, lang, {
+        onImage: (si, ii, dataUrl) =>
+          setRelayImages((prev) => ({ ...prev, [`${lang}-${guideid}-${si}-${ii}`]: dataUrl }))
+      });
+      if (seq !== openSeq.current) return;
       setResults((prev) =>
         prev.map((item) =>
-          item.guideid === summary.guideid && item.lang === summary.lang
-            ? { ...item, isCachedDetail: true }
-            : item
+          item.guideid === guideid && item.lang === lang ? { ...item, isCachedDetail: true } : item
         )
       );
+      setParentGuide(from);
       setSelectedGuide(detail);
     } catch (err) {
-      setDetailError(
-        err instanceof Error
-          ? err.message
-          : "Impossible d'ouvrir ce guide en mode hors-ligne."
-      );
+      if (seq !== openSeq.current) return;
+      const message = err instanceof Error ? err.message : "Impossible d'ouvrir ce guide en mode hors-ligne.";
+      // Depuis une fiche locale : revenir à la liste pour afficher le message
+      if (from) setSelectedGuide(null);
+      setDetailError(message);
     } finally {
-      setLoadingGuideId(null);
+      if (seq === openSeq.current) setLoadingGuideId(null);
     }
   };
 
+  const handleOpenGuide = (summary: IfixitGuideSummary) => openArticle(summary.guideid, summary.lang);
+
   if (selectedGuide) {
+    const isArticleFromLocal = Boolean(parentGuide) && !selectedGuide.localGuideId;
     return (
       <IfixitGuideViewer
-        guide={selectedGuide}
-        onBack={() => setSelectedGuide(null)}
+        guide={withRelayImages(selectedGuide, relayImages)}
+        backLabel={isArticleFromLocal ? 'Retour à la fiche' : 'Retour aux guides'}
+        openingArticleId={loadingGuideId}
+        onBack={() => {
+          if (isArticleFromLocal) {
+            setSelectedGuide(parentGuide);
+            setParentGuide(null);
+          } else {
+            setSelectedGuide(null);
+          }
+        }}
+        onOpenArticle={(link: IfixitArticleLink) => void openArticle(link.guideId, link.lang, selectedGuide)}
+        onSearchIfixit={(terms) => {
+          setSelectedGuide(null);
+          setParentGuide(null);
+          setQuery(terms);
+          void runSearch(terms, terms, false, true);
+        }}
       />
     );
   }
@@ -264,7 +317,7 @@ export default function IfixitGuidesPanel({
                 <span>Bibliothèque</span>
               </button>
             )}
-            {showManualSearch && (
+            {showManualSearch && !relayed && (
               <button
                 type="button"
                 aria-expanded={showKeyConfig}
@@ -282,8 +335,9 @@ export default function IfixitGuidesPanel({
           </div>
         </div>
 
-        {showManualSearch && showKeyConfig && (
-          <div className="p-3 rounded-2xl bg-app-input border border-app-card-border flex flex-col sm:flex-row sm:items-center gap-2">
+        {showManualSearch && showKeyConfig && !relayed && (
+          <div className="p-3 rounded-2xl bg-app-input border border-app-card-border space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <input
               type="password"
               aria-label="Clé API iFixit"
@@ -319,7 +373,28 @@ export default function IfixitGuidesPanel({
                   Effacer
                 </button>
               )}
+              <button
+                type="button"
+                disabled={testingKey || !apiKeyConfigured}
+                onClick={async () => {
+                  setTestingKey(true);
+                  setKeyTest(await testIfixitApiKey());
+                  setTestingKey(false);
+                }}
+                className="min-h-10 px-3 py-1.5 rounded-xl bg-app-card border border-app-card-border text-app-text font-display font-bold uppercase text-xs cursor-pointer disabled:opacity-50"
+              >
+                {testingKey ? 'Test…' : 'Tester la clé'}
+              </button>
             </div>
+          </div>
+          <p className="text-xs text-app-text-muted">
+            La clé reste sur ce PC. Les tablettes demandent les articles au PC, qui les leur transmet.
+          </p>
+          {keyTest && (
+            <p role="status" className={`text-xs font-bold ${keyTest.ok ? 'text-success' : 'text-warning'}`}>
+              {keyTest.message}
+            </p>
+          )}
           </div>
         )}
 
@@ -397,6 +472,12 @@ export default function IfixitGuidesPanel({
               )}
             </div>
           </>
+        )}
+
+        {searchError && hasAnyGuides && (
+          <p role="status" className="text-xs text-warning font-semibold">
+            Articles iFixit : {searchError}
+          </p>
         )}
 
         {usedFallbackEn && results.some((r) => r.lang === 'en') && (
@@ -555,6 +636,7 @@ export default function IfixitGuidesPanel({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {filteredOnline.map((guide) => {
               const isOpening = loadingGuideId === guide.guideid;
+              const thumb = relayThumbs[`${guide.lang}-${guide.guideid}`] || (relayed ? '' : guide.thumbnail);
               return (
                 <button
                   key={`${guide.lang}-${guide.guideid}`}
@@ -564,13 +646,13 @@ export default function IfixitGuidesPanel({
                   className="bg-app-card border border-app-card-border hover:border-primary/70 rounded-2xl p-3.5 text-left shadow-sm transition-colors cursor-pointer flex items-center gap-3 disabled:opacity-60"
                 >
                   <div className="w-20 h-16 rounded-xl overflow-hidden bg-app-input border border-app-card-border shrink-0 flex items-center justify-center">
-                    {guide.thumbnail && !failedThumbs[guide.thumbnail] ? (
+                    {thumb && !failedThumbs[thumb] ? (
                       <img
-                        src={guide.thumbnail}
+                        src={thumb}
                         alt=""
                         loading="lazy"
                         onError={() =>
-                          setFailedThumbs((prev) => ({ ...prev, [guide.thumbnail]: true }))
+                          setFailedThumbs((prev) => ({ ...prev, [thumb]: true }))
                         }
                         className="w-full h-full object-cover"
                       />
